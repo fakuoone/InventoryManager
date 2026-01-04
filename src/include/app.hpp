@@ -4,6 +4,7 @@
 #include <unordered_map>
 
 #include "changeTracker.hpp"
+#include "config.hpp"
 #include "dbService.hpp"
 #include "logger.hpp"
 
@@ -13,7 +14,9 @@ class App {
    private:
     DbService& dbService;
     ChangeTracker& changeTracker;
+    Config& config;
     Logger& logger;
+
     AppState appState{AppState::RUNNING};
     completeDbData dbData;
     bool dataAvailable{false};
@@ -25,12 +28,18 @@ class App {
     }
 
    public:
-    App(DbService& cDbService, ChangeTracker& cChangeTracker, Logger& cLogger) : dbService(cDbService), changeTracker(cChangeTracker), logger(cLogger) {}
+    App(DbService& cDbService, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger) : dbService(cDbService), changeTracker(cChangeTracker), config(cConfig), logger(cLogger) {}
 
     void init() {}
 
+    void supplyConfigString() {
+        config.setConfigString("B:/Programmieren/C/InventoryManager/config/database.json");
+        dbService.initializeDbInterface(config.getDatabaseString());
+    }
+
     void run() {
         auto fCompleteDbData = dbService.startUp();
+        supplyConfigString();
         while (appState == AppState::RUNNING) {
             if (fCompleteDbData.valid() && fCompleteDbData.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
                 dbData = fCompleteDbData.get();

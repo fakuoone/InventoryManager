@@ -1,5 +1,5 @@
-#include "ThreadPool.hpp"
-#include "logger.hpp"
+#include "include/threadPool.hpp"
+#include "include/logger.hpp"
 
 #include <iostream>
 

@@ -8,7 +8,6 @@
 #include <pqxx/pqxx>
 #include <string>
 
-#include "config.hpp"
 #include "logger.hpp"
 #include "timing.hpp"
 
@@ -40,20 +39,39 @@ struct completeDbData {
     tRowMap tableRows;
 };
 
+struct protectedConnData {
+    std::shared_ptr<std::string> connString;
+    mutable std::mutex mtx;
+    mutable std::condition_variable cv;
+    bool connStringValid;
+};
+
 class DbInterface {
    private:
     protectedData<tStringVector> tables;
     protectedData<tHeaderMap> tableHeaders;
     protectedData<tRowMap> tableRows;
-
-    std::shared_ptr<std::string> connString;
-    Config& config;
     Logger& logger;
 
-    [[nodiscard]] transactionData getTransaction() const { return transactionData(*connString); }
+    protectedConnData connData;
+
+    [[nodiscard]] transactionData getTransaction() const {
+        std::unique_lock lock(connData.mtx);
+        connData.cv.wait(lock, [this] { return connData.connStringValid; });
+        return transactionData(*connData.connString);
+    }
 
    public:
-    DbInterface(Config& cConfig, Logger& cLogger) : config(cConfig), logger(cLogger) { connString = std::make_shared<std::string>(std::move(config.getDatabaseString())); }
+    DbInterface(Logger& cLogger) : logger(cLogger) {}
+
+    void initializeWithConfigString(const std::string& confString) {
+        {
+            std::lock_guard lock(connData.mtx);
+            connData.connString = std::make_shared<std::string>(confString);
+            connData.connStringValid = true;
+        }
+        connData.cv.notify_all();  // wake all waiting DB threads
+    }
 
     void acquireTables() {
         try {

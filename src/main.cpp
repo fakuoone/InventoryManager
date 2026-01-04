@@ -1,7 +1,7 @@
 #include <expected>
 #include <iostream>
 
-#include "app.hpp"
+#include "include/app.hpp"
 #include "include/changeTracker.hpp"
 #include "include/config.hpp"
 #include "include/dbInterface.hpp"
@@ -11,17 +11,16 @@
 #include "include/timing.hpp"
 
 int main() {
-    Config config;
-
     Logger logger;
-    DbInterface dbStorage{config, logger};
-    ThreadPool pool{5, logger};  // 2 worker threads
+    Config config{logger};
 
+    ThreadPool pool{5, logger};
+
+    DbInterface dbStorage{logger};
     DbService dbService{dbStorage, pool, logger};
 
     ChangeTracker changeTracker{dbService, logger};
-
-    App app{dbService, changeTracker, logger};
+    App app{dbService, changeTracker, config, logger};
 
     app.run();
     return 0;

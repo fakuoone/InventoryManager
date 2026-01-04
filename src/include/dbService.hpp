@@ -3,6 +3,7 @@
 #include <future>
 
 #include "change.hpp"
+#include "config.hpp"
 #include "dbInterface.hpp"
 #include "logger.hpp"
 #include "threadPool.hpp"
@@ -31,4 +32,6 @@ class DbService {
         }
         return true;
     }
+
+    void initializeDbInterface(const std::string& configString) { dbInterface.initializeWithConfigString(configString); }
 };
