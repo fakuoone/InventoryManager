@@ -12,13 +12,13 @@ bool ChangeTracker::manageConflict(const Change<int>& newChange, std::size_t has
     }
     Change<int>& existingChange = changes.data.at(hash);
     switch (existingChange.getType()) {
-        case changeType::InsertRow:
+        case changeType::INSERT_ROW:
             return false;
 
-        case changeType::DeleteRow:
+        case changeType::DELETE_ROW:
             return false;
 
-        case changeType::UpdateCells:
+        case changeType::UPDATE_CELLS:
             mergeCellChanges(existingChange, newChange);
             return true;
         default:
@@ -40,10 +40,17 @@ void ChangeTracker::addChange(const Change<int>& change) {
     }
 }
 
-void ChangeTracker::removeChange(Change<int>& change) {
-    const std::size_t hash = change.getHash();
+void ChangeTracker::removeChanges(const std::vector<std::size_t>& changeHashes) {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    if (changes.data.contains(hash)) {
-        changes.data.erase(hash);
+    for (const auto& hash : changeHashes) {
+        if (changes.data.contains(hash)) {
+            logger.pushLog(Log{std::format("    Removing change {}", hash)});
+            changes.data.erase(hash);
+        }
     }
+}
+
+std::map<std::size_t, Change<int>> ChangeTracker::getChanges() {
+    std::lock_guard<std::mutex> lgChanges(changes.mtx);
+    return changes.data;
 }

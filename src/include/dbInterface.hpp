@@ -8,6 +8,7 @@
 #include <pqxx/pqxx>
 #include <string>
 
+#include "change.hpp"
 #include "logger.hpp"
 #include "timing.hpp"
 
@@ -214,5 +215,16 @@ class DbInterface {
             acquireTableRows(table, headers);
         }
         return completeDbData{tables.data, tableHeaders.data, tableRows.data};
+    }
+
+    std::vector<std::size_t> applyChanges(std::map<std::size_t, Change<int>> changes) {
+        // TODO: Implement logic
+        // TODO: Reconsider the map argument. Vector might be more suitable?
+        for (const auto& [hash, change] : changes) {
+            logger.pushLog(Log{std::format("    Applying change {}", hash)});
+            logger.pushLog(Log{std::format("        SQL-command: {}", change.toSQLaction(sqlAction::EXECUTE))});
+        }
+        std::vector<std::size_t> successfulChanges;
+        return successfulChanges;
     }
 };

@@ -30,5 +30,7 @@ class ChangeTracker {
 
     void addChange(const Change<int>& change);
 
-    void removeChange(Change<int>& change);
+    void removeChanges(const std::vector<std::size_t>& changeHashes) ;
+
+    std::map<std::size_t, Change<int>> getChanges();
 };

@@ -34,4 +34,6 @@ class DbService {
     }
 
     void initializeDbInterface(const std::string& configString) { dbInterface.initializeWithConfigString(configString); }
+
+    std::future<std::vector<std::size_t>> requestChangeApplication(std::map<std::size_t, Change<int>> changes) { return pool.submit(&DbInterface::applyChanges, &dbInterface, std::move(changes)); }
 };

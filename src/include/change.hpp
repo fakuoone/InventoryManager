@@ -8,7 +8,9 @@
 #include <unordered_map>
 #include <vector>
 
-enum class changeType { InsertRow, DeleteRow, UpdateCells };
+enum class changeType { INSERT_ROW, DELETE_ROW, UPDATE_CELLS };
+
+enum class sqlAction { PREVIEW, EXECUTE };
 
 template <typename rowIdType = int>
 class Change {
@@ -20,7 +22,7 @@ class Change {
     5. change n cells in a row 
     */
    private:
-    changeType type{changeType::UpdateCells};
+    changeType type{changeType::UPDATE_CELLS};
     std::string table;
     rowIdType rowId{};
     std::unordered_map<std::string, std::string> changedCells;
@@ -55,5 +57,34 @@ class Change {
             this->updateHash();
         }
         return *this;
+    }
+
+    std::string toSQLaction(sqlAction action) const {
+        // TODO: Basierend auf action entweder eine Vorschau präsentieren, oder exekutieren
+        // TODO: INSERT und UPDATE sind anfällig für SQL Injektion. Beheben
+        std::string sqlString;
+
+        switch (type) {
+            case changeType::DELETE_ROW:
+                // TODO: Wie komme ich an den Spaltennamen von der id-Spalte (muss es sie geben?)
+                sqlString = std::format("DELETE FROM {} WHERE {} = {}", table, "id", rowId);
+                break;
+            case changeType::INSERT_ROW: {
+                // TODO: Tabellenkopf und Zellwerte aus change bauen
+                std::string columnNames;
+                std::string cellValues;
+                sqlString = std::format("INSERT INTO {} ({}) VALUES ({});", table, columnNames, cellValues);
+                break;
+            }
+            case changeType::UPDATE_CELLS: {
+                std::string columnValuePairs;
+                sqlString = std::format("UPDATE {} SET {} WHERE id = {};", table, columnValuePairs, rowId);
+                break;
+            }
+            default:
+                break;
+        }
+
+        return sqlString;
     }
 };

@@ -20,12 +20,15 @@ class App {
     AppState appState{AppState::RUNNING};
     completeDbData dbData;
     bool dataAvailable{false};
+    bool changesCommitted{false};
 
     void changeData(Change<int> change) {
         if (dataAvailable) {
             changeTracker.addChange(change);
         }
     }
+
+    std::future<std::vector<std::size_t>> executeChanges(sqlAction action) { return dbService.requestChangeApplication(std::move(changeTracker.getChanges())); }
 
    public:
     App(DbService& cDbService, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger) : dbService(cDbService), changeTracker(cChangeTracker), config(cConfig), logger(cLogger) {}
@@ -39,6 +42,8 @@ class App {
 
     void run() {
         auto fCompleteDbData = dbService.startUp();
+        std::future<std::vector<std::size_t>> fApplyChanges;
+
         supplyConfigString();
         while (appState == AppState::RUNNING) {
             if (fCompleteDbData.valid() && fCompleteDbData.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
@@ -47,17 +52,23 @@ class App {
                 logger.pushLog(Log{"UI got the data."});
 
                 testMakeChanges();
+                fApplyChanges = executeChanges(sqlAction::EXECUTE);
             }
+            // TODO: DO this only once
+            if (!changesCommitted && fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+                changeTracker.removeChanges(fApplyChanges.get());
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
 
     void testMakeChanges() {
         std::unordered_map<std::string, std::string> testmap;
-        changeData(Change{changeType::InsertRow, "categories", 0, testmap, logger});
+        changeData(Change{changeType::INSERT_ROW, "categories", 0, testmap, logger});
         testmap.emplace("test", "2");
         testmap.emplace("test2", "3");
-        changeData(Change{changeType::UpdateCells, "categories", 0, testmap, logger});
+        changeData(Change{changeType::UPDATE_CELLS, "categories", 0, testmap, logger});
         testmap.emplace("test2", "3");
-        changeData(Change{changeType::UpdateCells, "categories", 0, testmap, logger});
+        changeData(Change{changeType::UPDATE_CELLS, "categories", 0, testmap, logger});
     }
 };
