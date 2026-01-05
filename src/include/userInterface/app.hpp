@@ -7,11 +7,15 @@
 #include "config.hpp"
 #include "dbService.hpp"
 #include "logger.hpp"
+#include "userInterface/dbDataVisualizer.hpp"
+#include "userInterface/imguiContext.hpp"
 
 enum class AppState { RUNNING, ENDING };
 
 class App {
    private:
+    ImGuiContext imguiCtx;
+
     DbService& dbService;
     ChangeTracker& changeTracker;
     Config& config;
@@ -19,8 +23,13 @@ class App {
 
     AppState appState{AppState::RUNNING};
     completeDbData dbData;
+    std::future<completeDbData> fCompleteDbData;
     bool dataAvailable{false};
+
+    std::future<std::vector<std::size_t>> fApplyChanges;
     bool changesCommitted{false};
+
+    DbVisualizer dbVisualizer;
 
     void changeData(Change<int> change) {
         if (dataAvailable) {
@@ -30,10 +39,32 @@ class App {
 
     std::future<std::vector<std::size_t>> executeChanges(sqlAction action) { return dbService.requestChangeApplication(std::move(changeTracker.getChanges())); }
 
+    bool waitForData() {
+        if (fCompleteDbData.valid() && fCompleteDbData.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            dbData = fCompleteDbData.get();
+            dataAvailable = true;
+            logger.pushLog(Log{"UI got the data."});
+            return true;
+        }
+        return false;
+    }
+
+    bool waitForChangeApplication() {
+        if (!changesCommitted && fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            return true;
+        }
+        return false;
+    }
+
    public:
     App(DbService& cDbService, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger) : dbService(cDbService), changeTracker(cChangeTracker), config(cConfig), logger(cLogger) {}
 
-    void init() {}
+    App(const App&) = delete;
+    App& operator=(const App&) = delete;
+    App(App&&) = delete;
+    App& operator=(App&&) = delete;
+
+    void init() { imguiCtx.init(); }
 
     void supplyConfigString() {
         config.setConfigString("B:/Programmieren/C/InventoryManager/config/database.json");
@@ -42,23 +73,30 @@ class App {
 
     void run() {
         auto fCompleteDbData = dbService.startUp();
-        std::future<std::vector<std::size_t>> fApplyChanges;
 
         supplyConfigString();
         while (appState == AppState::RUNNING) {
-            if (fCompleteDbData.valid() && fCompleteDbData.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-                dbData = fCompleteDbData.get();
-                dataAvailable = true;
-                logger.pushLog(Log{"UI got the data."});
+            int entryState = imguiCtx.loopEntry();
+            if (entryState == 1) {
+                appState = AppState::ENDING;
+                break;
+            } else if (entryState == 2) {
+                continue;
+            }
 
+            if (waitForData()) {
                 testMakeChanges();
                 fApplyChanges = executeChanges(sqlAction::EXECUTE);
             }
-            // TODO: DO this only once
-            if (!changesCommitted && fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+
+            if (waitForChangeApplication()) {
                 changeTracker.removeChanges(fApplyChanges.get());
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+            if (dataAvailable) {
+                dbVisualizer.run(dbData);
+            }
+            imguiCtx.loopExit();
         }
     }
 

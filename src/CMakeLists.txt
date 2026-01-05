@@ -10,8 +10,10 @@ set(CMAKE_CXX_COMPILER C:/msys64/mingw64/bin/g++.exe)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# --- Linker flags for static builds ---
+# --- Linker flags  ---
+SET(LINK_TYPE "DYNAMIC") 
 if(USE_STATIC)
+    set(LINK_TYPE "STATIC")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static -static-libgcc -static-libstdc++")
 endif()
 
@@ -29,14 +31,47 @@ set(SOURCES
     main.cpp
     threadPool.cpp
     changeTracker.cpp
-)
-
-set(HEADERS
-    ${CMAKE_SOURCE_DIR}/include/dbInterface.hpp
+    userInterface/dx11Context.cpp
 )
 
 # --- Executable ---
 add_executable(InventoryManager ${SOURCES} ${HEADERS})
+
+# --- IMGUI ---
+set(IMGUI_PATH  "B:/Programmieren/C/Libs/imgui")
+file(GLOB IMGUI_GLOB
+    ${IMGUI_PATH}/imgui.h
+    ${IMGUI_PATH}/imgui.cpp
+    ${IMGUI_PATH}/imconfig.h
+    ${IMGUI_PATH}/imgui_demo.cpp
+    ${IMGUI_PATH}/imgui_draw.cpp
+    ${IMGUI_PATH}/imgui_internal.h
+    ${IMGUI_PATH}/imstb_rectpack.h
+    ${IMGUI_PATH}/imstb_textedit.h
+    ${IMGUI_PATH}/imstb_truetype.h
+    ${IMGUI_PATH}/imgui_tables.cpp
+    ${IMGUI_PATH}/imgui_widgets.cpp
+
+    ${IMGUI_PATH}/backends/imgui_impl_win32.h
+    ${IMGUI_PATH}/backends/imgui_impl_win32.cpp
+    ${IMGUI_PATH}/backends/imgui_impl_dx11.cpp
+    ${IMGUI_PATH}/backends/imgui_impl_dx11.h)
+
+add_library(imgui ${LINKTYPE} ${IMGUI_GLOB})
+target_compile_definitions(imgui PRIVATE IMGUI_EXPORTS)
+target_include_directories(imgui PUBLIC ${IMGUI_PATH})
+target_include_directories(imgui PUBLIC ${IMGUI_PATH}/backends)
+
+target_link_libraries(imgui PUBLIC
+    d3d11
+    dxgi
+    d3dcompiler
+    imm32
+    user32
+    gdi32
+    dwmapi
+)
+
 
 # --- Determine paths based on static/dynamic build ---
 if(USE_STATIC)
@@ -52,6 +87,7 @@ endif()
 # --- Include directories ---
 target_include_directories(InventoryManager PRIVATE
     "${VCPKG_TRIPLET_DIR}/include"
+    "${PROJECT_SOURCE_DIR}/include"
 )
 
 # --- Libraries ---
@@ -59,4 +95,5 @@ target_link_libraries(InventoryManager PRIVATE
     "${LIBPQXX_LIB}"
     "${LIBPQ_LIB}"
     ws2_32
+    imgui
 )

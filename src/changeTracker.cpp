@@ -7,10 +7,10 @@ void ChangeTracker::mergeCellChanges(Change<int>& existingChange, const Change<i
 }
 
 bool ChangeTracker::manageConflict(const Change<int>& newChange, std::size_t hash) {
-    if (!changes.data.contains(hash)) {
+    if (!changes.flatData.contains(hash)) {
         return true;
     }
-    Change<int>& existingChange = changes.data.at(hash);
+    Change<int>& existingChange = changes.flatData.at(hash);
     switch (existingChange.getType()) {
         case changeType::INSERT_ROW:
             return false;
@@ -36,21 +36,29 @@ void ChangeTracker::addChange(const Change<int>& change) {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
     logger.pushLog(Log{std::format("    Adding change {}", change.getHash())});
     if (manageConflict(change, hash)) {
-        changes.data.emplace(hash, change);
+        changes.flatData.emplace(hash, change);
     }
+}
+
+void ChangeTracker::addRelatedChange(std::size_t baseHash, const Change<int>& change) {
+    std::lock_guard<std::mutex> lgChanges(changes.mtx);
+    if (!changes.flatData.contains(baseHash)) {
+        return;
+    }
+    // TODO: Manage related changes
 }
 
 void ChangeTracker::removeChanges(const std::vector<std::size_t>& changeHashes) {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
     for (const auto& hash : changeHashes) {
-        if (changes.data.contains(hash)) {
+        if (changes.flatData.contains(hash)) {
             logger.pushLog(Log{std::format("    Removing change {}", hash)});
-            changes.data.erase(hash);
+            changes.flatData.erase(hash);
         }
     }
 }
 
 std::map<std::size_t, Change<int>> ChangeTracker::getChanges() {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    return changes.data;
+    return changes.flatData;
 }

@@ -1,14 +1,11 @@
-#include <expected>
-#include <iostream>
-
-#include "include/app.hpp"
-#include "include/changeTracker.hpp"
-#include "include/config.hpp"
-#include "include/dbInterface.hpp"
-#include "include/dbService.hpp"
-#include "include/logger.hpp"
-#include "include/threadPool.hpp"
-#include "include/timing.hpp"
+#include "changeTracker.hpp"
+#include "config.hpp"
+#include "dbInterface.hpp"
+#include "dbService.hpp"
+#include "logger.hpp"
+#include "threadPool.hpp"
+#include "timing.hpp"
+#include "userInterface/app.hpp"
 
 int main() {
     Logger logger;
@@ -22,6 +19,7 @@ int main() {
     ChangeTracker changeTracker{dbService, logger};
     App app{dbService, changeTracker, config, logger};
 
+    app.init();
     app.run();
     return 0;
 }

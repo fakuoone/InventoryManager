@@ -12,7 +12,8 @@
 
 struct protectedChanges {
     std::mutex mtx;
-    std::map<std::size_t, Change<int>> data;
+    std::map<std::size_t, Change<int>> flatData;
+    std::vector<std::size_t> orderedTree;
 };
 
 class ChangeTracker {
@@ -30,7 +31,9 @@ class ChangeTracker {
 
     void addChange(const Change<int>& change);
 
-    void removeChanges(const std::vector<std::size_t>& changeHashes) ;
+    void addRelatedChange(std::size_t baseHash, const Change<int>& change);
+
+    void removeChanges(const std::vector<std::size_t>& changeHashes);
 
     std::map<std::size_t, Change<int>> getChanges();
 };
