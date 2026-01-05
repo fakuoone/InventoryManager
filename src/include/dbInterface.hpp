@@ -76,6 +76,16 @@ class DbInterface {
 
     void acquireTables() {
         try {
+            // TODO: There is a UB somewhere related to getTransaction
+            /*
+            ~~18064~~ Error #33: UNINITIALIZED READ: reading 0x000000672effe29a-0x000000672effe2a0 6 byte(s) within 0x000000672effe290-0x000000672effe2b8
+            ~~18064~~ # 0 ntdll.dll!RcContinueExit
+            ~~18064~~ # 1 ntdll.dll!RtlUnwindEx
+            ~~18064~~ # 2 libgcc_s_seh-1.dll!?                                                      +0x0      (0x00007ffc4bcac44f <libgcc_s_seh-1.dll+0x1c44f>)
+            ~~18064~~ # 3 _ZNSt17_Function_handlerIFSt10unique_ptrINSt13__future_base12_Result_baseENS2_8_DeleterEEvENS1_12_Task_setterIS0_INS1_7_ResultIvEES3_EZNS1_11_Task_stateIZN10ThreadPool6submitIM11DbInterfaceFvvEJPSD_EEEDaOT_DpOT0_EUlvE_SaIiEFvvEE6_M_runEvEUlvE_vEEE9_M_invo
+            ~~18064~~ # 4 KERNELBASE.dll!RaiseException
+            ~~18064~~ # 5 DbInterface::getTransaction
+            */
             transactionData transaction = getTransaction();
             const std::string tableQuery = "SELECT table_name FROM information_schema.tables WHERE table_schema='public'";
             auto result = transaction.tx.query<std::string>(tableQuery);
