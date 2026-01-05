@@ -6,3 +6,4 @@
 /lib
 /keylog
 .vscode
+*.json

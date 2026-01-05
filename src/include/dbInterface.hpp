@@ -41,10 +41,10 @@ struct completeDbData {
 };
 
 struct protectedConnData {
-    std::shared_ptr<std::string> connString;
-    mutable std::mutex mtx;
-    mutable std::condition_variable cv;
+    std::string connString;
     bool connStringValid;
+    std::mutex mtx;
+    std::condition_variable cv;
 };
 
 class DbInterface {
@@ -56,10 +56,10 @@ class DbInterface {
 
     protectedConnData connData;
 
-    [[nodiscard]] transactionData getTransaction() const {
+    [[nodiscard]] transactionData getTransaction() {
         std::unique_lock lock(connData.mtx);
         connData.cv.wait(lock, [this] { return connData.connStringValid; });
-        return transactionData(*connData.connString);
+        return transactionData(connData.connString);
     }
 
    public:
@@ -68,7 +68,7 @@ class DbInterface {
     void initializeWithConfigString(const std::string& confString) {
         {
             std::lock_guard lock(connData.mtx);
-            connData.connString = std::make_shared<std::string>(confString);
+            connData.connString = confString;
             connData.connStringValid = true;
         }
         connData.cv.notify_all();  // wake all waiting DB threads

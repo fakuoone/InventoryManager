@@ -1,4 +1,4 @@
-#include "include/changeTracker.hpp"
+#include "changeTracker.hpp"
 
 void ChangeTracker::mergeCellChanges(Change<int>& existingChange, const Change<int>& newChange) {
     // assignment operator overloaded
