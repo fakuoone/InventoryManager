@@ -31,11 +31,33 @@ set(SOURCES
     main.cpp
     threadPool.cpp
     changeTracker.cpp
-    userInterface/dx11Context.cpp
+    imGuiDX11Context.cpp
 )
 
 # --- Executable ---
 add_executable(InventoryManager ${SOURCES} ${HEADERS})
+
+# --- Compiler flags ---
+target_compile_options(InventoryManager PRIVATE
+    -Wall
+    -Wno-unused-parameter # disable for now
+    -Wextra
+    -Wpedantic
+    -Wshadow
+    -Wconversion
+    -Wsign-conversion
+    -Wnull-dereference
+    -Wdouble-promotion
+    -Wformat=2
+)
+
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_options(InventoryManager PRIVATE
+        -fno-omit-frame-pointer
+        -g
+        -O1
+    )
+endif()
 
 # --- IMGUI ---
 set(IMGUI_PATH  "B:/Programmieren/C/Libs/imgui")

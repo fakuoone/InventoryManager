@@ -19,7 +19,6 @@ int main() {
     ChangeTracker changeTracker{dbService, logger};
     App app{dbService, changeTracker, config, logger};
 
-    app.init();
     app.run();
     return 0;
 }

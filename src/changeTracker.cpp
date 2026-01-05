@@ -7,9 +7,7 @@ void ChangeTracker::mergeCellChanges(Change<int>& existingChange, const Change<i
 }
 
 bool ChangeTracker::manageConflict(const Change<int>& newChange, std::size_t hash) {
-    if (!changes.flatData.contains(hash)) {
-        return true;
-    }
+    if (!changes.flatData.contains(hash)) { return true; }
     Change<int>& existingChange = changes.flatData.at(hash);
     switch (existingChange.getType()) {
         case changeType::INSERT_ROW:
@@ -29,22 +27,16 @@ bool ChangeTracker::manageConflict(const Change<int>& newChange, std::size_t has
 
 void ChangeTracker::addChange(const Change<int>& change) {
     // The only function that is allowed to lock changes
-    if (!dbService.validateChange(change)) {
-        return;
-    }
+    if (!dbService.validateChange(change)) { return; }
     const std::size_t hash = change.getHash();
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
     logger.pushLog(Log{std::format("    Adding change {}", change.getHash())});
-    if (manageConflict(change, hash)) {
-        changes.flatData.emplace(hash, change);
-    }
+    if (manageConflict(change, hash)) { changes.flatData.emplace(hash, change); }
 }
 
 void ChangeTracker::addRelatedChange(std::size_t baseHash, const Change<int>& change) {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    if (!changes.flatData.contains(baseHash)) {
-        return;
-    }
+    if (!changes.flatData.contains(baseHash)) { return; }
     // TODO: Manage related changes
 }
 

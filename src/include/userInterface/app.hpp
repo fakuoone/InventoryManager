@@ -8,13 +8,13 @@
 #include "dbService.hpp"
 #include "logger.hpp"
 #include "userInterface/dbDataVisualizer.hpp"
-#include "userInterface/imguiContext.hpp"
+#include "userInterface/imGuiDX11Context.hpp"
 
 enum class AppState { RUNNING, ENDING };
 
 class App {
    private:
-    ImGuiContext imguiCtx;
+    ImGuiDX11Context imguiCtx;
 
     DbService& dbService;
     ChangeTracker& changeTracker;
@@ -32,12 +32,10 @@ class App {
     DbVisualizer dbVisualizer;
 
     void changeData(Change<int> change) {
-        if (dataAvailable) {
-            changeTracker.addChange(change);
-        }
+        if (dataAvailable) { changeTracker.addChange(change); }
     }
 
-    std::future<std::vector<std::size_t>> executeChanges(sqlAction action) { return dbService.requestChangeApplication(std::move(changeTracker.getChanges())); }
+    std::future<std::vector<std::size_t>> executeChanges(sqlAction action) { return dbService.requestChangeApplication(changeTracker.getChanges(), action); }
 
     bool waitForData() {
         if (fCompleteDbData.valid() && fCompleteDbData.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
@@ -50,9 +48,7 @@ class App {
     }
 
     bool waitForChangeApplication() {
-        if (!changesCommitted && fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-            return true;
-        }
+        if (!changesCommitted && fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) { return true; }
         return false;
     }
 
@@ -64,39 +60,33 @@ class App {
     App(App&&) = delete;
     App& operator=(App&&) = delete;
 
-    void init() { imguiCtx.init(); }
-
     void supplyConfigString() {
         config.setConfigString("B:/Programmieren/C/InventoryManager/config/database.json");
         dbService.initializeDbInterface(config.getDatabaseString());
     }
 
     void run() {
-        auto fCompleteDbData = dbService.startUp();
+        fCompleteDbData = dbService.startUp();
 
         supplyConfigString();
         while (appState == AppState::RUNNING) {
-            int entryState = imguiCtx.loopEntry();
-            if (entryState == 1) {
+            if (!imguiCtx.pollEvents()) {
                 appState = AppState::ENDING;
                 break;
-            } else if (entryState == 2) {
-                continue;
             }
 
+            // UI INDEPENDANT CODE
             if (waitForData()) {
                 testMakeChanges();
                 fApplyChanges = executeChanges(sqlAction::EXECUTE);
             }
 
-            if (waitForChangeApplication()) {
-                changeTracker.removeChanges(fApplyChanges.get());
-            }
+            if (waitForChangeApplication()) { changeTracker.removeChanges(fApplyChanges.get()); }
 
-            if (dataAvailable) {
-                dbVisualizer.run(dbData);
-            }
-            imguiCtx.loopExit();
+            if (!imguiCtx.beginFrame()) { continue; }
+            if (dataAvailable) { dbVisualizer.run(dbData); }
+
+            imguiCtx.endFrame();
         }
     }
 
