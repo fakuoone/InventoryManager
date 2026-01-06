@@ -24,7 +24,7 @@ struct transactionData {
     pqxx::connection conn;
     pqxx::work tx;
 
-    transactionData(std::string cConnString) : conn(cConnString), tx(conn) {}
+    transactionData(const std::string cConnString) : conn(cConnString), tx(conn) {}
 
     transactionData(const transactionData&) = delete;
     transactionData& operator=(transactionData& other) = delete;
@@ -32,7 +32,8 @@ struct transactionData {
 
 using tStringVector = std::vector<std::string>;
 using tHeaderMap = std::map<std::string, tStringVector>;
-using tRowMap = std::map<std::string, std::map<std::string, tStringVector>>;
+using tColumnDataMap = tHeaderMap;
+using tRowMap = std::map<std::string, tColumnDataMap>;
 
 struct completeDbData {
     tStringVector tables;
@@ -42,7 +43,7 @@ struct completeDbData {
 
 struct protectedConnData {
     std::string connString;
-    bool connStringValid;
+    bool connStringValid{false};
     std::mutex mtx;
     std::condition_variable cv;
 };
@@ -69,7 +70,7 @@ class DbInterface {
         {
             std::lock_guard lock(connData.mtx);
             connData.connString = confString;
-            connData.connStringValid = true;
+            connData.connStringValid = !confString.empty();
         }
         connData.cv.notify_all();  // wake all waiting DB threads
     }

@@ -10,16 +10,15 @@
 
 class Config {
    private:
-    std::filesystem::path configPath;
+    std::string dbString;
     Logger& logger;
 
-    std::string databaseJsonToString(const nlohmann::json& j) {
+    std::string databaseJsonToDbString(const nlohmann::json& j) {
         try {
             const std::string dbname = j.at("dbname").get<std::string>();
             const std::string user = j.at("user").get<std::string>();
             const std::string password = j.at("password").get<std::string>();
             std::string connectionString = std::format("dbname={} user={} password={}", dbname, user, password);
-
             return connectionString;
         } catch (const nlohmann::json::exception& e) {
             logger.pushLog(Log{std::format("ERROR PARSING CONFIG: ", e.what())});
@@ -27,7 +26,7 @@ class Config {
         }
     }
 
-    std::string readConfigFile() {
+    std::string readConfigFile(const std::filesystem::path& configPath) {
         logger.pushLog(Log{std::format("Reading config from {}", configPath.string())});
 
         std::ifstream configFile(configPath);
@@ -43,14 +42,14 @@ class Config {
             logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
             return std::string{};
         }
-
-        return databaseJsonToString(config);
+        return databaseJsonToDbString(config);
     }
 
    public:
     Config(Logger& cLogger) : logger(cLogger) {}
 
-    void setConfigString(const std::string configPathName) { configPath = std::filesystem::path{configPathName}; }
-
-    std::string getDatabaseString() { return readConfigFile(); }
+    std::string setConfigString(const std::string configPathName) {
+        dbString = readConfigFile(std::filesystem::path{configPathName});
+        return dbString;
+    }
 };

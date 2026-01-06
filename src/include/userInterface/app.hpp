@@ -61,8 +61,8 @@ class App {
     App& operator=(App&&) = delete;
 
     void supplyConfigString() {
-        config.setConfigString("B:/Programmieren/C/InventoryManager/config/database.json");
-        dbService.initializeDbInterface(config.getDatabaseString());
+        std::string dbString = config.setConfigString("B:/Programmieren/C/InventoryManager/config/database.json");
+        dbService.initializeDbInterface(dbString);
     }
 
     void run() {
