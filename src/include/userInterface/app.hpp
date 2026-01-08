@@ -29,7 +29,7 @@ class App {
     std::future<std::vector<std::size_t>> fApplyChanges;
     bool changesCommitted{false};
 
-    DbVisualizer dbVisualizer;
+    DbVisualizer dbVisualizer{changeTracker, dbData, logger};
 
     void changeData(Change<int> change) {
         if (dataAvailable) { changeTracker.addChange(change); }
@@ -40,11 +40,36 @@ class App {
     bool waitForData() {
         if (fCompleteDbData.valid() && fCompleteDbData.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
             dbData = fCompleteDbData.get();
-            dataAvailable = true;
-            logger.pushLog(Log{"UI got the data."});
-            return true;
+            if (validateCompleteDbData()) {
+                dataAvailable = true;
+                return true;
+            }
         }
         return false;
+    }
+
+    bool validateCompleteDbData() {
+        // tablecount matches everywhere
+        std::size_t tableCount = dbData.tables.size();
+        if (tableCount != dbData.headers.size() || tableCount != dbData.tableRows.size()) {
+            logger.pushLog(Log{"ERROR: Table data is mismatching in size."});
+            return false;
+        }
+        // all tables have headers
+        for (const auto& table : dbData.tables) {
+            if (!dbData.headers.contains(table)) {
+                logger.pushLog(Log{std::format("ERROR: Table {} has no header information.", table)});
+                return false;
+            }
+            // columns have the same values as rows have keys
+            for (const auto& header : dbData.headers.at(table)) {
+                if (!dbData.tableRows.at(table).contains(header)) {
+                    logger.pushLog(Log{std::format("ERROR: Table {} has header {} which has no data.", table, header)});
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     bool waitForChangeApplication() {
@@ -84,7 +109,7 @@ class App {
             if (waitForChangeApplication()) { changeTracker.removeChanges(fApplyChanges.get()); }
 
             if (!imguiCtx.beginFrame()) { continue; }
-            if (dataAvailable) { dbVisualizer.run(dbData); }
+            if (dataAvailable) { dbVisualizer.run(); }
 
             imguiCtx.endFrame();
         }

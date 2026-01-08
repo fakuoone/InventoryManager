@@ -3,49 +3,54 @@
 #include "imgui.h"
 
 #include "dbInterface.hpp"
+#include "changeTracker.hpp"
+
+#include "logger.hpp"
 
 class DbVisualizer {
    private:
-    void createColumns(const tStringVector& columns) {
-        for (const auto& column : columns) {
+    ChangeTracker& changeTracker;
+    const completeDbData& dbData;
+    Logger& logger;
+
+    void createColumns(const std::string& table) {
+        for (const auto& column : dbData.headers.at(table)) {
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(column.c_str());
         }
         ImGui::TableNextRow();
     }
 
-    void createRows(const tColumnDataMap& columns) {
-        // TODO: SPalten mit den hier vorhandenen abgleichen oder vertrauen? DIe Sortierung muss gleich sein, sonst bugs
-        /*
-        1. ZEilenahzahl bestimmen (minimum)
-        2. äußerer Loop über diese Anzahl
-        3. Innerer Loop geht von map-EIntrag zu map-eintrag
-        */
-        bool maxNotReached = true;
+    void createRows(const std::string& table) {
+        if (!dbData.headers.contains(table)) { return; }
         size_t i = 0;
+        bool maxNotReached = true;
         while (maxNotReached) {
-            for (const auto& [column, data] : columns) {
-                if (data.size() - 1 < i) {
+            for (const auto& header : dbData.headers.at(table)) {
+                ImGui::TableNextColumn();
+                if (!dbData.tableRows.contains(table)) { return; }
+                if (!dbData.tableRows.at(table).contains(header)) { continue; }
+                const auto& data = dbData.tableRows.at(table).at(header);
+                if (data.size() <= i) {
                     maxNotReached = false;
+                    ImGui::TextUnformatted("-");
                 } else {
                     maxNotReached = true;
                     ImGui::TextUnformatted(data.at(i).c_str());
                 }
-                ImGui::TableNextColumn();
             }
             ImGui::TableNextRow();
             ++i;
         }
     }
 
-    void createTableSplitters(const completeDbData& dbData) {
-        // TODO: wenn daten ans ui übergeben werden, sollten sie geprüft werden. nicht zyklisch
+    void createTableSplitters() {
         if (ImGui::BeginTabBar("MainTabs")) {
             for (const auto& [table, data] : dbData.headers) {
                 if (ImGui::BeginTabItem(table.c_str())) {
                     if (ImGui::BeginTable("ColumnsTable", static_cast<int>(data.size()), ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-                        createColumns(data);
-                        createRows(dbData.tableRows.at(table));
+                        createColumns(table);
+                        createRows(table);
                         ImGui::EndTable();
                     }
                     ImGui::EndTabItem();
@@ -56,7 +61,7 @@ class DbVisualizer {
     }
 
    public:
-    void run(const completeDbData& dbData) { createTableSplitters(dbData); }
+    void run() { createTableSplitters(); }
 
-    DbVisualizer() {}
+    DbVisualizer(ChangeTracker& cChangeTracker, const completeDbData& cDbData, Logger& cLogger) : changeTracker(cChangeTracker), dbData(cDbData), logger(cLogger) {}
 };
