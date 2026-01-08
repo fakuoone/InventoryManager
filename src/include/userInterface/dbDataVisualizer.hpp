@@ -10,11 +10,12 @@
 class DbVisualizer {
    private:
     ChangeTracker& changeTracker;
-    const completeDbData& dbData;
     Logger& logger;
 
+    std::shared_ptr<const completeDbData> dbData;
+
     void createColumns(const std::string& table) {
-        for (const auto& column : dbData.headers.at(table)) {
+        for (const auto& column : dbData->headers.at(table)) {
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(column.c_str());
         }
@@ -22,15 +23,15 @@ class DbVisualizer {
     }
 
     void createRows(const std::string& table) {
-        if (!dbData.headers.contains(table)) { return; }
+        if (!dbData->headers.contains(table)) { return; }
         size_t i = 0;
         bool maxNotReached = true;
         while (maxNotReached) {
-            for (const auto& header : dbData.headers.at(table)) {
+            for (const auto& header : dbData->headers.at(table)) {
                 ImGui::TableNextColumn();
-                if (!dbData.tableRows.contains(table)) { return; }
-                if (!dbData.tableRows.at(table).contains(header)) { continue; }
-                const auto& data = dbData.tableRows.at(table).at(header);
+                if (!dbData->tableRows.contains(table)) { return; }
+                if (!dbData->tableRows.at(table).contains(header)) { continue; }
+                const auto& data = dbData->tableRows.at(table).at(header);
                 if (data.size() <= i) {
                     maxNotReached = false;
                     ImGui::TextUnformatted("-");
@@ -46,7 +47,7 @@ class DbVisualizer {
 
     void createTableSplitters() {
         if (ImGui::BeginTabBar("MainTabs")) {
-            for (const auto& [table, data] : dbData.headers) {
+            for (const auto& [table, data] : dbData->headers) {
                 if (ImGui::BeginTabItem(table.c_str())) {
                     if (ImGui::BeginTable("ColumnsTable", static_cast<int>(data.size()), ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                         createColumns(table);
@@ -61,7 +62,10 @@ class DbVisualizer {
     }
 
    public:
-    void run() { createTableSplitters(); }
+    void setData(std::shared_ptr<const completeDbData> newData) { dbData = std::move(newData); }
+    void run() {
+        if (dbData) { createTableSplitters(); }
+    }
 
-    DbVisualizer(ChangeTracker& cChangeTracker, const completeDbData& cDbData, Logger& cLogger) : changeTracker(cChangeTracker), dbData(cDbData), logger(cLogger) {}
+    DbVisualizer(ChangeTracker& cChangeTracker, Logger& cLogger) : changeTracker(cChangeTracker), logger(cLogger) {}
 };

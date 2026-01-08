@@ -22,14 +22,13 @@ class App {
     Logger& logger;
 
     AppState appState{AppState::RUNNING};
-    completeDbData dbData;
-    std::future<completeDbData> fCompleteDbData;
+    std::shared_ptr<const completeDbData> dbData;
     bool dataAvailable{false};
 
     std::future<std::vector<std::size_t>> fApplyChanges;
     bool changesCommitted{false};
 
-    DbVisualizer dbVisualizer{changeTracker, dbData, logger};
+    DbVisualizer dbVisualizer{changeTracker, logger};
 
     void changeData(Change<int> change) {
         if (dataAvailable) { changeTracker.addChange(change); }
@@ -38,43 +37,39 @@ class App {
     std::future<std::vector<std::size_t>> executeChanges(sqlAction action) { return dbService.requestChangeApplication(changeTracker.getChanges(), action); }
 
     bool waitForData() {
-        if (fCompleteDbData.valid() && fCompleteDbData.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-            dbData = fCompleteDbData.get();
-            if (validateCompleteDbData()) {
-                dataAvailable = true;
-                return true;
-            }
-        }
-        return false;
-    }
+        if (dataAvailable) { return false; }
 
-    bool validateCompleteDbData() {
-        // tablecount matches everywhere
-        std::size_t tableCount = dbData.tables.size();
-        if (tableCount != dbData.headers.size() || tableCount != dbData.tableRows.size()) {
-            logger.pushLog(Log{"ERROR: Table data is mismatching in size."});
-            return false;
-        }
-        // all tables have headers
-        for (const auto& table : dbData.tables) {
-            if (!dbData.headers.contains(table)) {
-                logger.pushLog(Log{std::format("ERROR: Table {} has no header information.", table)});
-                return false;
-            }
-            // columns have the same values as rows have keys
-            for (const auto& header : dbData.headers.at(table)) {
-                if (!dbData.tableRows.at(table).contains(header)) {
-                    logger.pushLog(Log{std::format("ERROR: Table {} has header {} which has no data.", table, header)});
-                    return false;
-                }
-            }
-        }
+        auto result = dbService.getCompleteData();
+        if (!result) { return false; }
+
+        dbData = *result;
+        dbVisualizer.setData(dbData);
+        dataAvailable = true;
         return true;
     }
 
     bool waitForChangeApplication() {
         if (!changesCommitted && fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) { return true; }
         return false;
+    }
+
+    void drawFpsOverlay() {
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        const float PAD = 10.0f;
+
+        ImVec2 pos(viewport->WorkPos.x + viewport->WorkSize.x - PAD, viewport->WorkPos.y + viewport->WorkSize.y - PAD);
+
+        ImGui::SetNextWindowPos(pos, ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+        ImGui::SetNextWindowBgAlpha(0.35f);
+
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove;
+
+        if (ImGui::Begin("FPSOverlay", nullptr, flags)) {
+            ImGuiIO& io = ImGui::GetIO();
+            ImGui::Text("FPS: %.1f", static_cast<double>(io.Framerate));
+            ImGui::Text("Frame: %.3f ms", 1000.0 / static_cast<double>(io.Framerate));
+            ImGui::End();
+        }
     }
 
    public:
@@ -91,7 +86,7 @@ class App {
     }
 
     void run() {
-        fCompleteDbData = dbService.startUp();
+        dbService.startUp();
 
         supplyConfigString();
         while (appState == AppState::RUNNING) {
@@ -110,6 +105,8 @@ class App {
 
             if (!imguiCtx.beginFrame()) { continue; }
             if (dataAvailable) { dbVisualizer.run(); }
+
+            drawFpsOverlay();
 
             imguiCtx.endFrame();
         }

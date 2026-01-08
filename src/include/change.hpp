@@ -44,6 +44,8 @@ class Change {
 
     changeType getType() const { return type; }
 
+    const std::string& getTable() const { return table; }
+
     void updateHash() { changeHash = getHash(); }
 
     Change& operator=(const Change& other) {

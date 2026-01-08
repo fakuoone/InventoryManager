@@ -27,9 +27,9 @@ bool ChangeTracker::manageConflict(const Change<int>& newChange, std::size_t has
 
 void ChangeTracker::addChange(const Change<int>& change) {
     // The only function that is allowed to lock changes
+    std::lock_guard<std::mutex> lgChanges(changes.mtx);
     if (!dbService.validateChange(change)) { return; }
     const std::size_t hash = change.getHash();
-    std::lock_guard<std::mutex> lgChanges(changes.mtx);
     logger.pushLog(Log{std::format("    Adding change {}", change.getHash())});
     if (manageConflict(change, hash)) { changes.flatData.emplace(hash, change); }
 }
