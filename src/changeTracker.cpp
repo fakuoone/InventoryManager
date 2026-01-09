@@ -1,14 +1,14 @@
 #include "changeTracker.hpp"
 
-void ChangeTracker::mergeCellChanges(Change<int>& existingChange, const Change<int>& newChange) {
+void ChangeTracker::mergeCellChanges(Change<cccType>& existingChange, const Change<cccType>& newChange) {
     // assignment operator overloaded
     logger.pushLog(Log{std::format("        Merging cell changes {} and {}", existingChange.getHash(), newChange.getHash())});
     existingChange = newChange;
 }
 
-bool ChangeTracker::manageConflict(const Change<int>& newChange, std::size_t hash) {
+bool ChangeTracker::manageConflict(const Change<cccType>& newChange, std::size_t hash) {
     if (!changes.flatData.contains(hash)) { return true; }
-    Change<int>& existingChange = changes.flatData.at(hash);
+    Change<cccType>& existingChange = changes.flatData.at(hash);
     switch (existingChange.getType()) {
         case changeType::INSERT_ROW:
             return false;
@@ -25,16 +25,21 @@ bool ChangeTracker::manageConflict(const Change<int>& newChange, std::size_t has
     return false;
 }
 
-void ChangeTracker::addChange(const Change<int>& change) {
+void ChangeTracker::addChange(const Change<cccType>& change) {
     // The only function that is allowed to lock changes
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
     if (!dbService.validateChange(change)) { return; }
     const std::size_t hash = change.getHash();
     logger.pushLog(Log{std::format("    Adding change {}", change.getHash())});
-    if (manageConflict(change, hash)) { changes.flatData.emplace(hash, change); }
+    if (manageConflict(change, hash)) {
+        changes.flatData.emplace(hash, change);
+        const std::string table = change.getTable();
+        if (!changes.rowMappedData.contains(table)) { changes.rowMappedData.emplace(table, std::map<cccType, std::size_t>{}); }
+        changes.rowMappedData.at(table).emplace(change.getRowId(), hash);
+    }
 }
 
-void ChangeTracker::addRelatedChange(std::size_t baseHash, const Change<int>& change) {
+void ChangeTracker::addRelatedChange(std::size_t baseHash, const Change<cccType>& change) {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
     if (!changes.flatData.contains(baseHash)) { return; }
     // TODO: Manage related changes
@@ -50,7 +55,12 @@ void ChangeTracker::removeChanges(const std::vector<std::size_t>& changeHashes) 
     }
 }
 
-std::map<std::size_t, Change<int>> ChangeTracker::getChanges() {
+std::map<std::size_t, Change<cccType>> ChangeTracker::getChanges() {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
     return changes.flatData;
+}
+
+std::map<std::string, std::map<cccType, std::size_t>> ChangeTracker::getRowMappedData() {
+    std::lock_guard<std::mutex> lgChanges(changes.mtx);
+    return changes.rowMappedData;
 }

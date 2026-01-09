@@ -101,7 +101,7 @@ class App {
                 fApplyChanges = executeChanges(sqlAction::EXECUTE);
             }
 
-            if (waitForChangeApplication()) { changeTracker.removeChanges(fApplyChanges.get()); }
+            if (waitForChangeApplication()) {}  //changeTracker.removeChanges(fApplyChanges.get()); }
 
             if (!imguiCtx.beginFrame()) { continue; }
             if (dataAvailable) { dbVisualizer.run(); }

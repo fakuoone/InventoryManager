@@ -12,9 +12,9 @@
 #include "logger.hpp"
 #include "timing.hpp"
 
-template <typename T>
+template <typename changeTrackerChangeType>
 struct protectedData {
-    T data;
+    changeTrackerChangeType data;
     std::mutex mtx;
     std::condition_variable cv;
     bool ready{false};

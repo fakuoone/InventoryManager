@@ -46,6 +46,15 @@ class Change {
 
     const std::string& getTable() const { return table; }
 
+    const rowIdType getRowId() const { return rowId; }
+
+    std::unordered_map<std::string, std::string> getCells() const { return changedCells; }
+
+    std::string getCell() const {
+        if (!changedCells.contains(table)) { return std::string(); }
+        return changedCells.at(table);
+    }
+
     void updateHash() { changeHash = getHash(); }
 
     Change& operator=(const Change& other) {
