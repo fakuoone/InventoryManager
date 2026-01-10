@@ -21,20 +21,17 @@ class App {
     Config& config;
     Logger& logger;
 
+    DbVisualizer dbVisualizer{dbService, changeTracker, logger};
+
     AppState appState{AppState::RUNNING};
     std::shared_ptr<const completeDbData> dbData;
     bool dataAvailable{false};
 
     std::future<std::vector<std::size_t>> fApplyChanges;
-    bool changesCommitted{false};
 
-    DbVisualizer dbVisualizer{changeTracker, logger};
-
-    void changeData(Change<int> change) {
+    void changeData(Change<cccType> change) {
         if (dataAvailable) { changeTracker.addChange(change); }
     }
-
-    std::future<std::vector<std::size_t>> executeChanges(sqlAction action) { return dbService.requestChangeApplication(changeTracker.getChanges(), action); }
 
     bool waitForData() {
         if (dataAvailable) { return false; }
@@ -46,11 +43,6 @@ class App {
         dbVisualizer.setData(dbData);
         dataAvailable = true;
         return true;
-    }
-
-    bool waitForChangeApplication() {
-        if (!changesCommitted && fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) { return true; }
-        return false;
     }
 
     void drawFpsOverlay() {
@@ -96,15 +88,13 @@ class App {
             }
 
             // UI INDEPENDANT CODE
-            if (waitForData()) {
-                testMakeChanges();
-                fApplyChanges = executeChanges(sqlAction::EXECUTE);
-            }
-
-            if (waitForChangeApplication()) {}  //changeTracker.removeChanges(fApplyChanges.get()); }
+            if (waitForData()) { testMakeChanges(); }
 
             if (!imguiCtx.beginFrame()) { continue; }
-            if (dataAvailable) { dbVisualizer.run(); }
+            if (dataAvailable) {
+                dbVisualizer.run();
+                // const std::vector& < std::size_tdbVisualizer.getCommitedChanges()
+            }
 
             drawFpsOverlay();
 

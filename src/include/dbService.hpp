@@ -9,6 +9,8 @@
 #include "logger.hpp"
 #include "threadPool.hpp"
 
+// TODO: fix this
+using cccType = int;
 class DbService {
    private:
     DbInterface& dbInterface;
@@ -93,5 +95,5 @@ class DbService {
 
     void initializeDbInterface(const std::string& configString) { dbInterface.initializeWithConfigString(configString); }
 
-    std::future<std::vector<std::size_t>> requestChangeApplication(std::map<std::size_t, Change<int>> changes, sqlAction action) { return pool.submit(&DbInterface::applyChanges, &dbInterface, std::move(changes), action); }
+    std::future<std::vector<std::size_t>> requestChangeApplication(std::map<std::size_t, Change<cccType>> changes, sqlAction action) { return pool.submit(&DbInterface::applyChanges, &dbInterface, std::move(changes), action); }
 };

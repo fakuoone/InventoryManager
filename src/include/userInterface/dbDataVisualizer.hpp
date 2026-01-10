@@ -2,6 +2,7 @@
 
 #include "imgui.h"
 
+#include "dbService.hpp"
 #include "dbInterface.hpp"
 #include "changeTracker.hpp"
 
@@ -9,6 +10,7 @@
 
 class DbVisualizer {
    private:
+    DbService& dbService;
     ChangeTracker& changeTracker;
     Logger& logger;
 
@@ -16,6 +18,12 @@ class DbVisualizer {
     // TODO: wahrscheinlich sollte sich app darum kümmern und hier nur eine REferenz? rowMappedChanges sollte nur in changeTracker existieren, und hier wird angefragt?
     std::map<std::string, std::map<cccType, std::size_t>> rowMappedChanges;
     std::map<std::size_t, Change<cccType>> changes;
+    std::future<std::vector<std::size_t>> fApplyChanges;
+
+    bool waitForChangeApplication() {
+        if (fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) { return true; }
+        return false;
+    }
 
     void drawInsertionChanges(const std::string& table, std::size_t lastRow) {
         if (!rowMappedChanges.contains(table) || !dbData->headers.contains(table)) { return; }
@@ -41,6 +49,10 @@ class DbVisualizer {
                     */
                 ImGui::TableNextColumn();
                 ImGui::PushID(static_cast<int>(lastRow));
+
+                if (ImGui::Button("RUN")) { fApplyChanges = dbService.requestChangeApplication(changeTracker.getChanges(), sqlAction::EXECUTE); }
+
+                ImGui::SameLine();
                 if (ImGui::Button("x")) { changeTracker.removeChange(change.getHash()); }
                 ImGui::PopID();
             }
@@ -160,8 +172,10 @@ class DbVisualizer {
             rowMappedChanges = changeTracker.getRowMappedData();
             changes = changeTracker.getChanges();
             createTableSplitters();
+            // TODO: NICHT ALLE LÖSCHEN etc
+            if (waitForChangeApplication()) { changeTracker.removeChanges(fApplyChanges.get()); }
         }
     }
 
-    DbVisualizer(ChangeTracker& cChangeTracker, Logger& cLogger) : changeTracker(cChangeTracker), logger(cLogger) {}
+    DbVisualizer(DbService& cDbService, ChangeTracker& cChangeTracker, Logger& cLogger) : dbService(cDbService), changeTracker(cChangeTracker), logger(cLogger) {}
 };
