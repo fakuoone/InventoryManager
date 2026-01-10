@@ -40,4 +40,6 @@ class ChangeTracker {
     std::map<std::size_t, Change<cccType>> getChanges();
 
     std::map<std::string, std::map<cccType, std::size_t>> getRowMappedData();
+
+    void removeChange(const std::size_t hash);
 };

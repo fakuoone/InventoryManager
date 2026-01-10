@@ -48,10 +48,7 @@ void ChangeTracker::addRelatedChange(std::size_t baseHash, const Change<cccType>
 void ChangeTracker::removeChanges(const std::vector<std::size_t>& changeHashes) {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
     for (const auto& hash : changeHashes) {
-        if (changes.flatData.contains(hash)) {
-            logger.pushLog(Log{std::format("    Removing change {}", hash)});
-            changes.flatData.erase(hash);
-        }
+        removeChange(hash);
     }
 }
 
@@ -63,4 +60,14 @@ std::map<std::size_t, Change<cccType>> ChangeTracker::getChanges() {
 std::map<std::string, std::map<cccType, std::size_t>> ChangeTracker::getRowMappedData() {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
     return changes.rowMappedData;
+}
+
+void ChangeTracker::removeChange(const std::size_t hash) {
+    if (changes.flatData.contains(hash)) {
+        // TODO: ERror handling
+        const Change<cccType>& change = changes.flatData.at(hash);
+        changes.rowMappedData.at(change.getTable()).erase(change.getRowId());
+        logger.pushLog(Log{std::format("    Removing change {}", hash)});
+        changes.flatData.erase(hash);
+    }
 }

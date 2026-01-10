@@ -19,9 +19,11 @@ class DbVisualizer {
 
     void drawInsertionChanges(const std::string& table, std::size_t lastRow) {
         if (!rowMappedChanges.contains(table) || !dbData->headers.contains(table)) { return; }
+        ImGui::TableNextRow();
         for (const auto& [_, hash] : rowMappedChanges.at(table)) {
             const Change<cccType>& change = changes.at(hash);
             if (change.getType() == changeType::INSERT_ROW) {
+                ++lastRow;
                 for (const auto& header : dbData->headers.at(table)) {
                     ImGui::TableNextColumn();
                     const auto& cellChanges = change.getCells();
@@ -37,9 +39,12 @@ class DbVisualizer {
                     if (std::find(headers.begin(), headers.end(), column) == headers.end()) { logger.pushLog(Log{std::format("ERROR: Change {} has entry {} for invalid column {}.", hash, cell, column)}); }
                     }
                     */
+                ImGui::TableNextColumn();
+                ImGui::PushID(static_cast<int>(lastRow));
+                if (ImGui::Button("x")) { changeTracker.removeChange(change.getHash()); }
+                ImGui::PopID();
             }
         }
-        ImGui::TableNextRow();
     }
 
     void drawChange(const Change<cccType>& change) {
@@ -86,11 +91,11 @@ class DbVisualizer {
     }
 
     void createColumns(const std::string& table) {
+        ImGui::TableNextRow();
         for (const auto& column : dbData->headers.at(table)) {
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(column.c_str());
         }
-        ImGui::TableNextRow();
     }
 
     void createRows(const std::string& table) {
@@ -109,6 +114,7 @@ class DbVisualizer {
         bool maxNotReached = true;
         while (maxNotReached) {
             auto rowChange = getChangeOfRow(table, dbData->headers.at(table), i);
+            ImGui::TableNextRow();
             for (const auto& header : dbData->headers.at(table)) {
                 ImGui::TableNextColumn();
                 if (!dbData->tableRows.at(table).contains(header)) { continue; }
@@ -126,7 +132,6 @@ class DbVisualizer {
                 maxNotReached = true;
                 ImGui::TextUnformatted(cell.c_str());
             }
-            ImGui::TableNextRow();
             ++i;
         }
         drawInsertionChanges(table, i);
@@ -136,7 +141,7 @@ class DbVisualizer {
         if (ImGui::BeginTabBar("MainTabs")) {
             for (const auto& [table, data] : dbData->headers) {
                 if (ImGui::BeginTabItem(table.c_str())) {
-                    if (ImGui::BeginTable("ColumnsTable", static_cast<cccType>(data.size()), ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                    if (ImGui::BeginTable("ColumnsTable", static_cast<cccType>(data.size() + 1), ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                         createColumns(table);
                         createRows(table);
                         ImGui::EndTable();
