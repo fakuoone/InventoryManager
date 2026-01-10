@@ -19,6 +19,8 @@ class DbVisualizer {
     // TODO: wahrscheinlich sollte sich app darum kümmern und hier nur eine REferenz? rowMappedChanges sollte nur in changeTracker existieren, und hier wird angefragt?
     Change::ctRMD rowMappedChanges;
     Change::chHashM changes;
+    Change::chHashV sucChanges;
+    bool changesBeingApplied{false};
 
     void drawInsertionChanges(const std::string& table, std::size_t lastRow) {
         if (!rowMappedChanges.contains(table) || !dbData->headers.contains(table)) { return; }
@@ -45,13 +47,15 @@ class DbVisualizer {
                 ImGui::TableNextColumn();
                 ImGui::PushID(static_cast<int>(lastRow));
 
-                if (ImGui::Button("RUN")) {}
-                // fApplyChanges = changeExe.requestChangeApplication(changeTracker.getChanges(), sqlAction::EXECUTE); }
-
-                ImGui::SameLine();
-                if (ImGui::Button("x")) { changeTracker.removeChange(change.getHash()); }
-                ImGui::PopID();
+                if (ImGui::Button("RUN")) {
+                    changesBeingApplied = true;
+                    changeExe.requestChangeApplication(Change{change}, sqlAction::EXECUTE);
+                }
             }
+
+            ImGui::SameLine();
+            if (ImGui::Button("x")) { changeTracker.removeChange(change.getHash()); }
+            ImGui::PopID();
         }
     }
 
@@ -168,8 +172,11 @@ class DbVisualizer {
             rowMappedChanges = changeTracker.getRowMappedData();
             changes = changeTracker.getChanges();
             createTableSplitters();
-            // TODO: NICHT ALLE LÖSCHEN etc
-            // if (changeExe.waitForChangeApplication()) { changeTracker.removeChanges// (fApplyChanges.get()); }
+            if (changeExe.isChangeApplicationDone()) {
+                sucChanges = changeExe.getSuccessfulChanges();
+                changesBeingApplied = false;
+            }
+            if (changesBeingApplied) { ImGui::Dummy(ImVec2{50, 50}); }
         }
     }
 

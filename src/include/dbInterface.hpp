@@ -1,16 +1,21 @@
 #pragma once
 
 #include <algorithm>
+#include <concepts>
 #include <condition_variable>
 #include <iostream>
 #include <map>
 #include <mutex>
-#include <pqxx/pqxx>
 #include <string>
+
+#include <pqxx/pqxx>
 
 #include "change.hpp"
 #include "logger.hpp"
 #include "timing.hpp"
+
+template <typename T>
+concept C = std::same_as<T, const Change&> || std::same_as<T, const Change::chHashM&>;
 
 template <typename changeTrackerChangeType>
 struct protectedData {
@@ -228,15 +233,23 @@ class DbInterface {
         return completeDbData{tables.data, tableHeaders.data, tableRows.data};
     }
 
-    Change::chHashV applyChanges(Change::chHashM changes, sqlAction action) {
-        // TODO: Implement logic
+    template <typename C>
+    Change::chHashV applyChanges(C change_s, sqlAction action) {
         // TODO: A change can require a nested tree of additional changes. The deepest change needs to be executed first
         Change::chHashV successfulChanges;
-        for (const auto& [hash, change] : changes) {
-            logger.pushLog(Log{std::format("    Applying change {}", hash)});
-            logger.pushLog(Log{std::format("        SQL-command: {}", change.toSQLaction(action))});
-            successfulChanges.push_back(hash);
+        if constexpr (std::same_as<C, Change>) {
+            if (applySingleChange(change_s, action)) { successfulChanges.push_back(change_s.getHash()); };
+        } else {
+            for (const auto& [hash, change] : change_s) {
+                if (applySingleChange(change, action)) { successfulChanges.push_back(hash); }
+            }
         }
         return successfulChanges;
+    }
+
+    bool applySingleChange(const Change& change, sqlAction action) {
+        logger.pushLog(Log{std::format("    Applying change {}", change.getHash())});
+        logger.pushLog(Log{std::format("        SQL-command: {}", change.toSQLaction(action))});
+        return true;
     }
 };

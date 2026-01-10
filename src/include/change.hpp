@@ -41,6 +41,8 @@ class Change {
     Change(colValMap cCells, changeType cType, std::string cTable, Logger& cLogger, std::size_t cRowId) : changedCells(cCells), type(cType), table(cTable), logger(cLogger), rowId(cRowId) { updateHash(); }
 
     [[nodiscard]] std::size_t getHash() const {
+        //TODO: Es ist unmöglich, in einer Tabelle zwei mal iNSERT_ROw zu haben
+        // was ist mit cash collisions?
         std::size_t currentHash = 0;
         combineHash(currentHash, std::hash<int>{}(static_cast<int>(type)));
         combineHash(currentHash, std::hash<std::string>{}(table));
@@ -63,6 +65,7 @@ class Change {
 
     void updateHash() { changeHash = getHash(); }
 
+    Change(const Change&) = default;
     Change& operator=(const Change& other) {
         // merges changs if necessary
         if (this != &other) {

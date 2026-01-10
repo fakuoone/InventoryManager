@@ -93,5 +93,9 @@ class DbService {
 
     void initializeDbInterface(const std::string& configString) { dbInterface.initializeWithConfigString(configString); }
 
-    std::future<Change::chHashV> requestChangeApplication(Change::chHashM changes, sqlAction action) { return pool.submit(&DbInterface::applyChanges, &dbInterface, std::move(changes), action); }
+    template <typename T>
+    std::future<Change::chHashV> requestChangeApplication(T change_s, sqlAction action) {
+        return pool.submit([this](auto change, sqlAction act) { return dbInterface.applyChanges(std::move(change), act); }, std::move(change_s), action);
+        //      return pool.submit(&DbInterface::applyChanges, &dbInterface, std::move(change_s), action);
+    }
 };

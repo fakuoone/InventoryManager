@@ -29,8 +29,6 @@ class App {
     std::shared_ptr<const completeDbData> dbData;
     bool dataAvailable{false};
 
-    std::future<Change::chHashV> fApplyChanges;
-
     void changeData(Change change) {
         if (dataAvailable) { changeTracker.addChange(change); }
     }
@@ -60,6 +58,7 @@ class App {
 
         if (ImGui::Begin("FPSOverlay", nullptr, flags)) {
             ImGuiIO& io = ImGui::GetIO();
+            if (io.Framerate < 239) { logger.pushLog(Log{std::format("FPS: {}", io.Framerate)}); }
             ImGui::Text("FPS: %.1f", static_cast<double>(io.Framerate));
             ImGui::Text("Frame: %.3f ms", 1000.0 / static_cast<double>(io.Framerate));
             ImGui::End();
@@ -112,5 +111,6 @@ class App {
         changeData(Change{testmap, changeType::UPDATE_CELLS, "categories", logger, 0});
         testmap.emplace("test2", "3");
         changeData(Change{testmap, changeType::UPDATE_CELLS, "categories", logger, 0});
+        changeData(Change{testmap, changeType::INSERT_ROW, "parts", logger, 0});
     }
 };
