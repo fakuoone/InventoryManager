@@ -5,14 +5,13 @@
 #include <map>
 #include <mutex>
 #include <string>
-#include <unordered_map>
+#include <map>
 #include <vector>
 
 enum class changeType { INSERT_ROW, DELETE_ROW, UPDATE_CELLS };
 
 enum class sqlAction { PREVIEW, EXECUTE };
 
-template <typename rowIdType = int>
 class Change {
     /* 
     1. create table (not supported) 
@@ -21,24 +20,31 @@ class Change {
     4. remove row from any table 
     5. change n cells in a row 
     */
+   public:
+    using colValMap = std::map<std::string, std::string>;
+    using chHHMap = std::map<std::size_t, std::size_t>;
+    using chHashV = std::vector<std::size_t>;
+    using chHashM = std::map<std::size_t, Change>;
+    using ctRMD = std::map<std::string, chHHMap>;
+
    private:
+    colValMap changedCells;
     changeType type{changeType::UPDATE_CELLS};
     std::string table;
-    rowIdType rowId{};
-    std::unordered_map<std::string, std::string> changedCells;
-    std::size_t changeHash;
     Logger& logger;
+    std::size_t rowId;
+    std::size_t changeHash;
 
     static inline void combineHash(std::size_t& hash, std::size_t value) { hash ^= value + 0x9e3779b9 + (hash << 6) + (hash >> 2); }
 
    public:
-    Change(changeType cType, std::string cTable, rowIdType cRowId, std::unordered_map<std::string, std::string> cCells, Logger& cLogger) : type(cType), table(cTable), rowId(cRowId), changedCells(cCells), logger(cLogger) { updateHash(); }
+    Change(colValMap cCells, changeType cType, std::string cTable, Logger& cLogger, std::size_t cRowId) : changedCells(cCells), type(cType), table(cTable), logger(cLogger), rowId(cRowId) { updateHash(); }
 
     [[nodiscard]] std::size_t getHash() const {
         std::size_t currentHash = 0;
         combineHash(currentHash, std::hash<int>{}(static_cast<int>(type)));
         combineHash(currentHash, std::hash<std::string>{}(table));
-        combineHash(currentHash, std::hash<rowIdType>{}(rowId));
+        combineHash(currentHash, std::hash<std::size_t>{}(rowId));
         return currentHash;
     }
 
@@ -46,9 +52,9 @@ class Change {
 
     const std::string& getTable() const { return table; }
 
-    const rowIdType getRowId() const { return rowId; }
+    std::size_t getRowId() const { return rowId; }
 
-    std::unordered_map<std::string, std::string> getCells() const { return changedCells; }
+    colValMap getCells() const { return changedCells; }
 
     std::string getCell() const {
         if (!changedCells.contains(table)) { return std::string(); }

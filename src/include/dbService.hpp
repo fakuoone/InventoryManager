@@ -9,8 +9,6 @@
 #include "logger.hpp"
 #include "threadPool.hpp"
 
-// TODO: fix this
-using cccType = int;
 class DbService {
    private:
     DbInterface& dbInterface;
@@ -70,7 +68,7 @@ class DbService {
         return true;
     }
 
-    bool validateChange(const Change<int>& change) {
+    bool validateChange(const Change& change) {
         // TODO: Implement logic
         // 1.
         const tStringVector& tables = dbData->tables;
@@ -95,5 +93,5 @@ class DbService {
 
     void initializeDbInterface(const std::string& configString) { dbInterface.initializeWithConfigString(configString); }
 
-    std::future<std::vector<std::size_t>> requestChangeApplication(std::map<std::size_t, Change<cccType>> changes, sqlAction action) { return pool.submit(&DbInterface::applyChanges, &dbInterface, std::move(changes), action); }
+    std::future<Change::chHashV> requestChangeApplication(Change::chHashM changes, sqlAction action) { return pool.submit(&DbInterface::applyChanges, &dbInterface, std::move(changes), action); }
 };

@@ -1,12 +1,13 @@
 #pragma once
 
 #include <future>
-#include <unordered_map>
 
 #include "changeTracker.hpp"
 #include "config.hpp"
 #include "dbService.hpp"
 #include "logger.hpp"
+#include "changeExeService.hpp"
+
 #include "userInterface/dbDataVisualizer.hpp"
 #include "userInterface/imGuiDX11Context.hpp"
 
@@ -21,15 +22,16 @@ class App {
     Config& config;
     Logger& logger;
 
-    DbVisualizer dbVisualizer{dbService, changeTracker, logger};
+    ChangeExeService changeExe{dbService, changeTracker, logger};
+    DbVisualizer dbVisualizer{changeTracker, changeExe, logger};
 
     AppState appState{AppState::RUNNING};
     std::shared_ptr<const completeDbData> dbData;
     bool dataAvailable{false};
 
-    std::future<std::vector<std::size_t>> fApplyChanges;
+    std::future<Change::chHashV> fApplyChanges;
 
-    void changeData(Change<cccType> change) {
+    void changeData(Change change) {
         if (dataAvailable) { changeTracker.addChange(change); }
     }
 
@@ -103,12 +105,12 @@ class App {
     }
 
     void testMakeChanges() {
-        std::unordered_map<std::string, std::string> testmap;
-        changeData(Change{changeType::INSERT_ROW, "categories", 0, testmap, logger});
+        Change::colValMap testmap;
+        changeData(Change{testmap, changeType::INSERT_ROW, "categories", logger, 0});
         testmap.emplace("test", "2");
         testmap.emplace("test2", "3");
-        changeData(Change{changeType::UPDATE_CELLS, "categories", 0, testmap, logger});
+        changeData(Change{testmap, changeType::UPDATE_CELLS, "categories", logger, 0});
         testmap.emplace("test2", "3");
-        changeData(Change{changeType::UPDATE_CELLS, "categories", 0, testmap, logger});
+        changeData(Change{testmap, changeType::UPDATE_CELLS, "categories", logger, 0});
     }
 };

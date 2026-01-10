@@ -5,31 +5,26 @@
 #include "dbService.hpp"
 #include "dbInterface.hpp"
 #include "changeTracker.hpp"
+#include "changeExeService.hpp"
 
 #include "logger.hpp"
 
 class DbVisualizer {
    private:
-    DbService& dbService;
     ChangeTracker& changeTracker;
+    ChangeExeService& changeExe;
     Logger& logger;
 
     std::shared_ptr<const completeDbData> dbData;
     // TODO: wahrscheinlich sollte sich app darum kümmern und hier nur eine REferenz? rowMappedChanges sollte nur in changeTracker existieren, und hier wird angefragt?
-    std::map<std::string, std::map<cccType, std::size_t>> rowMappedChanges;
-    std::map<std::size_t, Change<cccType>> changes;
-    std::future<std::vector<std::size_t>> fApplyChanges;
-
-    bool waitForChangeApplication() {
-        if (fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) { return true; }
-        return false;
-    }
+    Change::ctRMD rowMappedChanges;
+    Change::chHashM changes;
 
     void drawInsertionChanges(const std::string& table, std::size_t lastRow) {
         if (!rowMappedChanges.contains(table) || !dbData->headers.contains(table)) { return; }
         ImGui::TableNextRow();
         for (const auto& [_, hash] : rowMappedChanges.at(table)) {
-            const Change<cccType>& change = changes.at(hash);
+            const Change& change = changes.at(hash);
             if (change.getType() == changeType::INSERT_ROW) {
                 ++lastRow;
                 for (const auto& header : dbData->headers.at(table)) {
@@ -50,7 +45,8 @@ class DbVisualizer {
                 ImGui::TableNextColumn();
                 ImGui::PushID(static_cast<int>(lastRow));
 
-                if (ImGui::Button("RUN")) { fApplyChanges = dbService.requestChangeApplication(changeTracker.getChanges(), sqlAction::EXECUTE); }
+                if (ImGui::Button("RUN")) {}
+                // fApplyChanges = changeExe.requestChangeApplication(changeTracker.getChanges(), sqlAction::EXECUTE); }
 
                 ImGui::SameLine();
                 if (ImGui::Button("x")) { changeTracker.removeChange(change.getHash()); }
@@ -59,7 +55,7 @@ class DbVisualizer {
         }
     }
 
-    void drawChange(const Change<cccType>& change) {
+    void drawChange(const Change& change) {
         switch (change.getType()) {
             case changeType::DELETE_ROW:
                 break;
@@ -73,7 +69,7 @@ class DbVisualizer {
         }
     }
 
-    std::expected<const Change<cccType>*, bool> getChangeOfRow(const std::string& table, const tStringVector& headers, const std::size_t row) {
+    std::expected<const Change*, bool> getChangeOfRow(const std::string& table, const tStringVector& headers, const std::size_t row) {
         if (!rowMappedChanges.contains(table)) { return std::unexpected(false); }
         for (const auto& header : headers) {
             if (header == "id") {
@@ -84,9 +80,9 @@ class DbVisualizer {
                 }
 
                 const std::string& cell = data.at(row);
-                cccType id;
+                std::size_t id;
                 try {
-                    id = std::stoi(cell);
+                    id = static_cast<std::size_t>(std::stoi(cell));
                 } catch (const std::exception& e) {
                     logger.pushLog(Log{std::format("ERROR: Getting change of ID {} in table {}: value {} is not an integer. Exception: {}", row, table, cell, e.what())});
                     return std::unexpected(false);
@@ -153,7 +149,7 @@ class DbVisualizer {
         if (ImGui::BeginTabBar("MainTabs")) {
             for (const auto& [table, data] : dbData->headers) {
                 if (ImGui::BeginTabItem(table.c_str())) {
-                    if (ImGui::BeginTable("ColumnsTable", static_cast<cccType>(data.size() + 1), ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                    if (ImGui::BeginTable("ColumnsTable", static_cast<int>(data.size() + 1), ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                         createColumns(table);
                         createRows(table);
                         ImGui::EndTable();
@@ -173,9 +169,9 @@ class DbVisualizer {
             changes = changeTracker.getChanges();
             createTableSplitters();
             // TODO: NICHT ALLE LÖSCHEN etc
-            if (waitForChangeApplication()) { changeTracker.removeChanges(fApplyChanges.get()); }
+            // if (changeExe.waitForChangeApplication()) { changeTracker.removeChanges// (fApplyChanges.get()); }
         }
     }
 
-    DbVisualizer(DbService& cDbService, ChangeTracker& cChangeTracker, Logger& cLogger) : dbService(cDbService), changeTracker(cChangeTracker), logger(cLogger) {}
+    DbVisualizer(ChangeTracker& cChangeTracker, ChangeExeService& cChangeExe, Logger& cLogger) : changeTracker(cChangeTracker), changeExe(cChangeExe), logger(cLogger) {}
 };

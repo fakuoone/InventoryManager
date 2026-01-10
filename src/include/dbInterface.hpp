@@ -228,11 +228,10 @@ class DbInterface {
         return completeDbData{tables.data, tableHeaders.data, tableRows.data};
     }
 
-    std::vector<std::size_t> applyChanges(std::map<std::size_t, Change<int>> changes, sqlAction action) {
+    Change::chHashV applyChanges(Change::chHashM changes, sqlAction action) {
         // TODO: Implement logic
-        // TODO: Reconsider the map argument. Vector might be more suitable?
         // TODO: A change can require a nested tree of additional changes. The deepest change needs to be executed first
-        std::vector<std::size_t> successfulChanges;
+        Change::chHashV successfulChanges;
         for (const auto& [hash, change] : changes) {
             logger.pushLog(Log{std::format("    Applying change {}", hash)});
             logger.pushLog(Log{std::format("        SQL-command: {}", change.toSQLaction(action))});

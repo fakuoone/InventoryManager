@@ -10,12 +10,11 @@
 #include <unordered_map>
 #include <vector>
 
-using cccType = int;
 struct protectedChanges {
     std::mutex mtx;
-    std::map<std::size_t, Change<cccType>> flatData;
-    std::vector<std::size_t> orderedTree;
-    std::map<std::string, std::map<cccType, std::size_t>> rowMappedData;
+    Change::chHashM flatData;
+    Change::chHashV orderedTree;
+    Change::ctRMD rowMappedData;
 };
 
 class ChangeTracker {
@@ -24,22 +23,22 @@ class ChangeTracker {
     DbService& dbService;
     Logger& logger;
 
-    void mergeCellChanges(Change<cccType>& existingChange, const Change<cccType>& newChange);
+    void mergeCellChanges(Change& existingChange, const Change& newChange);
 
-    bool manageConflict(const Change<cccType>& newChange, std::size_t hash);
+    bool manageConflict(const Change& newChange, std::size_t hash);
 
    public:
     ChangeTracker(DbService& cDbService, Logger& cLogger) : dbService(cDbService), logger(cLogger) {}
 
-    void addChange(const Change<cccType>& change);
+    void addChange(const Change& change);
 
-    void addRelatedChange(std::size_t baseHash, const Change<cccType>& change);
+    void addRelatedChange(std::size_t baseHash, const Change& change);
 
-    void removeChanges(const std::vector<std::size_t>& changeHashes);
+    void removeChanges(const Change::chHashV& changeHashes);
 
-    std::map<std::size_t, Change<cccType>> getChanges();
+    Change::chHashM getChanges();
 
-    std::map<std::string, std::map<cccType, std::size_t>> getRowMappedData();
+    Change::ctRMD getRowMappedData();
 
     void removeChange(const std::size_t hash);
 };
