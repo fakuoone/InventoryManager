@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_set>
+
 #include "imgui.h"
 
 #include "dbService.hpp"
@@ -8,6 +10,12 @@
 #include "changeExeService.hpp"
 
 #include "logger.hpp"
+
+constexpr std::size_t BUFFER_SIZE = 256;
+struct editingData {
+    std::unordered_set<std::size_t> whichRows;
+    char buffer[BUFFER_SIZE];
+};
 
 class DbVisualizer {
    private:
@@ -21,6 +29,8 @@ class DbVisualizer {
     Change::chHashM changes;
     Change::chHashV sucChanges;
     bool changesBeingApplied{false};
+
+    editingData edit;
 
     void drawInsertionChanges(const std::string& table, std::size_t lastRow) {
         if (!rowMappedChanges.contains(table) || !dbData->headers.contains(table)) { return; }
@@ -59,17 +69,28 @@ class DbVisualizer {
         }
     }
 
-    void drawChange(const Change& change) {
-        switch (change.getType()) {
-            case changeType::DELETE_ROW:
-                break;
-            case changeType::INSERT_ROW:
-                break;
-            case changeType::UPDATE_CELLS:
-                break;
+    void drawCellWithChange(std::expected<const Change*, bool> change, const std::string& originalCell, const std::string& table, const std::string& header, std::size_t row) {
+        std::string newCellValue{};
+        // Get changed value for column and display it
+        if (change.has_value()) {
+            newCellValue = (*change)->getCell(header);
+            if (!newCellValue.empty()) {
+                ImGui::TextUnformatted(originalCell.c_str());
+                ImGui::SameLine();
+            }
+        }
 
-            default:
-                break;
+        if (newCellValue.empty()) { newCellValue = originalCell; }
+
+        // Draw editable cell
+        if (edit.whichRows.contains(row)) {
+            std::snprintf(edit.buffer, BUFFER_SIZE, "%s", newCellValue.c_str());
+            if (ImGui::InputText("##edit", edit.buffer, BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue)) {
+                Change::colValMap newChangeColVal{{header, std::string(edit.buffer)}};
+                changeTracker.addChange(Change{newChangeColVal, changeType::UPDATE_CELLS, table, logger, row});
+            }
+        } else {
+            ImGui::TextUnformatted(newCellValue.c_str());
         }
     }
 
@@ -111,6 +132,7 @@ class DbVisualizer {
     }
 
     void createRows(const std::string& table) {
+        // Check data validity
         if (!dbData->headers.contains(table)) { return; }
         if (!dbData->tableRows.contains(table)) { return; }
         bool hasData = false;
@@ -127,23 +149,43 @@ class DbVisualizer {
         while (maxNotReached) {
             auto rowChange = getChangeOfRow(table, dbData->headers.at(table), i);
             ImGui::TableNextRow();
+            // Draw every column for this row index
             for (const auto& header : dbData->headers.at(table)) {
                 ImGui::TableNextColumn();
                 if (!dbData->tableRows.at(table).contains(header)) { continue; }
+                // Get data for column
                 const auto& data = dbData->tableRows.at(table).at(header);
                 if (data.size() <= i + 1) {
                     maxNotReached = false;
                     ImGui::TextUnformatted("-");
                     continue;
                 }
+                // Draw each cell
                 std::string cell = data.at(i);
-                if (rowChange.has_value()) {
-                    std::string newCellValue = rowChange.value()->getCell();
-                    if (!newCellValue.empty()) { cell = std::format("{} | {}", cell, newCellValue); }
-                }
+                drawCellWithChange(rowChange, cell, table, header, i);
                 maxNotReached = true;
-                ImGui::TextUnformatted(cell.c_str());
             }
+            // Draw edit options
+            ImGui::TableNextColumn();
+            ImGui::PushID(static_cast<int>(i));
+            // Remove row
+            if (ImGui::Button("x")) {
+                Change::colValMap cvMap{};
+                changeTracker.addChange(Change{cvMap, changeType::DELETE_ROW, table, logger, i});
+            }
+
+            // Edit row
+            // TODO: nur bearbeitbar, wenn kein change mit delete_row für diese reihe vorhanden
+            ImGui::SameLine();
+            if (ImGui::Button("edit")) {
+                if (edit.whichRows.contains(i)) {
+                    edit.whichRows.erase(i);
+                } else {
+                    edit.whichRows.insert(i);
+                }
+            }
+
+            ImGui::PopID();
             ++i;
         }
         drawInsertionChanges(table, i);

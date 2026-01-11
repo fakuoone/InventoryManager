@@ -58,9 +58,9 @@ class Change {
 
     colValMap getCells() const { return changedCells; }
 
-    std::string getCell() const {
-        if (!changedCells.contains(table)) { return std::string(); }
-        return changedCells.at(table);
+    std::string getCell(const std::string& header) const {
+        if (!changedCells.contains(header)) { return std::string(); }
+        return changedCells.at(header);
     }
 
     void updateHash() { changeHash = getHash(); }

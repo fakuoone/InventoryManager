@@ -37,6 +37,8 @@ target_compile_options(InventoryManager PRIVATE
     -Wdouble-promotion
     -Wformat=2
     -Wno-unused-parameter
+    -fdiagnostics-color=always
+
 )
 
 # --- IMGUI ---
