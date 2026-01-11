@@ -76,6 +76,7 @@ class App {
     void supplyConfigString() {
         std::string dbString = config.setConfigString("B:/Programmieren/C/InventoryManager/config/database.json");
         dbService.initializeDbInterface(dbString);
+        dbVisualizer.setPrimaryKey(config.getPrimaryKey());
     }
 
     void run() {
@@ -89,7 +90,7 @@ class App {
             }
 
             // UI INDEPENDANT CODE
-            if (waitForData()) { testMakeChanges(); }
+            if (waitForData()) {}
 
             if (!imguiCtx.beginFrame()) { continue; }
             if (dataAvailable) {
@@ -101,16 +102,5 @@ class App {
 
             imguiCtx.endFrame();
         }
-    }
-
-    void testMakeChanges() {
-        Change::colValMap testmap;
-        changeData(Change{testmap, changeType::INSERT_ROW, "categories", logger, 0});
-        testmap.emplace("test", "2");
-        testmap.emplace("test2", "3");
-        changeData(Change{testmap, changeType::UPDATE_CELLS, "categories", logger, 0});
-        testmap.emplace("test2", "3");
-        changeData(Change{testmap, changeType::UPDATE_CELLS, "categories", logger, 0});
-        changeData(Change{testmap, changeType::INSERT_ROW, "parts", logger, 0});
     }
 };
