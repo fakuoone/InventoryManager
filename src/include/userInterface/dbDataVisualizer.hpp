@@ -74,7 +74,7 @@ class DbVisualizer {
         return i;
     }
 
-    void drawCellWithChange(std::expected<const Change*, bool> change, const std::string& originalCell, const std::string& table, const std::string& header, std::size_t row) {
+    void drawCellWithChange(std::expected<const Change*, bool> change, const std::string& originalCell, const std::string& table, const std::string& header, const std::size_t id) {
         std::string newCellValue{};
         changeType cType;
         // Get changed value for column and display it
@@ -92,12 +92,14 @@ class DbVisualizer {
         if (newCellValue.empty()) { newCellValue = originalCell; }
 
         // Draw editable cell
-        if (edit.whichIds.contains(row)) {
+        if (edit.whichIds.contains(id)) {
+            ImGui::PushID(header.c_str());
             std::snprintf(edit.buffer, BUFFER_SIZE, "%s", newCellValue.c_str());
             if (ImGui::InputText("##edit", edit.buffer, BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue)) {
                 Change::colValMap newChangeColVal{{header, std::string(edit.buffer)}};
-                changeTracker.addChange(Change{newChangeColVal, changeType::UPDATE_CELLS, table, logger, row});
+                changeTracker.addChange(Change{newChangeColVal, changeType::UPDATE_CELLS, table, logger, id});
             }
+            ImGui::PopID();
         } else {
             if (cType == changeType::DELETE_ROW) {
                 ImVec2 pos = ImGui::GetCursorScreenPos();
@@ -169,6 +171,7 @@ class DbVisualizer {
             auto rowChange = getChangeOfRow(table, dbData->headers.at(table), id);
             ImGui::TableNextRow();
             // Draw every column for this row index
+            ImGui::PushID(static_cast<int>(id));
             for (const auto& header : dbData->headers.at(table)) {
                 ImGui::TableNextColumn();
                 if (!dbData->tableRows.at(table).contains(header)) { continue; }
@@ -186,11 +189,15 @@ class DbVisualizer {
             }
             // Draw edit options
             ImGui::TableNextColumn();
-            ImGui::PushID(static_cast<int>(id));
-            // Remove row
+            // Remove row or (deletion) change affecting it
             if (ImGui::Button("x")) {
-                Change::colValMap cvMap{};
-                changeTracker.addChange(Change{cvMap, changeType::DELETE_ROW, table, logger, id});
+                if (rowChange.has_value()) {
+                    changeTracker.removeChange((*rowChange)->getHash());
+                } else {
+                    Change::colValMap cvMap{};
+                    changeTracker.addChange(Change{cvMap, changeType::DELETE_ROW, table, logger, id});
+                    if (edit.whichIds.contains(id)) { edit.whichIds.erase(id); }
+                }
             }
 
             // Edit row
