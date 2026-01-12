@@ -74,6 +74,27 @@ class DbVisualizer {
         return i;
     }
 
+    void drawUserInputRowFields(const std::string& table, const std::size_t loopId, const std::size_t id) {
+        // TODO: Evtl in createRows in den loop integrieren?
+        // TODO: Es sind sizeof(header) BUFFER notwendig
+        if (!dbData->headers.contains(table)) { return; }
+        ImGui::PushID(1);
+        Change::colValMap newChangeColVal{};
+        ImGui::TableNextRow();
+        for (const auto& header : dbData->headers.at(table)) {
+            ImGui::TableNextColumn();
+            if (!(header == primaryKey)) {
+                ImGui::PushID(header.c_str());
+                //std::snprintf(edit.buffer, BUFFER_SIZE, "%s", newCellValue.c_str());
+                if (ImGui::InputText("##edit", edit.buffer, BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue)) { newChangeColVal.emplace(header, std::string(edit.buffer)); }
+                ImGui::PopID();
+            }
+        }
+        ImGui::TableNextColumn();
+        if (ImGui::Button("ENTER")) { changeTracker.addChange(Change{newChangeColVal, changeType::INSERT_ROW, table, logger, id}); }
+        ImGui::PopID();
+    }
+
     void drawCellWithChange(std::expected<const Change*, bool> change, const std::string& originalCell, const std::string& table, const std::string& header, const std::size_t id) {
         std::string newCellValue{};
         changeType cType;
@@ -169,7 +190,7 @@ class DbVisualizer {
             std::size_t id = getIdOfLoopIndex(table, i);
             if (id > maxId) { maxId = id; }
             auto rowChange = getChangeOfRow(table, dbData->headers.at(table), id);
-            ImGui::TableNextRow();
+            ImGui::TableNextRow();  // TODO: Das Problem mit der leeren Zeile ist genau hier. Man merkt erst nach dem "nextrow"-AUfruf, dass keine Daten da sind
             // Draw every column for this row index
             ImGui::PushID(static_cast<int>(id));
             for (const auto& header : dbData->headers.at(table)) {
@@ -179,13 +200,18 @@ class DbVisualizer {
                 const auto& data = dbData->tableRows.at(table).at(header);
                 if (data.size() <= i) {
                     maxNotReached = false;
-                    ImGui::TextUnformatted("-");
+                    if (data.size() == 0) { ImGui::TextUnformatted("-"); }
                     continue;
                 }
                 // Draw each cell
                 std::string cell = data.at(i);
                 drawCellWithChange(rowChange, cell, table, header, id);
                 maxNotReached = true;
+            }
+            // Exit if all data has been printed
+            if (!maxNotReached) {
+                ImGui::PopID();
+                break;
             }
             // Draw edit options
             ImGui::TableNextColumn();
@@ -211,10 +237,13 @@ class DbVisualizer {
                 }
             }
             if (rowChange.has_value()) { ImGui::EndDisabled(); }
+
             ImGui::PopID();
             ++i;
         }
         i = drawInsertionChanges(table, i, maxId);
+        drawUserInputRowFields(table, i, maxId);
+        ++i;
     }
 
     void createTableSplitters() {
