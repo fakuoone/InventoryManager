@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_set>
+#include <array>
 
 #include "imgui.h"
 
@@ -15,7 +16,8 @@ constexpr const std::size_t INVALID_ID = std::numeric_limits<std::size_t>::max()
 constexpr const std::size_t BUFFER_SIZE = 256;
 struct editingData {
     std::unordered_set<std::size_t> whichIds;
-    char buffer[BUFFER_SIZE];
+    std::vector<std::array<char, BUFFER_SIZE>> insertBuffer;
+    std::array<char, BUFFER_SIZE> editBuffer;
 };
 
 class DbVisualizer {
@@ -76,19 +78,22 @@ class DbVisualizer {
 
     void drawUserInputRowFields(const std::string& table, const std::size_t loopId, const std::size_t id) {
         // TODO: Evtl in createRows in den loop integrieren?
-        // TODO: Es sind sizeof(header) BUFFER notwendig
         if (!dbData->headers.contains(table)) { return; }
         ImGui::PushID(1);
         Change::colValMap newChangeColVal{};
         ImGui::TableNextRow();
+        edit.insertBuffer.resize(dbData->headers.size());
+        std::size_t i = 0;
         for (const auto& header : dbData->headers.at(table)) {
             ImGui::TableNextColumn();
             if (!(header == primaryKey)) {
                 ImGui::PushID(header.c_str());
                 //std::snprintf(edit.buffer, BUFFER_SIZE, "%s", newCellValue.c_str());
-                if (ImGui::InputText("##edit", edit.buffer, BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue)) { newChangeColVal.emplace(header, std::string(edit.buffer)); }
+                ImGui::InputText("##edit", edit.insertBuffer.at(i).data(), BUFFER_SIZE);
+                std::string newValue = newChangeColVal[header] = std::string(edit.insertBuffer.at(i).data());
                 ImGui::PopID();
             }
+            ++i;
         }
         ImGui::TableNextColumn();
         if (ImGui::Button("ENTER")) { changeTracker.addChange(Change{newChangeColVal, changeType::INSERT_ROW, table, logger, id}); }
@@ -113,11 +118,11 @@ class DbVisualizer {
         if (newCellValue.empty()) { newCellValue = originalCell; }
 
         // Draw editable cell
-        if (edit.whichIds.contains(id)) {
+        if (edit.whichIds.contains(id) && header != primaryKey) {
             ImGui::PushID(header.c_str());
-            std::snprintf(edit.buffer, BUFFER_SIZE, "%s", newCellValue.c_str());
-            if (ImGui::InputText("##edit", edit.buffer, BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue)) {
-                Change::colValMap newChangeColVal{{header, std::string(edit.buffer)}};
+            std::snprintf(edit.editBuffer.data(), BUFFER_SIZE, "%s", newCellValue.c_str());
+            if (ImGui::InputText("##edit", edit.editBuffer.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue)) {
+                Change::colValMap newChangeColVal{{header, std::string(edit.editBuffer.data())}};
                 changeTracker.addChange(Change{newChangeColVal, changeType::UPDATE_CELLS, table, logger, id});
             }
             ImGui::PopID();
