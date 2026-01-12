@@ -20,6 +20,11 @@ struct editingData {
     std::array<char, BUFFER_SIZE> editBuffer;
 };
 
+struct rowIds {
+    std::size_t loopId;
+    std::size_t pKeyId;
+};
+
 class DbVisualizer {
    private:
     ChangeTracker& changeTracker;
@@ -36,8 +41,8 @@ class DbVisualizer {
 
     editingData edit;
 
-    std::size_t drawInsertionChanges(const std::string& table, const std::size_t loopId, const std::size_t id) {
-        if (!idMappedChanges.contains(table) || !dbData->headers.contains(table)) { return loopId; }
+    rowIds drawInsertionChanges(const std::string& table, const std::size_t loopId, const std::size_t id) {
+        if (!idMappedChanges.contains(table) || !dbData->headers.contains(table)) { return rowIds{loopId, id}; }
         ImGui::TableNextRow();
         std::size_t localId{id};
         std::size_t i{loopId};
@@ -49,8 +54,13 @@ class DbVisualizer {
                 for (const auto& header : dbData->headers.at(table)) {
                     ImGui::TableNextColumn();
                     const auto& cellChanges = change.getCells();
+                    if (header == primaryKey) {
+                        std::string pKeyFormat = std::format("({})", std::to_string(change.getRowId()));
+                        ImGui::TextUnformatted(pKeyFormat.c_str());
+                        continue;
+                    }
                     if (!cellChanges.contains(header)) {
-                        ImGui::TextUnformatted("NOT PROVIDED");
+                        ImGui::TextUnformatted("-");
                         continue;
                     }
                     ImGui::TextUnformatted(cellChanges.at(header).c_str());
@@ -73,12 +83,12 @@ class DbVisualizer {
                 ImGui::PopID();
             }
         }
-        return i;
+        return rowIds{loopId + 1, localId + 1};
     }
 
-    void drawUserInputRowFields(const std::string& table, const std::size_t loopId, const std::size_t id) {
+    rowIds drawUserInputRowFields(const std::string& table, const std::size_t loopId, const std::size_t id) {
         // TODO: Evtl in createRows in den loop integrieren?
-        if (!dbData->headers.contains(table)) { return; }
+        if (!dbData->headers.contains(table)) { return rowIds{loopId, id}; }
         ImGui::PushID(1);
         Change::colValMap newChangeColVal{};
         ImGui::TableNextRow();
@@ -96,8 +106,12 @@ class DbVisualizer {
             ++i;
         }
         ImGui::TableNextColumn();
-        if (ImGui::Button("ENTER")) { changeTracker.addChange(Change{newChangeColVal, changeType::INSERT_ROW, table, logger, id}); }
+        if (ImGui::Button("ENTER")) {
+            logger.pushLog(Log{std::format("CHANGE wITH ID {}", id)});
+            changeTracker.addChange(Change{newChangeColVal, changeType::INSERT_ROW, table, logger, id});
+        }
         ImGui::PopID();
+        return rowIds{loopId + 1, id + 1};
     }
 
     void drawCellWithChange(std::expected<const Change*, bool> change, const std::string& originalCell, const std::string& table, const std::string& header, const std::size_t id) {
@@ -156,11 +170,6 @@ class DbVisualizer {
         if (id == INVALID_ID) { return std::unexpected(false); }
         if (idMappedChanges.at(table).contains(id)) {
             const std::size_t changeHash = idMappedChanges.at(table).at(id);
-            if (changes.at(changeHash).getType() == changeType::DELETE_ROW) {
-                int a = 0;
-                int b = a;
-                a = b;
-            }
             return &changes.at(changeHash);
         }
         return std::unexpected(false);
@@ -187,30 +196,31 @@ class DbVisualizer {
         }
         if (!hasData) { return; }
 
-        std::size_t i = 0;
+        rowIds indexes{0, 0};
         std::size_t maxId = 0;
         bool maxNotReached = true;
         while (maxNotReached) {
             // Get primary key for row
-            std::size_t id = getIdOfLoopIndex(table, i);
-            if (id > maxId) { maxId = id; }
-            auto rowChange = getChangeOfRow(table, dbData->headers.at(table), id);
+            indexes.pKeyId = getIdOfLoopIndex(table, indexes.loopId);
+            if (indexes.pKeyId == INVALID_ID) { break; }
+            if (indexes.pKeyId > maxId) { maxId = indexes.pKeyId; }
+            auto rowChange = getChangeOfRow(table, dbData->headers.at(table), indexes.pKeyId);
             ImGui::TableNextRow();  // TODO: Das Problem mit der leeren Zeile ist genau hier. Man merkt erst nach dem "nextrow"-AUfruf, dass keine Daten da sind
             // Draw every column for this row index
-            ImGui::PushID(static_cast<int>(id));
+            ImGui::PushID(static_cast<int>(indexes.pKeyId));
             for (const auto& header : dbData->headers.at(table)) {
                 ImGui::TableNextColumn();
                 if (!dbData->tableRows.at(table).contains(header)) { continue; }
                 // Get data for column
                 const auto& data = dbData->tableRows.at(table).at(header);
-                if (data.size() <= i) {
+                if (data.size() <= indexes.loopId) {
                     maxNotReached = false;
                     if (data.size() == 0) { ImGui::TextUnformatted("-"); }
                     continue;
                 }
                 // Draw each cell
-                std::string cell = data.at(i);
-                drawCellWithChange(rowChange, cell, table, header, id);
+                std::string cell = data.at(indexes.loopId);
+                drawCellWithChange(rowChange, cell, table, header, indexes.pKeyId);
                 maxNotReached = true;
             }
             // Exit if all data has been printed
@@ -226,8 +236,8 @@ class DbVisualizer {
                     changeTracker.removeChange((*rowChange)->getHash());
                 } else {
                     Change::colValMap cvMap{};
-                    changeTracker.addChange(Change{cvMap, changeType::DELETE_ROW, table, logger, id});
-                    if (edit.whichIds.contains(id)) { edit.whichIds.erase(id); }
+                    changeTracker.addChange(Change{cvMap, changeType::DELETE_ROW, table, logger, indexes.pKeyId});
+                    if (edit.whichIds.contains(indexes.pKeyId)) { edit.whichIds.erase(indexes.pKeyId); }
                 }
             }
 
@@ -235,20 +245,19 @@ class DbVisualizer {
             ImGui::SameLine();
             if (rowChange.has_value()) { ImGui::BeginDisabled((*rowChange)->getType() == changeType::DELETE_ROW); }
             if (ImGui::Button("edit")) {
-                if (edit.whichIds.contains(id)) {
-                    edit.whichIds.erase(id);
+                if (edit.whichIds.contains(indexes.pKeyId)) {
+                    edit.whichIds.erase(indexes.pKeyId);
                 } else {
-                    edit.whichIds.insert(id);
+                    edit.whichIds.insert(indexes.pKeyId);
                 }
             }
             if (rowChange.has_value()) { ImGui::EndDisabled(); }
 
             ImGui::PopID();
-            ++i;
+            ++indexes.loopId;
         }
-        i = drawInsertionChanges(table, i, maxId);
-        drawUserInputRowFields(table, i, maxId);
-        ++i;
+        indexes = drawInsertionChanges(table, indexes.loopId, maxId);
+        indexes = drawUserInputRowFields(table, indexes.loopId, indexes.pKeyId);
     }
 
     void createTableSplitters() {
