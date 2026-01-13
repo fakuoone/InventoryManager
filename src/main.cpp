@@ -14,7 +14,7 @@ int main() {
     ThreadPool pool{5, logger};
 
     DbInterface dbStorage{logger};
-    DbService dbService{dbStorage, pool, logger};
+    DbService dbService{dbStorage, pool, config, logger};
 
     ChangeTracker changeTracker{dbService, logger};
     App app{dbService, changeTracker, config, logger};

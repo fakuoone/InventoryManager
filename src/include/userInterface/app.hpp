@@ -41,6 +41,8 @@ class App {
 
         dbData = *result;
         dbVisualizer.setData(dbData);
+        changeTracker.setMaxPKeys(dbData->maxPKeys);
+
         dataAvailable = true;
         return true;
     }

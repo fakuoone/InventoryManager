@@ -34,7 +34,7 @@ class DbVisualizer {
     std::string primaryKey;
     std::shared_ptr<const completeDbData> dbData;
     // TODO: wahrscheinlich sollte sich app darum kümmern und hier nur eine REferenz? idMappedChanges sollte nur in changeTracker existieren, und hier wird angefragt?
-    Change::ctRMD idMappedChanges;
+    Change::ctPKMD idMappedChanges;
     Change::chHashM changes;
     Change::chHashV sucChanges;
     bool changesBeingApplied{false};
@@ -50,7 +50,6 @@ class DbVisualizer {
             const Change& change = changes.at(hash);
             if (change.getType() == changeType::INSERT_ROW) {
                 ++i;
-                ++localId;
                 for (const auto& header : dbData->headers.at(table)) {
                     ImGui::TableNextColumn();
                     const auto& cellChanges = change.getCells();
@@ -65,12 +64,7 @@ class DbVisualizer {
                     }
                     ImGui::TextUnformatted(cellChanges.at(header).c_str());
                 }
-                /*
-                for (const auto& [column, cell] : change.getCells()) {
-                    const tStringVector& headers = dbData->headers.at(table);
-                    if (std::find(headers.begin(), headers.end(), column) == headers.end()) { logger.pushLog(Log{std::format("ERROR: Change {} has entry {} for invalid column {}.", hash, cell, column)}); }
-                    }
-                    */
+                localId = change.getRowId();
                 ImGui::TableNextColumn();
                 ImGui::PushID(static_cast<int>(localId));
 
@@ -86,9 +80,9 @@ class DbVisualizer {
         return rowIds{loopId + 1, localId + 1};
     }
 
-    rowIds drawUserInputRowFields(const std::string& table, const std::size_t loopId, const std::size_t id) {
+    void drawUserInputRowFields(const std::string& table) {
         // TODO: Evtl in createRows in den loop integrieren?
-        if (!dbData->headers.contains(table)) { return rowIds{loopId, id}; }
+        if (!dbData->headers.contains(table)) { return; }
         ImGui::PushID(1);
         Change::colValMap newChangeColVal{};
         ImGui::TableNextRow();
@@ -106,12 +100,8 @@ class DbVisualizer {
             ++i;
         }
         ImGui::TableNextColumn();
-        if (ImGui::Button("ENTER")) {
-            logger.pushLog(Log{std::format("CHANGE wITH ID {}", id)});
-            changeTracker.addChange(Change{newChangeColVal, changeType::INSERT_ROW, table, logger, id});
-        }
+        if (ImGui::Button("ENTER")) { changeTracker.addChange(Change{newChangeColVal, changeType::INSERT_ROW, table, logger, changeTracker.getMaxPKey(table) + 1}); }
         ImGui::PopID();
-        return rowIds{loopId + 1, id + 1};
     }
 
     void drawCellWithChange(std::expected<const Change*, bool> change, const std::string& originalCell, const std::string& table, const std::string& header, const std::size_t id) {
@@ -196,8 +186,9 @@ class DbVisualizer {
         }
         if (!hasData) { return; }
 
+        drawUserInputRowFields(table);
         rowIds indexes{0, 0};
-        std::size_t maxId = 0;
+        std::size_t maxId = indexes.pKeyId;
         bool maxNotReached = true;
         while (maxNotReached) {
             // Get primary key for row
@@ -256,8 +247,8 @@ class DbVisualizer {
             ImGui::PopID();
             ++indexes.loopId;
         }
+        ++maxId;
         indexes = drawInsertionChanges(table, indexes.loopId, maxId);
-        indexes = drawUserInputRowFields(table, indexes.loopId, indexes.pKeyId);
     }
 
     void createTableSplitters() {

@@ -44,6 +44,7 @@ struct completeDbData {
     tStringVector tables;
     tHeaderMap headers;
     tRowMap tableRows;
+    std::map<std::string, std::size_t> maxPKeys;
 };
 
 struct protectedConnData {
@@ -230,7 +231,7 @@ class DbInterface {
         for (const auto& [table, headers] : work) {
             acquireTableRows(table, headers);
         }
-        return completeDbData{tables.data, tableHeaders.data, tableRows.data};
+        return completeDbData{tables.data, tableHeaders.data, tableRows.data, std::map<std::string, std::size_t>{}};
     }
 
     template <typename C>

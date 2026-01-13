@@ -27,16 +27,23 @@ bool ChangeTracker::manageConflict(const Change& newChange, std::size_t hash) {
 
 void ChangeTracker::addChange(const Change& change) {
     // The only function that is allowed to lock changes
-    std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    if (!dbService.validateChange(change)) { return; }
+    const std::string table = change.getTable();
     const std::size_t hash = change.getHash();
-    logger.pushLog(Log{std::format("    Adding change {}", change.getHash())});
+    if (!dbService.validateChange(change)) { return; }
+    std::lock_guard<std::mutex> lgChanges(changes.mtx);
     if (manageConflict(change, hash)) {
+        if (change.getType() == changeType::INSERT_ROW) {
+            if (change.getRowId() > changes.maxPKeys[table]) {
+                changes.maxPKeys[table] = change.getRowId();
+            } else {
+                changes.maxPKeys[table]++;
+            }
+        }
         changes.flatData.emplace(hash, change);
-        const std::string table = change.getTable();
-        if (!changes.rowMappedData.contains(table)) { changes.rowMappedData.emplace(table, Change::chHHMap{}); }
-        changes.rowMappedData.at(table).emplace(change.getRowId(), hash);
+        if (!changes.pKeyMappedData.contains(table)) { changes.pKeyMappedData.emplace(table, Change::chHHMap{}); }
+        changes.pKeyMappedData.at(table).emplace(change.getRowId(), hash);
     }
+    logger.pushLog(Log{std::format("    Adding change {}", hash)});
 }
 
 void ChangeTracker::addRelatedChange(std::size_t baseHash, const Change& change) {
@@ -57,17 +64,32 @@ Change::chHashM ChangeTracker::getChanges() {
     return changes.flatData;
 }
 
-Change::ctRMD ChangeTracker::getRowMappedData() {
+Change::ctPKMD ChangeTracker::getRowMappedData() {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    return changes.rowMappedData;
+    return changes.pKeyMappedData;
 }
 
 void ChangeTracker::removeChange(const std::size_t hash) {
+    std::lock_guard<std::mutex> lgChanges(changes.mtx);
     if (changes.flatData.contains(hash)) {
         // TODO: ERror handling
         const Change& change = changes.flatData.at(hash);
-        changes.rowMappedData.at(change.getTable()).erase(change.getRowId());
+        // TODO: Bedingung ist nicht ausreichend für runterzählen
+        if (change.getRowId() == changes.maxPKeys.at(change.getTable()) && change.getRowId() > 0) { changes.maxPKeys[change.getTable()]--; }
+        changes.pKeyMappedData.at(change.getTable()).erase(change.getRowId());
         logger.pushLog(Log{std::format("    Removing change {}", hash)});
         changes.flatData.erase(hash);
     }
+}
+
+void ChangeTracker::setMaxPKeys(std::map<std::string, std::size_t> pk) {
+    std::lock_guard<std::mutex> lgChanges(changes.mtx);
+    changes.maxPKeys = pk;
+}
+
+std::size_t ChangeTracker::getMaxPKey(const std::string table) {
+    std::lock_guard<std::mutex> lgChanges(changes.mtx);
+
+    if (!changes.maxPKeys.contains(table)) { return 0; }
+    return changes.maxPKeys.at(table);
 }

@@ -25,7 +25,7 @@ class Change {
     using chHHMap = std::map<std::size_t, std::size_t>;
     using chHashV = std::vector<std::size_t>;
     using chHashM = std::map<std::size_t, Change>;
-    using ctRMD = std::map<std::string, chHHMap>;
+    using ctPKMD = std::map<std::string, chHHMap>;
 
    private:
     colValMap changedCells;

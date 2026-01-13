@@ -14,7 +14,8 @@ struct protectedChanges {
     std::mutex mtx;
     Change::chHashM flatData;
     Change::chHashV orderedTree;
-    Change::ctRMD rowMappedData;
+    Change::ctPKMD pKeyMappedData;
+    std::map<std::string, std::size_t> maxPKeys;
 };
 
 class ChangeTracker {
@@ -38,7 +39,11 @@ class ChangeTracker {
 
     Change::chHashM getChanges();
 
-    Change::ctRMD getRowMappedData();
+    Change::ctPKMD getRowMappedData();
 
     void removeChange(const std::size_t hash);
+
+    void setMaxPKeys(std::map<std::string, std::size_t> pk);
+
+    std::size_t getMaxPKey(const std::string table);
 };

@@ -13,22 +13,47 @@ class DbService {
    private:
     DbInterface& dbInterface;
     ThreadPool& pool;
+    Config& config;
     Logger& logger;
 
     std::future<completeDbData> fCompleteDbData;
     std::shared_ptr<const completeDbData> dbData;
-    bool dataAvailable{false};
+    std::shared_ptr<completeDbData> pendingData;
+    std::future<std::map<std::string, std::size_t>> fMaxPKeys;
+
+    std::atomic<bool> dataAvailable{false};
+
+    std::map<std::string, std::size_t> calcMaxPKeys(completeDbData data) {
+        std::map<std::string, std::size_t> maxPKeys;
+        for (const auto& table : data.tables) {
+            const tStringVector& keyVector = data.tableRows.at(table).at(config.getPrimaryKey());
+            auto it = std::max_element(keyVector.begin(), keyVector.end(), [](const std::string& key1, const std::string& key2) { return std::stoll(key1) < std::stoll(key2); });
+            std::size_t maxKey = 0;
+            if (it != keyVector.end()) { maxKey = static_cast<std::size_t>(std::stoll(*it)); }
+            maxPKeys[table] = maxKey;
+        }
+        return maxPKeys;
+    }
 
     bool isDataReady() {
-        if (fCompleteDbData.valid() && fCompleteDbData.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-            dbData = std::make_shared<completeDbData>(std::move(fCompleteDbData.get()));
-            if (validateCompleteDbData()) { dataAvailable = true; }
+        if (!pendingData && fCompleteDbData.valid() && fCompleteDbData.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            auto data = fCompleteDbData.get();
+            if (!validateCompleteDbData(data)) { return false; }
+            pendingData = std::make_shared<completeDbData>(std::move(data));
+            fMaxPKeys = pool.submit(&DbService::calcMaxPKeys, this, std::cref(*pendingData));
         }
+
+        if (pendingData && fMaxPKeys.valid() && fMaxPKeys.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            pendingData->maxPKeys = fMaxPKeys.get();
+            dbData = std::move(pendingData);
+            dataAvailable = true;
+        }
+
         return dataAvailable;
     }
 
    public:
-    DbService(DbInterface& cDbData, ThreadPool& cPool, Logger& cLogger) : dbInterface(cDbData), pool(cPool), logger(cLogger) {}
+    DbService(DbInterface& cDbData, ThreadPool& cPool, Config& cConfig, Logger& cLogger) : dbInterface(cDbData), pool(cPool), config(cConfig), logger(cLogger) {}
 
     void startUp() {
         pool.submit(&DbInterface::acquireTables, &dbInterface);
@@ -44,25 +69,31 @@ class DbService {
         }
     }
 
-    bool validateCompleteDbData() {
+    bool validateCompleteDbData(const completeDbData& data) {
         // tablecount matches everywhere
-        std::size_t tableCount = dbData->tables.size();
-        if (tableCount != dbData->headers.size() || tableCount != dbData->tableRows.size()) {
+        std::size_t tableCount = data.tables.size();
+        if (tableCount != data.headers.size() || tableCount != data.tableRows.size()) {
             logger.pushLog(Log{"ERROR: Table data is mismatching in size."});
             return false;
         }
         // all tables have headers
-        for (const auto& table : dbData->tables) {
-            if (!dbData->headers.contains(table)) {
+        for (const auto& table : data.tables) {
+            if (!data.headers.contains(table)) {
                 logger.pushLog(Log{std::format("ERROR: Table {} has no header information.", table)});
                 return false;
             }
             // columns have the same values as rows have keys
-            for (const auto& header : dbData->headers.at(table)) {
-                if (!dbData->tableRows.at(table).contains(header)) {
+            bool pKeyFound{false};
+            for (const auto& header : data.headers.at(table)) {
+                if (header == config.getPrimaryKey()) { pKeyFound = true; };
+                if (!data.tableRows.at(table).contains(header)) {
                     logger.pushLog(Log{std::format("ERROR: Table {} has header {} which has no data.", table, header)});
                     return false;
                 }
+            }
+            if (!pKeyFound) {
+                logger.pushLog(Log{std::format("ERROR: Table {} has no primary key {}.", table, config.getPrimaryKey())});
+                return false;
             }
         }
         return true;
