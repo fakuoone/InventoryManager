@@ -33,21 +33,17 @@ class DbVisualizer {
 
     std::string primaryKey;
     std::shared_ptr<const completeDbData> dbData;
-    // TODO: wahrscheinlich sollte sich app darum kümmern und hier nur eine REferenz? idMappedChanges sollte nur in changeTracker existieren, und hier wird angefragt?
-    Change::ctPKMD idMappedChanges;
-    Change::chHashM changes;
-    Change::chHashV sucChanges;
-    bool changesBeingApplied{false};
-
+    // TODO: wahrscheinlich sollte sich app darum kümmern und hier nur eine REferenz? uiChanges->idMappedChanges sollte nur in changeTracker existieren, und hier wird angefragt?
+    std::shared_ptr<uiChangeInfo> uiChanges;
     editingData edit;
 
     rowIds drawInsertionChanges(const std::string& table, const std::size_t loopId, const std::size_t id) {
-        if (!idMappedChanges.contains(table) || !dbData->headers.contains(table)) { return rowIds{loopId, id}; }
+        if (!uiChanges->idMappedChanges.contains(table) || !dbData->headers.contains(table)) { return rowIds{loopId, id}; }
         ImGui::TableNextRow();
         std::size_t localId{id};
         std::size_t i{loopId};
-        for (const auto& [_, hash] : idMappedChanges.at(table)) {
-            const Change& change = changes.at(hash);
+        for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
+            const Change& change = uiChanges->changes.at(hash);
             if (change.getType() == changeType::INSERT_ROW) {
                 ++i;
                 for (const auto& header : dbData->headers.at(table)) {
@@ -69,7 +65,7 @@ class DbVisualizer {
                 ImGui::PushID(static_cast<int>(localId));
 
                 if (ImGui::Button("RUN")) {
-                    changesBeingApplied = true;
+                    uiChanges->changesBeingApplied = true;
                     changeExe.requestChangeApplication(Change{change}, sqlAction::EXECUTE);
                 }
                 ImGui::SameLine();
@@ -156,11 +152,11 @@ class DbVisualizer {
     }
 
     std::expected<const Change*, bool> getChangeOfRow(const std::string& table, const tStringVector& headers, const std::size_t id) {
-        if (!idMappedChanges.contains(table)) { return std::unexpected(false); }
+        if (!uiChanges->idMappedChanges.contains(table)) { return std::unexpected(false); }
         if (id == INVALID_ID) { return std::unexpected(false); }
-        if (idMappedChanges.at(table).contains(id)) {
-            const std::size_t changeHash = idMappedChanges.at(table).at(id);
-            return &changes.at(changeHash);
+        if (uiChanges->idMappedChanges.at(table).contains(id)) {
+            const std::size_t changeHash = uiChanges->idMappedChanges.at(table).at(id);
+            return &uiChanges->changes.at(changeHash);
         }
         return std::unexpected(false);
     }
@@ -255,11 +251,7 @@ class DbVisualizer {
         if (ImGui::BeginTabBar("MainTabs")) {
             for (const auto& [table, data] : dbData->headers) {
                 if (ImGui::BeginTabItem(table.c_str())) {
-                    if (ImGui::BeginTable("ColumnsTable", static_cast<int>(data.size() + 1), ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-                        createColumns(table);
-                        createRows(table);
-                        ImGui::EndTable();
-                    }
+                    drawTableView(table, data);
                     ImGui::EndTabItem();
                 }
             }
@@ -267,21 +259,47 @@ class DbVisualizer {
         }
     }
 
+    void drawTableView(const std::string& table, const tStringVector& data) {
+        if (ImGui::BeginTable("SplitView", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame)) {
+            ImGui::TableNextColumn();
+            ImGui::Text("DATA");
+            ImGui::Separator();
+            if (ImGui::BeginTable("ColumnsTable", static_cast<int>(data.size() + 1), ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+                ImGui::TableNextRow();
+                createColumns(table);
+                createRows(table);
+                ImGui::EndTable();
+            }
+
+            ImGui::TableNextColumn();
+            drawChangeOverview(table);
+
+            ImGui::EndTable();
+        }
+    }
+
+    void drawChangeOverview(const std::string& table) {
+        // ImGui::BeginChild();
+        ImGui::Text("CHANGE OVERVIEW");
+        if (!uiChanges->idMappedChanges.contains(table)) { return; }
+        for (const auto& [id, hash] : uiChanges->idMappedChanges.at(table)) {
+            ImGui::TextUnformatted(std::format("id: {}", id).c_str());
+            bool test;
+            ImGui::SameLine();
+            ImGui::Checkbox("TEST", &test);
+        }
+        // ImGui::EndChild();
+    }
+
    public:
     void setData(std::shared_ptr<const completeDbData> newData) { dbData = std::move(newData); }
 
+    void setChangeData(std::shared_ptr<uiChangeInfo> changeData) { uiChanges = std::move(changeData); }
+
     void setPrimaryKey(const std::string& key) { primaryKey = key; }
+
     void run() {
-        if (dbData) {
-            idMappedChanges = changeTracker.getRowMappedData();
-            changes = changeTracker.getChanges();
-            createTableSplitters();
-            if (changeExe.isChangeApplicationDone()) {
-                sucChanges = changeExe.getSuccessfulChanges();
-                changesBeingApplied = false;
-            }
-            if (changesBeingApplied) { ImGui::Dummy(ImVec2{50, 50}); }
-        }
+        if (dbData && uiChanges != nullptr) { createTableSplitters(); }
     }
 
     DbVisualizer(ChangeTracker& cChangeTracker, ChangeExeService& cChangeExe, Logger& cLogger) : changeTracker(cChangeTracker), changeExe(cChangeExe), logger(cLogger) {}

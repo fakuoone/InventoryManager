@@ -29,6 +29,8 @@ class App {
     std::shared_ptr<const completeDbData> dbData;
     bool dataAvailable{false};
 
+    std::shared_ptr<uiChangeInfo> uiChanges;
+
     void changeData(Change change) {
         if (dataAvailable) { changeTracker.addChange(change); }
     }
@@ -92,12 +94,20 @@ class App {
             }
 
             // UI INDEPENDANT CODE
-            if (waitForData()) {}
+            if (waitForData()) {
+                if (!uiChanges) { uiChanges = std::make_shared<uiChangeInfo>(); }
+            }
 
             if (!imguiCtx.beginFrame()) { continue; }
-            if (dataAvailable) {
+            if (uiChanges && dataAvailable) {
+                uiChanges->changes = changeTracker.getChanges();
+                uiChanges->idMappedChanges = changeTracker.getRowMappedData();
+                dbVisualizer.setChangeData(uiChanges);
                 dbVisualizer.run();
-                // const std::vector& < std::size_tdbVisualizer.getCommitedChanges()
+                if (changeExe.isChangeApplicationDone()) {
+                    uiChanges->sucChanges = changeExe.getSuccessfulChanges();
+                    uiChanges->changesBeingApplied = false;
+                }
             }
 
             drawFpsOverlay();

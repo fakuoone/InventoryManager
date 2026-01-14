@@ -74,9 +74,11 @@ void ChangeTracker::removeChange(const std::size_t hash) {
     if (changes.flatData.contains(hash)) {
         // TODO: ERror handling
         const Change& change = changes.flatData.at(hash);
-        // TODO: Bedingung ist nicht ausreichend für runterzählen
-        if (change.getRowId() == changes.maxPKeys.at(change.getTable()) && change.getRowId() > 0) { changes.maxPKeys[change.getTable()]--; }
         changes.pKeyMappedData.at(change.getTable()).erase(change.getRowId());
+        if (change.getRowId() == changes.maxPKeys.at(change.getTable())) {
+            const Change::chHHMap& pkmd = changes.pKeyMappedData.at(change.getTable());
+            changes.maxPKeys[change.getTable()] = pkmd.rbegin()->first;
+        }
         logger.pushLog(Log{std::format("    Removing change {}", hash)});
         changes.flatData.erase(hash);
     }
