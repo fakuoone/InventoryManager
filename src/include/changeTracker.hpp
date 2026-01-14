@@ -22,6 +22,7 @@ struct uiChangeInfo {
     Change::ctPKMD idMappedChanges;
     Change::chHashM changes;
     Change::chHashV sucChanges;
+    std::map<std::string, std::map<std::size_t, bool>> selection;
     bool changesBeingApplied{false};
 };
 

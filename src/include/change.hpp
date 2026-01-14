@@ -12,6 +12,11 @@ enum class changeType { INSERT_ROW, DELETE_ROW, UPDATE_CELLS };
 
 enum class sqlAction { PREVIEW, EXECUTE };
 
+struct selectableChange {
+    std::size_t hash;
+    bool selected{false};
+};
+
 class Change {
     /* 
     1. create table (not supported) 
@@ -22,7 +27,7 @@ class Change {
     */
    public:
     using colValMap = std::map<std::string, std::string>;
-    using chHHMap = std::map<std::size_t, std::size_t>;
+    using chHHMap = std::map<std::size_t, selectableChange>;
     using chHashV = std::vector<std::size_t>;
     using chHashM = std::map<std::size_t, Change>;
     using ctPKMD = std::map<std::string, chHHMap>;

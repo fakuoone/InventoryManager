@@ -33,7 +33,6 @@ class DbVisualizer {
 
     std::string primaryKey;
     std::shared_ptr<const completeDbData> dbData;
-    // TODO: wahrscheinlich sollte sich app darum kümmern und hier nur eine REferenz? uiChanges->idMappedChanges sollte nur in changeTracker existieren, und hier wird angefragt?
     std::shared_ptr<uiChangeInfo> uiChanges;
     editingData edit;
 
@@ -42,8 +41,8 @@ class DbVisualizer {
         ImGui::TableNextRow();
         std::size_t localId{id};
         std::size_t i{loopId};
-        for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
-            const Change& change = uiChanges->changes.at(hash);
+        for (const auto& [_, selectableHash] : uiChanges->idMappedChanges.at(table)) {
+            const Change& change = uiChanges->changes.at(selectableHash.hash);
             if (change.getType() == changeType::INSERT_ROW) {
                 ++i;
                 for (const auto& header : dbData->headers.at(table)) {
@@ -155,7 +154,7 @@ class DbVisualizer {
         if (!uiChanges->idMappedChanges.contains(table)) { return std::unexpected(false); }
         if (id == INVALID_ID) { return std::unexpected(false); }
         if (uiChanges->idMappedChanges.at(table).contains(id)) {
-            const std::size_t changeHash = uiChanges->idMappedChanges.at(table).at(id);
+            const std::size_t changeHash = uiChanges->idMappedChanges.at(table).at(id).hash;
             return &uiChanges->changes.at(changeHash);
         }
         return std::unexpected(false);
@@ -272,34 +271,73 @@ class DbVisualizer {
             }
 
             ImGui::TableNextColumn();
-            drawChangeOverview(table);
+            drawTableChangeOverview(table);
 
             ImGui::EndTable();
         }
     }
 
-    void drawChangeOverview(const std::string& table) {
+    void drawChangeOverview() {
+        for (const auto& [table, _] : uiChanges->idMappedChanges) {
+            ImGui::TextUnformatted(table.c_str());
+            drawTableChangeOverview(table);
+        }
+    }
+
+    void drawTableChangeOverview(const std::string& table) {
         // ImGui::BeginChild();
         ImGui::Text("CHANGE OVERVIEW");
         if (!uiChanges->idMappedChanges.contains(table)) { return; }
-        for (const auto& [id, hash] : uiChanges->idMappedChanges.at(table)) {
-            ImGui::TextUnformatted(std::format("id: {}", id).c_str());
-            bool test;
+        for (const auto& [id, selectableHash] : uiChanges->idMappedChanges.at(table)) {
+            const Change& change = uiChanges->changes.at(selectableHash.hash);
+            std::string type;
+            switch (change.getType()) {
+                case changeType::DELETE_ROW:
+                    type = "DELETE";
+                    break;
+                case changeType::INSERT_ROW:
+                    type = "INSERT";
+                    break;
+                case changeType::UPDATE_CELLS:
+                    type = "UPDATE";
+                    break;
+                default:
+                    type = "UNKNOWN";
+                    break;
+            }
+            ImGui::PushID(static_cast<int>(id));
+            ImGui::TextUnformatted(std::format("{}: ", type).c_str());
             ImGui::SameLine();
-            ImGui::Checkbox("TEST", &test);
+            ImGui::TextUnformatted(std::format("ID: {}", id).c_str());
+            ImGui::SameLine();
+            // TODO: selected gets overwritten (default constructed) by changetracker. Better mechanism required here. maybe changeTRacker.select?
+            ImGui::Checkbox("TEST", &uiChanges->idMappedChanges.at(table).at(id).selected);
+            ImGui::PopID();
         }
         // ImGui::EndChild();
     }
 
    public:
-    void setData(std::shared_ptr<const completeDbData> newData) { dbData = std::move(newData); }
+    void setData(std::shared_ptr<const completeDbData> newData) { dbData = newData; }
 
-    void setChangeData(std::shared_ptr<uiChangeInfo> changeData) { uiChanges = std::move(changeData); }
+    void setChangeData(std::shared_ptr<uiChangeInfo> changeData) { uiChanges = changeData; }
 
     void setPrimaryKey(const std::string& key) { primaryKey = key; }
 
     void run() {
-        if (dbData && uiChanges != nullptr) { createTableSplitters(); }
+        if (dbData && uiChanges) {
+            if (ImGui::BeginTabBar("Main")) {
+                if (ImGui::BeginTabItem("Tables")) {
+                    createTableSplitters();
+                    ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("Changes")) {
+                    drawChangeOverview();
+                    ImGui::EndTabItem();
+                }
+            }
+            ImGui::EndTabBar();
+        }
     }
 
     DbVisualizer(ChangeTracker& cChangeTracker, ChangeExeService& cChangeExe, Logger& cLogger) : changeTracker(cChangeTracker), changeExe(cChangeExe), logger(cLogger) {}
