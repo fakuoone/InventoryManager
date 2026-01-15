@@ -54,4 +54,8 @@ class ChangeTracker {
     void setMaxPKeys(std::map<std::string, std::size_t> pk);
 
     std::size_t getMaxPKey(const std::string table);
+
+    bool isChangeSelected(const std::size_t hash);
+
+    void toggleChangeSelect(const std::size_t hash);
 };

@@ -26,10 +26,15 @@ class DbService {
     std::map<std::string, std::size_t> calcMaxPKeys(completeDbData data) {
         std::map<std::string, std::size_t> maxPKeys;
         for (const auto& table : data.tables) {
-            const tStringVector& keyVector = data.tableRows.at(table).at(config.getPrimaryKey());
-            auto it = std::max_element(keyVector.begin(), keyVector.end(), [](const std::string& key1, const std::string& key2) { return std::stoll(key1) < std::stoll(key2); });
+            // Find pkey
+            std::string pKey;
+            auto it1 = std::ranges::find_if(data.headers.at(table), [](const headerInfo& h) { return h.type == headerType::PRIMARY_KEY; });
+            if (it1 != data.headers.at(table).end()) { pKey = it1->name; }
+            // Get max index of pkeys
+            const tStringVector& keyVector = data.tableRows.at(table).at(pKey);
+            auto it2 = std::max_element(keyVector.begin(), keyVector.end(), [](const std::string& key1, const std::string& key2) { return std::stoll(key1) < std::stoll(key2); });
             std::size_t maxKey = 0;
-            if (it != keyVector.end()) { maxKey = static_cast<std::size_t>(std::stoll(*it)); }
+            if (it2 != keyVector.end()) { maxKey = static_cast<std::size_t>(std::stoll(*it2)); }
             maxPKeys[table] = maxKey;
         }
         return maxPKeys;
@@ -85,9 +90,9 @@ class DbService {
             // columns have the same values as rows have keys
             bool pKeyFound{false};
             for (const auto& header : data.headers.at(table)) {
-                if (header == config.getPrimaryKey()) { pKeyFound = true; };
-                if (!data.tableRows.at(table).contains(header)) {
-                    logger.pushLog(Log{std::format("ERROR: Table {} has header {} which has no data.", table, header)});
+                if (header.type == headerType::PRIMARY_KEY) { pKeyFound = true; };
+                if (!data.tableRows.at(table).contains(header.name)) {
+                    logger.pushLog(Log{std::format("ERROR: Table {} has header {} which has no data.", table, header.name)});
                     return false;
                 }
             }

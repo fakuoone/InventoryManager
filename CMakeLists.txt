@@ -24,22 +24,7 @@ set(SOURCES
 
 # --- Executable ---
 add_executable(InventoryManager ${SOURCES})
-
-# --- Compiler warnings ---
-target_compile_options(InventoryManager PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-    -Wshadow
-    -Wconversion
-    -Wsign-conversion
-    -Wnull-dereference
-    -Wdouble-promotion
-    -Wformat=2
-    -Wno-unused-parameter
-    -fdiagnostics-color=always
-
-)
+set_target_properties(InventoryManager PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
 
 # --- IMGUI ---
 set(IMGUI_DIR "" CACHE PATH "Path to Dear ImGui source directory")
@@ -71,6 +56,12 @@ target_include_directories(imgui PUBLIC
     ${IMGUI_DIR}/backends
 )
 
+set_target_properties(imgui PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
+)
+
 target_link_libraries(imgui PUBLIC
     d3d11
     dxgi
@@ -80,6 +71,8 @@ target_link_libraries(imgui PUBLIC
     gdi32
     dwmapi
 )
+
+
 
 # --- Includes ---
 target_include_directories(InventoryManager PRIVATE
@@ -98,12 +91,3 @@ target_link_libraries(InventoryManager PRIVATE
     imgui
     ws2_32
 )
-
-if (WIN32 AND NOT VCPKG_TARGET_TRIPLET MATCHES "-static$")
-    add_custom_command(TARGET InventoryManager POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_RUNTIME_DLLS:InventoryManager>
-            $<TARGET_FILE_DIR:InventoryManager>
-        COMMAND_EXPAND_LISTS
-    )
-endif()

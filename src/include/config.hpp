@@ -8,6 +8,8 @@
 
 #include "logger.hpp"
 
+#include <windows.h>
+
 class Config {
    private:
     std::string dbString;
@@ -50,13 +52,23 @@ class Config {
    public:
     Config(Logger& cLogger) : logger(cLogger) {}
 
-    std::string setConfigString(const std::string configPathName) {
-        dbString = readConfigFile(std::filesystem::path{configPathName});
+    std::string setConfigString(const std::filesystem::path& configPath) {
+        if (configPath.empty()) {
+            dbString = readConfigFile(getExeDir().parent_path() / "config/database.json");
+        } else {
+            dbString = readConfigFile(std::filesystem::path{configPath});
+        }
         return dbString;
     }
 
     std::string getPrimaryKey() {
         if (primaryKey.empty()) { return std::string{"id"}; }
         return primaryKey;
+    }
+
+    std::filesystem::path getExeDir() {
+        char buffer[MAX_PATH];
+        GetModuleFileName(nullptr, buffer, MAX_PATH);
+        return std::filesystem::path(buffer).parent_path();
     }
 };

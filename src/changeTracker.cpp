@@ -26,24 +26,27 @@ bool ChangeTracker::manageConflict(const Change& newChange, std::size_t hash) {
 }
 
 void ChangeTracker::addChange(const Change& change) {
-    // The only function that is allowed to lock changes
+    // change data
     const std::string table = change.getTable();
     const std::size_t hash = change.getHash();
+    // validate change
     if (!dbService.validateChange(change)) { return; }
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    if (manageConflict(change, hash)) {
-        if (change.getType() == changeType::INSERT_ROW) {
-            if (change.getRowId() > changes.maxPKeys[table]) {
-                changes.maxPKeys[table] = change.getRowId();
-            } else {
-                changes.maxPKeys[table]++;
-            }
+    if (!manageConflict(change, hash)) { return; }
+    // TODO: recursively add related changes (and store them as parent / children)
+    // increse max-id counter
+    if (change.getType() == changeType::INSERT_ROW) {
+        if (change.getRowId() > changes.maxPKeys[table]) {
+            changes.maxPKeys[table] = change.getRowId();
+        } else {
+            changes.maxPKeys[table]++;
         }
-        changes.flatData.emplace(hash, change);
-        if (!changes.pKeyMappedData.contains(table)) { changes.pKeyMappedData.emplace(table, Change::chHHMap{}); }
-        changes.pKeyMappedData.at(table).emplace(change.getRowId(), hash);
     }
+    // adding change
     logger.pushLog(Log{std::format("    Adding change {}", hash)});
+    changes.flatData.emplace(hash, change);
+    if (!changes.pKeyMappedData.contains(table)) { changes.pKeyMappedData.emplace(table, Change::chHHMap{}); }
+    changes.pKeyMappedData.at(table).emplace(change.getRowId(), hash);
 }
 
 void ChangeTracker::addRelatedChange(std::size_t baseHash, const Change& change) {
@@ -94,4 +97,14 @@ std::size_t ChangeTracker::getMaxPKey(const std::string table) {
 
     if (!changes.maxPKeys.contains(table)) { return 0; }
     return changes.maxPKeys.at(table);
+}
+
+bool ChangeTracker::isChangeSelected(const std::size_t hash) {
+    if (!changes.flatData.contains(hash)) { return false; }
+    return changes.flatData.at(hash).isSelected();
+}
+
+void ChangeTracker::toggleChangeSelect(const std::size_t hash) {
+    if (!changes.flatData.contains(hash)) { return; }
+    return changes.flatData.at(hash).toggleSelect();
 }

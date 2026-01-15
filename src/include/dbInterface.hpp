@@ -17,9 +17,9 @@
 template <typename T>
 concept C = std::same_as<T, const Change&> || std::same_as<T, const Change::chHashM&>;
 
-template <typename changeTrackerChangeType>
+template <typename T>
 struct protectedData {
-    changeTrackerChangeType data;
+    T data;
     std::mutex mtx;
     std::condition_variable cv;
     bool ready{false};
@@ -35,9 +35,18 @@ struct transactionData {
     transactionData& operator=(transactionData& other) = delete;
 };
 
+enum class headerType { PRIMARY_KEY, FOREIGN_KEY, DATA };
+
+struct headerInfo {
+    std::string name;
+    headerType type;
+    std::string referencedTable;
+};
+
 using tStringVector = std::vector<std::string>;
-using tHeaderMap = std::map<std::string, tStringVector>;
-using tColumnDataMap = tHeaderMap;
+using tHeaderVector = std::vector<headerInfo>;
+using tHeaderMap = std::map<std::string, tHeaderVector>;
+using tColumnDataMap = std::map<std::string, tStringVector>;
 using tRowMap = std::map<std::string, tColumnDataMap>;
 
 struct completeDbData {
@@ -114,6 +123,74 @@ class DbInterface {
         }
     }
 
+    tHeaderVector getTableHeaders(const std::string& table) {
+        transactionData transaction = getTransaction();
+        const std::string headerQuery = std::format("    SELECT * FROM {} WHERE 1=0", table);
+        logger.pushLog(Log{headerQuery});
+        pqxx::result r = transaction.tx.exec(headerQuery);
+        transaction.tx.commit();
+
+        std::vector<std::string> headers;
+        headers.reserve(static_cast<std::size_t>(r.columns()));
+
+        for (pqxx::row::size_type i = 0; i < r.columns(); ++i) {
+            headers.emplace_back(r.column_name(i));
+            logger.pushLog(Log{std::format("        column: {}", r.column_name(i))});
+        }
+
+        return getHeaderInfo(table, std::move(headers));
+    }
+
+    tHeaderVector getHeaderInfo(const std::string& table, std::vector<std::string> rawHeaders) {
+        tHeaderVector headers;
+        transactionData transaction = getTransaction();
+
+        for (const std::string& header : rawHeaders) {
+            headerInfo info{header, headerType::DATA, ""};
+            // Primary key
+            const std::string pkQuery = std::format(
+                "SELECT 1 "
+                "FROM pg_constraint c "
+                "JOIN pg_attribute a "
+                "  ON a.attrelid = c.conrelid "
+                " AND a.attnum = ANY (c.conkey) "
+                "WHERE c.contype = 'p' "
+                "  AND c.conrelid = '{}'::regclass "
+                "  AND a.attname = '{}'",
+                table, header);
+
+            pqxx::result pkResult = transaction.tx.exec(pkQuery);
+
+            if (!pkResult.empty()) {
+                info.type = headerType::PRIMARY_KEY;
+                headers.push_back(info);
+                continue;
+            }
+
+            // Foreign key
+            const std::string fkQuery = std::format(
+                "SELECT ccu.table_name AS referenced_table "
+                "FROM information_schema.table_constraints tc "
+                "JOIN information_schema.key_column_usage kcu "
+                "  ON tc.constraint_name = kcu.constraint_name "
+                "JOIN information_schema.constraint_column_usage ccu "
+                "  ON ccu.constraint_name = tc.constraint_name "
+                "WHERE tc.constraint_type = 'FOREIGN KEY' "
+                "  AND kcu.table_name = '{}' "
+                "  AND kcu.column_name = '{}'",
+                table, header);
+
+            pqxx::result fkResult = transaction.tx.exec(fkQuery);
+            if (!fkResult.empty()) {
+                info.type = headerType::FOREIGN_KEY;
+                info.referencedTable = fkResult[0]["referenced_table"].c_str();
+            }
+            headers.push_back(info);
+        }
+        transaction.tx.commit();
+        return headers;
+    }
+
     void acquireTableContent() {
         {
             std::unique_lock<std::mutex> lockTable(tables.mtx);
@@ -125,22 +202,11 @@ class DbInterface {
             tableHeaders.data.clear();
         }
 
+        // get headers
         logger.pushLog(Log{"ACQUIRE TABLE CONTENT: Preparing headerquery"});
         for (const std::string& tableName : tables.data) {
             try {
-                transactionData transaction = getTransaction();
-                const std::string headerQuery = std::format("    SELECT * FROM {} WHERE 1=0", tableName);
-                logger.pushLog(Log{headerQuery});
-                pqxx::result r = transaction.tx.exec(headerQuery);
-                transaction.tx.commit();
-
-                std::vector<std::string> headers;
-                headers.reserve(static_cast<std::size_t>(r.columns()));
-
-                for (pqxx::row::size_type i = 0; i < r.columns(); ++i) {
-                    headers.emplace_back(r.column_name(i));
-                    logger.pushLog(Log{std::format("        column: {}", r.column_name(i))});
-                }
+                tHeaderVector headers = getTableHeaders(tableName);
                 {
                     std::lock_guard<std::mutex> lgHeaders{tableHeaders.mtx};
                     std::lock_guard<std::mutex> lgTables{tables.mtx};
@@ -160,7 +226,7 @@ class DbInterface {
         tableHeaders.cv.notify_one();
     }
 
-    void acquireTableRows(const std::string& table, const std::vector<std::string>& cols) {
+    void acquireTableRows(const std::string& table, const tHeaderVector& cols) {
         {
             logger.pushLog(Log{"ACQUIRE TABLE ROWS: Waiting for tableheaders"});
             std::unique_lock<std::mutex> lockTableHeaders(tableHeaders.mtx);
@@ -178,13 +244,13 @@ class DbInterface {
 
         std::lock_guard<std::mutex> lgTableHeaders(tableHeaders.mtx);
         for (const auto& col : cols) {
-            const std::vector<std::string>& localHeaders = tableHeaders.data.at(table);
-            if (std::find(localHeaders.begin(), localHeaders.end(), col) == localHeaders.end()) {
-                logger.pushLog(Log{std::format("ERROR: Acquiring rows: Header {} for table {} is unknown.", col, table)});
+            const tHeaderVector& localHeaders = tableHeaders.data.at(table);
+            if (std::ranges::find_if(localHeaders, [&](const headerInfo& h) { return h.name == col.name; }) == localHeaders.end()) {
+                logger.pushLog(Log{std::format("ERROR: Acquiring rows: Header {} for table {} is unknown.", col.name, table)});
                 return;
             }
             try {
-                const std::string headerQuery = std::format("    SELECT {} FROM {}", col, table);
+                const std::string headerQuery = std::format("    SELECT {} FROM {}", col.name, table);
                 logger.pushLog(Log{headerQuery});
 
                 transactionData transaction = getTransaction();
@@ -195,10 +261,10 @@ class DbInterface {
                 cells.reserve(static_cast<std::size_t>(r.columns()));
 
                 for (const pqxx::row& row : r) {
-                    cells.emplace_back(row[col].c_str());
-                    logger.pushLog(Log{std::format("        {}: {}", col, row[col].c_str())});
+                    cells.emplace_back(row[col.name].c_str());
+                    logger.pushLog(Log{std::format("        {}: {}", col.name, row[col.name].c_str())});
                 }
-                colCellMap.emplace(col, cells);
+                colCellMap.emplace(col.name, cells);
 
             } catch (std::exception const& e) {
                 logger.pushLog(Log{std::format("ERROR: {}", e.what())});
@@ -219,7 +285,7 @@ class DbInterface {
             tableHeaders.cv.wait(lock, [this] { return tableHeaders.ready; });
         }
 
-        std::vector<std::pair<std::string, tStringVector>> work;
+        std::vector<std::pair<std::string, tHeaderVector>> work;
         {
             std::lock_guard<std::mutex> lockTables(tables.mtx);
             std::lock_guard<std::mutex> lockTableHeaders(tableHeaders.mtx);

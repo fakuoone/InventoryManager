@@ -41,23 +41,23 @@ class DbVisualizer {
         ImGui::TableNextRow();
         std::size_t localId{id};
         std::size_t i{loopId};
-        for (const auto& [_, selectableHash] : uiChanges->idMappedChanges.at(table)) {
-            const Change& change = uiChanges->changes.at(selectableHash.hash);
+        for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
+            const Change& change = uiChanges->changes.at(hash);
             if (change.getType() == changeType::INSERT_ROW) {
                 ++i;
                 for (const auto& header : dbData->headers.at(table)) {
                     ImGui::TableNextColumn();
                     const auto& cellChanges = change.getCells();
-                    if (header == primaryKey) {
+                    if (header.type == headerType::PRIMARY_KEY) {
                         std::string pKeyFormat = std::format("({})", std::to_string(change.getRowId()));
                         ImGui::TextUnformatted(pKeyFormat.c_str());
                         continue;
                     }
-                    if (!cellChanges.contains(header)) {
+                    if (!cellChanges.contains(header.name)) {
                         ImGui::TextUnformatted("-");
                         continue;
                     }
-                    ImGui::TextUnformatted(cellChanges.at(header).c_str());
+                    ImGui::TextUnformatted(cellChanges.at(header.name).c_str());
                 }
                 localId = change.getRowId();
                 ImGui::TableNextColumn();
@@ -85,11 +85,11 @@ class DbVisualizer {
         std::size_t i = 0;
         for (const auto& header : dbData->headers.at(table)) {
             ImGui::TableNextColumn();
-            if (!(header == primaryKey)) {
-                ImGui::PushID(header.c_str());
+            if (!(header.type == headerType::PRIMARY_KEY)) {
+                ImGui::PushID(header.name.c_str());
                 //std::snprintf(edit.buffer, BUFFER_SIZE, "%s", newCellValue.c_str());
                 ImGui::InputText("##edit", edit.insertBuffer.at(i).data(), BUFFER_SIZE);
-                std::string newValue = newChangeColVal[header] = std::string(edit.insertBuffer.at(i).data());
+                std::string newValue = newChangeColVal[header.name] = std::string(edit.insertBuffer.at(i).data());
                 ImGui::PopID();
             }
             ++i;
@@ -150,11 +150,11 @@ class DbVisualizer {
         }
     }
 
-    std::expected<const Change*, bool> getChangeOfRow(const std::string& table, const tStringVector& headers, const std::size_t id) {
+    std::expected<const Change*, bool> getChangeOfRow(const std::string& table, const std::size_t id) {
         if (!uiChanges->idMappedChanges.contains(table)) { return std::unexpected(false); }
         if (id == INVALID_ID) { return std::unexpected(false); }
         if (uiChanges->idMappedChanges.at(table).contains(id)) {
-            const std::size_t changeHash = uiChanges->idMappedChanges.at(table).at(id).hash;
+            const std::size_t changeHash = uiChanges->idMappedChanges.at(table).at(id);
             return &uiChanges->changes.at(changeHash);
         }
         return std::unexpected(false);
@@ -164,7 +164,18 @@ class DbVisualizer {
         ImGui::TableNextRow();
         for (const auto& column : dbData->headers.at(table)) {
             ImGui::TableNextColumn();
-            ImGui::TextUnformatted(column.c_str());
+            std::string columnText = column.name;
+            switch (column.type) {
+                case headerType::PRIMARY_KEY:
+                    columnText = std::format("* {}", column.name);
+                    break;
+                case headerType::FOREIGN_KEY:
+                    columnText = std::format("** {}", column.name);
+                    break;
+                default:
+                    break;
+            }
+            ImGui::TextUnformatted(columnText.c_str());
         }
     }
 
@@ -173,8 +184,8 @@ class DbVisualizer {
         if (!dbData->headers.contains(table)) { return; }
         if (!dbData->tableRows.contains(table)) { return; }
         bool hasData = false;
-        for (const auto& header : dbData->headers.at(table)) {
-            if (header.size() > 0) {
+        for (const headerInfo& vHeaders : dbData->headers.at(table)) {
+            if (vHeaders.name.size() > 0) {
                 hasData = true;
                 break;
             }
@@ -190,15 +201,15 @@ class DbVisualizer {
             indexes.pKeyId = getIdOfLoopIndex(table, indexes.loopId);
             if (indexes.pKeyId == INVALID_ID) { break; }
             if (indexes.pKeyId > maxId) { maxId = indexes.pKeyId; }
-            auto rowChange = getChangeOfRow(table, dbData->headers.at(table), indexes.pKeyId);
+            auto rowChange = getChangeOfRow(table, indexes.pKeyId);
             ImGui::TableNextRow();  // TODO: Das Problem mit der leeren Zeile ist genau hier. Man merkt erst nach dem "nextrow"-AUfruf, dass keine Daten da sind
             // Draw every column for this row index
             ImGui::PushID(static_cast<int>(indexes.pKeyId));
             for (const auto& header : dbData->headers.at(table)) {
                 ImGui::TableNextColumn();
-                if (!dbData->tableRows.at(table).contains(header)) { continue; }
+                if (!dbData->tableRows.at(table).contains(header.name)) { continue; }
                 // Get data for column
-                const auto& data = dbData->tableRows.at(table).at(header);
+                const auto& data = dbData->tableRows.at(table).at(header.name);
                 if (data.size() <= indexes.loopId) {
                     maxNotReached = false;
                     if (data.size() == 0) { ImGui::TextUnformatted("-"); }
@@ -206,7 +217,7 @@ class DbVisualizer {
                 }
                 // Draw each cell
                 std::string cell = data.at(indexes.loopId);
-                drawCellWithChange(rowChange, cell, table, header, indexes.pKeyId);
+                drawCellWithChange(rowChange, cell, table, header.name, indexes.pKeyId);
                 maxNotReached = true;
             }
             // Exit if all data has been printed
@@ -258,17 +269,19 @@ class DbVisualizer {
         }
     }
 
-    void drawTableView(const std::string& table, const tStringVector& data) {
+    void drawTableView(const std::string& table, const tHeaderVector& data) {
         if (ImGui::BeginTable("SplitView", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchSame)) {
             ImGui::TableNextColumn();
             ImGui::Text("DATA");
             ImGui::Separator();
+            ImGui::BeginChild("Table", ImVec2{0, ImGui::GetContentRegionAvail().y}, false);
             if (ImGui::BeginTable("ColumnsTable", static_cast<int>(data.size() + 1), ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
                 ImGui::TableNextRow();
                 createColumns(table);
                 createRows(table);
                 ImGui::EndTable();
             }
+            ImGui::EndChild();
 
             ImGui::TableNextColumn();
             drawTableChangeOverview(table);
@@ -285,11 +298,11 @@ class DbVisualizer {
     }
 
     void drawTableChangeOverview(const std::string& table) {
-        // ImGui::BeginChild();
-        ImGui::Text("CHANGE OVERVIEW");
         if (!uiChanges->idMappedChanges.contains(table)) { return; }
-        for (const auto& [id, selectableHash] : uiChanges->idMappedChanges.at(table)) {
-            const Change& change = uiChanges->changes.at(selectableHash.hash);
+        ImGui::Text("CHANGE OVERVIEW");
+        ImGui::BeginChild("TableChangeOverview", ImVec2{0, ImGui::GetContentRegionAvail().y}, false);
+        for (const auto& [id, hash] : uiChanges->idMappedChanges.at(table)) {
+            const Change& change = uiChanges->changes.at(hash);
             std::string type;
             switch (change.getType()) {
                 case changeType::DELETE_ROW:
@@ -305,16 +318,19 @@ class DbVisualizer {
                     type = "UNKNOWN";
                     break;
             }
+            // visualize change
             ImGui::PushID(static_cast<int>(id));
             ImGui::TextUnformatted(std::format("{}: ", type).c_str());
             ImGui::SameLine();
             ImGui::TextUnformatted(std::format("ID: {}", id).c_str());
             ImGui::SameLine();
-            // TODO: selected gets overwritten (default constructed) by changetracker. Better mechanism required here. maybe changeTRacker.select?
-            ImGui::Checkbox("TEST", &uiChanges->idMappedChanges.at(table).at(id).selected);
+
+            // select change
+            bool selected = changeTracker.isChangeSelected(hash);
+            if (ImGui::Checkbox("TEST", &selected)) { changeTracker.toggleChangeSelect(hash); }
             ImGui::PopID();
         }
-        // ImGui::EndChild();
+        ImGui::EndChild();
     }
 
    public:

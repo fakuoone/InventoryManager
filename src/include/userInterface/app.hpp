@@ -78,15 +78,15 @@ class App {
     App& operator=(App&&) = delete;
 
     void supplyConfigString() {
-        std::string dbString = config.setConfigString("B:/Programmieren/C/InventoryManager/config/database.json");
+        std::string dbString = config.setConfigString(std::filesystem::path{});  // OPTIONAL USER SUPPLIED CONFIG PATH
         dbService.initializeDbInterface(dbString);
         dbVisualizer.setPrimaryKey(config.getPrimaryKey());
     }
 
     void run() {
         dbService.startUp();
-
         supplyConfigString();
+
         while (appState == AppState::RUNNING) {
             if (!imguiCtx.pollEvents()) {
                 appState = AppState::ENDING;
