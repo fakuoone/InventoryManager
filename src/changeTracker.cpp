@@ -115,12 +115,15 @@ std::size_t ChangeTracker::getMaxPKey(const std::string table) {
 }
 
 bool ChangeTracker::isChangeSelected(const std::size_t key) {
-    if (!changes.flatData.contains(key)) { return false; }
-    Change& change = changes.flatData.at(key);
-    while (change.hasParent()) {
-        change = changes.flatData.at(change.getParent());
+    auto it = changes.flatData.find(key);
+    if (it == changes.flatData.end()) { return false; }
+
+    const Change* change = &it->second;
+    while (change->hasParent()) {
+        change = &changes.flatData.at(change->getParent());
     }
-    return changes.flatData.at(change.getKey()).isSelected();
+
+    return change->isSelected();
 }
 
 void ChangeTracker::toggleChangeSelect(const std::size_t key) {

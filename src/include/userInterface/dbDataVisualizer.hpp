@@ -248,6 +248,7 @@ class DbVisualizer {
             ImGui::TableNextColumn();
 
             // Remove row or (deletion) change affecting it
+
             bool withParentChange = false;
             if (rowChange.has_value()) { withParentChange = (*rowChange)->hasParent(); }
 
@@ -278,7 +279,6 @@ class DbVisualizer {
             ImGui::PopID();
             ++indexes.loopId;
         }
-        ++maxId;
         drawInsertionChanges(table);
     }
 
@@ -329,6 +329,7 @@ class DbVisualizer {
         if (!uiChanges->idMappedChanges.contains(table)) { return; }
         ImGui::Text("CHANGE OVERVIEW");
         ImGui::BeginChild("TableChangeOverview", ImVec2{0, ImGui::GetContentRegionAvail().y}, false);
+        ImGui::PushID("tableChangeOverview");
         for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
             const Change& change = uiChanges->changes.at(hash);
             std::size_t id = change.getRowId();
@@ -356,11 +357,13 @@ class DbVisualizer {
 
             // select change
             bool selected = changeTracker.isChangeSelected(hash);
-            ImGui::BeginDisabled(change.hasParent());
+
             if (ImGui::Checkbox("TEST", &selected)) { changeTracker.toggleChangeSelect(hash); }
+            ImGui::BeginDisabled(change.hasParent());
             ImGui::EndDisabled();
             ImGui::PopID();
         }
+        ImGui::PopID();
         ImGui::EndChild();
     }
 
