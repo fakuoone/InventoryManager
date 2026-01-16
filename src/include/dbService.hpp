@@ -26,12 +26,8 @@ class DbService {
     std::map<std::string, std::size_t> calcMaxPKeys(completeDbData data) {
         std::map<std::string, std::size_t> maxPKeys;
         for (const auto& table : data.tables) {
-            // Find pkey
-            std::string pKey;
-            auto it1 = std::ranges::find_if(data.headers.at(table), [](const headerInfo& h) { return h.type == headerType::PRIMARY_KEY; });
-            if (it1 != data.headers.at(table).end()) { pKey = it1->name; }
             // Get max index of pkeys
-            const tStringVector& keyVector = data.tableRows.at(table).at(pKey);
+            const tStringVector& keyVector = data.tableRows.at(table).at(data.headers.at(table).pkey);
             auto it2 = std::max_element(keyVector.begin(), keyVector.end(), [](const std::string& key1, const std::string& key2) { return std::stoll(key1) < std::stoll(key2); });
             std::size_t maxKey = 0;
             if (it2 != keyVector.end()) { maxKey = static_cast<std::size_t>(std::stoll(*it2)); }
@@ -89,7 +85,7 @@ class DbService {
             }
             // columns have the same values as rows have keys
             bool pKeyFound{false};
-            for (const auto& header : data.headers.at(table)) {
+            for (const auto& header : data.headers.at(table).data) {
                 if (header.type == headerType::PRIMARY_KEY) { pKeyFound = true; };
                 if (!data.tableRows.at(table).contains(header.name)) {
                     logger.pushLog(Log{std::format("ERROR: Table {} has header {} which has no data.", table, header.name)});
@@ -127,11 +123,47 @@ class DbService {
         return true;
     }
 
+    std::vector<Change> getRequiredChanges(const Change& change) {
+        const std::string& table = change.getTable();
+        std::vector<Change> changes;
+        const tHeadersInfo& headers = dbData->headers.at(table);
+        const Change::colValMap& cells = change.getCells();
+
+        for (const auto& [col, val] : cells) {
+            // find foreign key thats required
+            auto it1 = std::ranges::find_if(headers.data, [&](const tHeaderInfo& h) { return h.name == col && h.type == headerType::FOREIGN_KEY; });
+            if (it1 != headers.data.end()) {
+                if (!checkReferencedPKeyValue(it1->referencedTable, val)) {
+                    Change::colValMap requiredCells;
+                    requiredCells.emplace(dbData->headers.at(it1->referencedTable).uKeyName, val);
+                    Change reqChange{requiredCells, changeType::INSERT_ROW, getTable(it1->referencedTable), 0};
+                    reqChange.setParent(change.getKey());
+                    changes.emplace_back(reqChange);
+                }
+            }
+        }
+        return changes;
+    }
+
+    bool checkReferencedPKeyValue(const std::string& ref, const std::string& val) {
+        std::string pKey = dbData->headers.at(ref).pkey;
+        auto it1 = std::ranges::find_if(dbData->tableRows.at(ref).at(pKey), [&](const std::string& h) { return h == val; });
+        if (it1 != dbData->tableRows.at(ref).at(pKey).end()) { return true; }
+        return false;
+    }
+
     void initializeDbInterface(const std::string& configString) { dbInterface.initializeWithConfigString(configString); }
 
     template <typename T>
     std::future<Change::chHashV> requestChangeApplication(T change_s, sqlAction action) {
         return pool.submit([this](auto change, sqlAction act) { return dbInterface.applyChanges(std::move(change), act); }, std::move(change_s), action);
         //      return pool.submit(&DbInterface::applyChanges, &dbInterface, std::move(change_s), action);
+    }
+
+    table getTable(const std::string& tableName) {
+        auto it = std::find(dbData->tables.begin(), dbData->tables.end(), tableName);
+        table tableData{tableName, 0};
+        if (it != dbData->tables.end()) { tableData.id = static_cast<uint16_t>(std::distance(dbData->tables.begin(), it)); }
+        return tableData;
     }
 };

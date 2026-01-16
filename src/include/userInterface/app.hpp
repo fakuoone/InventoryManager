@@ -11,7 +11,7 @@
 #include "userInterface/dbDataVisualizer.hpp"
 #include "userInterface/imGuiDX11Context.hpp"
 
-enum class AppState { RUNNING, ENDING };
+enum class AppState { DATA_OUTDATED, WAITING_FOR_DATA, DATA_READY, ENDING };
 
 class App {
    private:
@@ -23,17 +23,13 @@ class App {
     Logger& logger;
 
     ChangeExeService changeExe{dbService, changeTracker, logger};
-    DbVisualizer dbVisualizer{changeTracker, changeExe, logger};
+    DbVisualizer dbVisualizer{dbService, changeTracker, changeExe, logger};
 
-    AppState appState{AppState::RUNNING};
+    AppState appState{AppState::DATA_OUTDATED};
     std::shared_ptr<const completeDbData> dbData;
     bool dataAvailable{false};
 
     std::shared_ptr<uiChangeInfo> uiChanges;
-
-    void changeData(Change change) {
-        if (dataAvailable) { changeTracker.addChange(change); }
-    }
 
     bool waitForData() {
         if (dataAvailable) { return false; }
@@ -44,8 +40,8 @@ class App {
         dbData = *result;
         dbVisualizer.setData(dbData);
         changeTracker.setMaxPKeys(dbData->maxPKeys);
+        if (!uiChanges) { uiChanges = std::make_shared<uiChangeInfo>(); }
 
-        dataAvailable = true;
         return true;
     }
 
@@ -69,6 +65,26 @@ class App {
         }
     }
 
+    bool handleAppState() {
+        switch (appState) {
+            case AppState::DATA_OUTDATED:
+                dbService.startUp();
+                appState = AppState::WAITING_FOR_DATA;
+                break;
+            case AppState::WAITING_FOR_DATA:
+                if (waitForData()) { appState = AppState::DATA_READY; }
+                break;
+            case AppState::DATA_READY:
+                if (false) { appState = AppState::DATA_OUTDATED; }
+                break;
+            case AppState::ENDING:
+                return false;
+            default:
+                break;
+        }
+        return true;
+    }
+
    public:
     App(DbService& cDbService, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger) : dbService(cDbService), changeTracker(cChangeTracker), config(cConfig), logger(cLogger) {}
 
@@ -80,26 +96,21 @@ class App {
     void supplyConfigString() {
         std::string dbString = config.setConfigString(std::filesystem::path{});  // OPTIONAL USER SUPPLIED CONFIG PATH
         dbService.initializeDbInterface(dbString);
-        dbVisualizer.setPrimaryKey(config.getPrimaryKey());
     }
 
     void run() {
-        dbService.startUp();
         supplyConfigString();
-
-        while (appState == AppState::RUNNING) {
+        bool running = true;
+        while (running) {
             if (!imguiCtx.pollEvents()) {
                 appState = AppState::ENDING;
                 break;
             }
 
-            // UI INDEPENDANT CODE
-            if (waitForData()) {
-                if (!uiChanges) { uiChanges = std::make_shared<uiChangeInfo>(); }
-            }
+            running = handleAppState();
 
             if (!imguiCtx.beginFrame()) { continue; }
-            if (uiChanges && dataAvailable) {
+            if (appState == AppState::DATA_READY) {
                 uiChanges->changes = changeTracker.getChanges();
                 uiChanges->idMappedChanges = changeTracker.getRowMappedData();
                 dbVisualizer.setChangeData(uiChanges);

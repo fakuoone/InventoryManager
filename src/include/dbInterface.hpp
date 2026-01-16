@@ -35,17 +35,23 @@ struct transactionData {
     transactionData& operator=(transactionData& other) = delete;
 };
 
-enum class headerType { PRIMARY_KEY, FOREIGN_KEY, DATA };
+enum class headerType { PRIMARY_KEY, FOREIGN_KEY, UNIQUE_KEY, DATA };
 
-struct headerInfo {
+struct tHeaderInfo {
     std::string name;
     headerType type;
     std::string referencedTable;
 };
 
+using tHeaderVector = std::vector<tHeaderInfo>;
+struct tHeadersInfo {
+    tHeaderVector data;
+    std::string pkey;      // ID
+    std::string uKeyName;  // NAME
+};
+
 using tStringVector = std::vector<std::string>;
-using tHeaderVector = std::vector<headerInfo>;
-using tHeaderMap = std::map<std::string, tHeaderVector>;
+using tHeaderMap = std::map<std::string, tHeadersInfo>;
 using tColumnDataMap = std::map<std::string, tStringVector>;
 using tRowMap = std::map<std::string, tColumnDataMap>;
 
@@ -123,7 +129,7 @@ class DbInterface {
         }
     }
 
-    tHeaderVector getTableHeaders(const std::string& table) {
+    tHeadersInfo getTableHeaders(const std::string& table) {
         transactionData transaction = getTransaction();
         const std::string headerQuery = std::format("    SELECT * FROM {} WHERE 1=0", table);
         logger.pushLog(Log{headerQuery});
@@ -141,12 +147,12 @@ class DbInterface {
         return getHeaderInfo(table, std::move(headers));
     }
 
-    tHeaderVector getHeaderInfo(const std::string& table, std::vector<std::string> rawHeaders) {
-        tHeaderVector headers;
+    tHeadersInfo getHeaderInfo(const std::string& table, std::vector<std::string> rawHeaders) {
+        tHeadersInfo headers;
         transactionData transaction = getTransaction();
 
         for (const std::string& header : rawHeaders) {
-            headerInfo info{header, headerType::DATA, ""};
+            tHeaderInfo info{header, headerType::DATA, ""};
             // Primary key
             const std::string pkQuery = std::format(
                 "SELECT 1 "
@@ -163,21 +169,52 @@ class DbInterface {
 
             if (!pkResult.empty()) {
                 info.type = headerType::PRIMARY_KEY;
-                headers.push_back(info);
+                headers.data.push_back(info);
+                headers.pkey = header;
+                continue;
+            }
+
+            // UNIQUE (single-column only)
+            const std::string uqQuery = std::format(
+                "SELECT array_length(c.conkey, 1) AS key_len "
+                "FROM pg_constraint c "
+                "JOIN pg_attribute a "
+                "  ON a.attrelid = c.conrelid "
+                " AND a.attnum = ANY (c.conkey) "
+                "WHERE c.contype = 'u' "
+                "  AND c.conrelid = '{}'::regclass "
+                "  AND a.attname = '{}'",
+                table, header);
+
+            pqxx::result uqResult = transaction.tx.exec(uqQuery);
+            if (!uqResult.empty()) {
+                int keyLen = uqResult[0]["key_len"].as<int>();
+                if (keyLen == 1) {
+                    info.type = headerType::UNIQUE_KEY;
+                    headers.uKeyName = header;
+                } else {
+                    logger.pushLog(Log{std::format("WARNING: composite UNIQUE key on table '{}', column '{}' ignored", table, header)});
+                }
+
+                headers.data.push_back(info);
                 continue;
             }
 
             // Foreign key
             const std::string fkQuery = std::format(
-                "SELECT ccu.table_name AS referenced_table "
-                "FROM information_schema.table_constraints tc "
-                "JOIN information_schema.key_column_usage kcu "
-                "  ON tc.constraint_name = kcu.constraint_name "
-                "JOIN information_schema.constraint_column_usage ccu "
-                "  ON ccu.constraint_name = tc.constraint_name "
-                "WHERE tc.constraint_type = 'FOREIGN KEY' "
-                "  AND kcu.table_name = '{}' "
-                "  AND kcu.column_name = '{}'",
+                "SELECT "
+                "  c.confrelid::regclass AS referenced_table, "
+                "  af.attname           AS referenced_column "
+                "FROM pg_constraint c "
+                "JOIN pg_attribute a "
+                "  ON a.attrelid = c.conrelid "
+                " AND a.attnum = ANY (c.conkey) "
+                "JOIN pg_attribute af "
+                "  ON af.attrelid = c.confrelid "
+                " AND af.attnum = ANY (c.confkey) "
+                "WHERE c.contype = 'f' "
+                "  AND c.conrelid = '{}'::regclass "
+                "  AND a.attname = '{}'",
                 table, header);
 
             pqxx::result fkResult = transaction.tx.exec(fkQuery);
@@ -185,7 +222,8 @@ class DbInterface {
                 info.type = headerType::FOREIGN_KEY;
                 info.referencedTable = fkResult[0]["referenced_table"].c_str();
             }
-            headers.push_back(info);
+
+            headers.data.push_back(info);
         }
         transaction.tx.commit();
         return headers;
@@ -206,7 +244,7 @@ class DbInterface {
         logger.pushLog(Log{"ACQUIRE TABLE CONTENT: Preparing headerquery"});
         for (const std::string& tableName : tables.data) {
             try {
-                tHeaderVector headers = getTableHeaders(tableName);
+                tHeadersInfo headers = getTableHeaders(tableName);
                 {
                     std::lock_guard<std::mutex> lgHeaders{tableHeaders.mtx};
                     std::lock_guard<std::mutex> lgTables{tables.mtx};
@@ -226,7 +264,7 @@ class DbInterface {
         tableHeaders.cv.notify_one();
     }
 
-    void acquireTableRows(const std::string& table, const tHeaderVector& cols) {
+    void acquireTableRows(const std::string& table, const tHeadersInfo& cols) {
         {
             logger.pushLog(Log{"ACQUIRE TABLE ROWS: Waiting for tableheaders"});
             std::unique_lock<std::mutex> lockTableHeaders(tableHeaders.mtx);
@@ -243,9 +281,9 @@ class DbInterface {
         logger.pushLog(Log{"ACQUIRE TABLE ROWS: Preparing headerqueries"});
 
         std::lock_guard<std::mutex> lgTableHeaders(tableHeaders.mtx);
-        for (const auto& col : cols) {
-            const tHeaderVector& localHeaders = tableHeaders.data.at(table);
-            if (std::ranges::find_if(localHeaders, [&](const headerInfo& h) { return h.name == col.name; }) == localHeaders.end()) {
+        for (const auto& col : cols.data) {
+            const tHeaderVector& localHeaders = tableHeaders.data.at(table).data;
+            if (std::ranges::find_if(localHeaders, [&](const tHeaderInfo& h) { return h.name == col.name; }) == localHeaders.end()) {
                 logger.pushLog(Log{std::format("ERROR: Acquiring rows: Header {} for table {} is unknown.", col.name, table)});
                 return;
             }
@@ -285,7 +323,7 @@ class DbInterface {
             tableHeaders.cv.wait(lock, [this] { return tableHeaders.ready; });
         }
 
-        std::vector<std::pair<std::string, tHeaderVector>> work;
+        std::vector<std::pair<std::string, tHeadersInfo>> work;
         {
             std::lock_guard<std::mutex> lockTables(tables.mtx);
             std::lock_guard<std::mutex> lockTableHeaders(tableHeaders.mtx);
@@ -305,7 +343,7 @@ class DbInterface {
         // TODO: A change can require a nested tree of additional changes. The deepest change needs to be executed first
         Change::chHashV successfulChanges;
         if constexpr (std::same_as<C, Change>) {
-            if (applySingleChange(change_s, action)) { successfulChanges.push_back(change_s.getHash()); };
+            if (applySingleChange(change_s, action)) { successfulChanges.push_back(change_s.getKey()); };
         } else {
             for (const auto& [hash, change] : change_s) {
                 if (applySingleChange(change, action)) { successfulChanges.push_back(hash); }
@@ -315,7 +353,7 @@ class DbInterface {
     }
 
     bool applySingleChange(const Change& change, sqlAction action) {
-        logger.pushLog(Log{std::format("    Applying change {}", change.getHash())});
+        logger.pushLog(Log{std::format("    Applying change {}", change.getKey())});
         logger.pushLog(Log{std::format("        SQL-command: {}", change.toSQLaction(action))});
         return true;
     }

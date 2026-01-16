@@ -9,6 +9,7 @@
 
 int main() {
     Logger logger;
+    Change::setLogger(logger);
     Config config{logger};
 
     ThreadPool pool{5, logger};

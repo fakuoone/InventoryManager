@@ -32,14 +32,18 @@ class ChangeTracker {
     DbService& dbService;
     Logger& logger;
 
+    std::map<std::string, std::size_t> initialMaxPKeys;
+
     void mergeCellChanges(Change& existingChange, const Change& newChange);
 
     bool manageConflict(const Change& newChange, std::size_t hash);
 
+    void addChangeInternal(const Change& change);
+
    public:
     ChangeTracker(DbService& cDbService, Logger& cLogger) : dbService(cDbService), logger(cLogger) {}
 
-    void addChange(const Change& change);
+    bool addChange(const Change& change);
 
     void addRelatedChange(std::size_t baseHash, const Change& change);
 
