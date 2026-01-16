@@ -37,15 +37,17 @@ class DbVisualizer {
     editingData edit;
     std::string selectedTable;
 
-    rowIds drawInsertionChanges(const std::string& table, const std::size_t loopId, const std::size_t id) {
-        if (!uiChanges->idMappedChanges.contains(table) || !dbData->headers.contains(table)) { return rowIds{loopId, id}; }
+    void drawInsertionChanges(const std::string& table) {
+        if (!uiChanges->idMappedChanges.contains(table) || !dbData->headers.contains(table)) { return; }
         ImGui::TableNextRow();
-        std::size_t localId{id};
-        std::size_t i{loopId};
+        if (table == "categories") {
+            int a = 0;
+            int b = 1;
+            b = a + b;
+        }
         for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
             const Change& change = uiChanges->changes.at(hash);
             if (change.getType() == changeType::INSERT_ROW) {
-                ++i;
                 for (const auto& header : dbData->headers.at(table).data) {
                     ImGui::TableNextColumn();
                     const auto& cellChanges = change.getCells();
@@ -60,14 +62,10 @@ class DbVisualizer {
                     }
                     ImGui::TextUnformatted(cellChanges.at(header.name).c_str());
                 }
-                localId = change.getRowId();
                 ImGui::TableNextColumn();
-                ImGui::PushID(static_cast<int>(localId));
+                ImGui::PushID(static_cast<int>(change.getRowId()));
 
-                if (ImGui::Button("RUN")) {
-                    uiChanges->changesBeingApplied = true;
-                    changeExe.requestChangeApplication(Change{change}, sqlAction::EXECUTE);
-                }
+                if (ImGui::Button("RUN")) { changeExe.requestChangeApplication(Change{change}, sqlAction::EXECUTE); }
                 ImGui::SameLine();
                 ImGui::BeginDisabled(change.hasParent());
 
@@ -77,7 +75,7 @@ class DbVisualizer {
                 ImGui::PopID();
             }
         }
-        return rowIds{loopId + 1, localId + 1};
+        return;
     }
 
     void drawUserInputRowFields(const std::string& tableName) {
@@ -126,7 +124,7 @@ class DbVisualizer {
 
     void drawCellWithChange(std::expected<const Change*, bool> change, const std::string& originalCell, const std::string& tableName, const tHeaderInfo& header, const std::size_t id) {
         std::string newCellValue{};
-        changeType cType;
+        changeType cType = changeType::NONE;
         // Get changed value for column and display it
         if (change.has_value()) {
             cType = ((*change)->getType());
@@ -281,7 +279,7 @@ class DbVisualizer {
             ++indexes.loopId;
         }
         ++maxId;
-        indexes = drawInsertionChanges(table, indexes.loopId, maxId);
+        drawInsertionChanges(table);
     }
 
     void createTableSplitters() {
@@ -331,8 +329,9 @@ class DbVisualizer {
         if (!uiChanges->idMappedChanges.contains(table)) { return; }
         ImGui::Text("CHANGE OVERVIEW");
         ImGui::BeginChild("TableChangeOverview", ImVec2{0, ImGui::GetContentRegionAvail().y}, false);
-        for (const auto& [id, hash] : uiChanges->idMappedChanges.at(table)) {
+        for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
             const Change& change = uiChanges->changes.at(hash);
+            std::size_t id = change.getRowId();
             std::string type;
             switch (change.getType()) {
                 case changeType::DELETE_ROW:

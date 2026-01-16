@@ -5,9 +5,9 @@ void ChangeTracker::mergeCellChanges(Change& existingChange, const Change& newCh
     existingChange ^ newChange;
 }
 
-bool ChangeTracker::manageConflict(const Change& newChange, std::size_t key) {
-    if (!changes.flatData.contains(key)) { return true; }
-    Change& existingChange = changes.flatData.at(key);
+bool ChangeTracker::manageConflictL(const Change& newChange) {
+    if (!changes.flatData.contains(newChange.getKey())) { return true; }
+    Change& existingChange = changes.flatData.at(newChange.getKey());
     switch (existingChange.getType()) {
         case changeType::INSERT_ROW:
             return false;
@@ -24,24 +24,33 @@ bool ChangeTracker::manageConflict(const Change& newChange, std::size_t key) {
     return false;
 }
 
-bool ChangeTracker::addChange(const Change& change) {
-    // change data
-    const std::string table = change.getTable();
-    const std::size_t key = change.getKey();
-    // validate change
+bool ChangeTracker::addChange(Change change) {
+    logger.pushLog(Log{"ADDCHANGE CALLED"});
     if (!dbService.validateChange(change)) { return false; }
-    std::vector<Change> requiredChanges = dbService.getRequiredChanges(change);
-    for (const Change& requiredChange : requiredChanges) {
-        addChange(requiredChange);
+
+    std::vector<Change> allChanges;
+    collectRequiredChanges(change, allChanges);
+
+    std::lock_guard<std::mutex> lg(changes.mtx);
+
+    for (const Change& c : allChanges) {
+        if (!manageConflictL(c)) { return false; }
+        addChangeInternalL(c);
     }
 
-    std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    if (!manageConflict(change, key)) { return false; }
-    addChangeInternal(change);
     return true;
 }
 
-void ChangeTracker::addChangeInternal(const Change& change) {
+void ChangeTracker::collectRequiredChanges(Change& change, std::vector<Change>& out) {
+    out.push_back(change);
+    auto required = dbService.getRequiredChanges(change, changes.maxPKeys);
+    change.pushChildren(required);
+    for (Change& r : required) {
+        collectRequiredChanges(r, out);
+    }
+}
+
+void ChangeTracker::addChangeInternalL(const Change& change) {
     const std::string tableName = change.getTable();
     if (change.getType() == changeType::INSERT_ROW) {
         if (change.getRowId() > changes.maxPKeys[tableName]) {
@@ -51,16 +60,14 @@ void ChangeTracker::addChangeInternal(const Change& change) {
         }
     }
     // adding change
-    logger.pushLog(Log{std::format("    Adding change {}", change.getKey())});
-    changes.flatData.emplace(change.getKey(), change);
-    if (!changes.pKeyMappedData.contains(tableName)) { changes.pKeyMappedData.emplace(tableName, Change::chHHMap{}); }
-    changes.pKeyMappedData.at(tableName).emplace(change.getRowId(), change.getKey());
-}
+    auto [it, inserted] = changes.flatData.emplace(change.getKey(), change);
+    if (!inserted) {
+        logger.pushLog(Log{std::format("DUPLICATE KEY {}", change.getKey())});
+        return;
+    }
 
-void ChangeTracker::addRelatedChange(std::size_t baseHash, const Change& change) {
-    std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    if (!changes.flatData.contains(baseHash)) { return; }
-    // TODO: Manage related changes
+    if (inserted) { changes.pKeyMappedData[tableName].emplace(change.getRowId(), change.getKey()); }
+    logger.pushLog(Log{std::format("    Adding change {} to table {} at id {}", change.getKey(), change.getTable(), change.getRowId())});
 }
 
 void ChangeTracker::removeChanges(const Change::chHashV& changeHashes) {
@@ -70,14 +77,9 @@ void ChangeTracker::removeChanges(const Change::chHashV& changeHashes) {
     }
 }
 
-Change::chHashM ChangeTracker::getChanges() {
+uiChangeInfo ChangeTracker::getSnapShot() {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    return changes.flatData;
-}
-
-Change::ctPKMD ChangeTracker::getRowMappedData() {
-    std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    return changes.pKeyMappedData;
+    return uiChangeInfo{changes.pKeyMappedData, changes.flatData};
 }
 
 void ChangeTracker::removeChange(const std::size_t key) {

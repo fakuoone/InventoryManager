@@ -111,14 +111,10 @@ class App {
 
             if (!imguiCtx.beginFrame()) { continue; }
             if (appState == AppState::DATA_READY) {
-                uiChanges->changes = changeTracker.getChanges();
-                uiChanges->idMappedChanges = changeTracker.getRowMappedData();
+                uiChanges = std::make_shared<uiChangeInfo>(changeTracker.getSnapShot());
                 dbVisualizer.setChangeData(uiChanges);
                 dbVisualizer.run();
-                if (changeExe.isChangeApplicationDone()) {
-                    uiChanges->sucChanges = changeExe.getSuccessfulChanges();
-                    uiChanges->changesBeingApplied = false;
-                }
+                if (changeExe.isChangeApplicationDone()) { changeExe.getSuccessfulChanges(); }
             }
 
             drawFpsOverlay();

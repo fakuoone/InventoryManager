@@ -123,7 +123,7 @@ class DbService {
         return true;
     }
 
-    std::vector<Change> getRequiredChanges(const Change& change) {
+    std::vector<Change> getRequiredChanges(const Change& change, std::map<std::string, std::size_t>& ids) {
         const std::string& table = change.getTable();
         std::vector<Change> changes;
         const tHeadersInfo& headers = dbData->headers.at(table);
@@ -132,11 +132,12 @@ class DbService {
         for (const auto& [col, val] : cells) {
             // find foreign key thats required
             auto it1 = std::ranges::find_if(headers.data, [&](const tHeaderInfo& h) { return h.name == col && h.type == headerType::FOREIGN_KEY; });
-            if (it1 != headers.data.end()) {
+            if (it1 != headers.data.end() && it1->referencedTable != table) {
                 if (!checkReferencedPKeyValue(it1->referencedTable, val)) {
                     Change::colValMap requiredCells;
                     requiredCells.emplace(dbData->headers.at(it1->referencedTable).uKeyName, val);
-                    Change reqChange{requiredCells, changeType::INSERT_ROW, getTable(it1->referencedTable), 0};
+                    // std::size_t maxDataId = dbData->maxPKeys.at(getTable(it1->referencedTable));
+                    Change reqChange{requiredCells, changeType::INSERT_ROW, getTable(it1->referencedTable), ++(ids.at(it1->referencedTable))};
                     reqChange.setParent(change.getKey());
                     changes.emplace_back(reqChange);
                 }

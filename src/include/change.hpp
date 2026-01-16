@@ -8,7 +8,7 @@
 #include <map>
 #include <vector>
 
-enum class changeType : uint8_t { INSERT_ROW, DELETE_ROW, UPDATE_CELLS };
+enum class changeType : uint8_t { NONE, INSERT_ROW, DELETE_ROW, UPDATE_CELLS };
 
 enum class sqlAction : uint8_t { PREVIEW, EXECUTE };
 
@@ -40,10 +40,16 @@ class Change {
     uint32_t rowId{0};
     std::size_t changeKey{0};
     std::size_t parentKey{0};
+    std::vector<std::size_t> childrenKeys;
     bool selected{false};
+    bool valid{false};
 
    public:
-    Change(colValMap cCells, changeType cType, table cTable, std::size_t cRowId) : changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) { updateKey(); }
+    Change(colValMap cCells, changeType cType, table cTable, std::size_t cRowId) : changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) {
+
+        updateKey();
+        logger->pushLog(Log{std::format("CTOR with table {}, rowId {} and key {} constructed.", tableData.name, rowId, changeKey)});
+    }
 
     static void setLogger(Logger& l) { logger = &l; }
 
@@ -64,8 +70,10 @@ class Change {
 
     void updateKey() { changeKey = getKey(); }
 
-    Change(const Change&) = default;
+    Change(const Change& other) = default;
     Change& operator=(const Change& other) = default;
+    Change(Change&& other) = default;
+    Change& operator=(Change&& other) = default;
 
     Change& operator^(const Change& other) {
         // merges changs if necessary
@@ -77,6 +85,8 @@ class Change {
             }
             this->updateKey();
         }
+        if (logger) { logger->pushLog(Log{std::format("^^ operator")}); }
+
         return *this;
     }
 
@@ -118,4 +128,12 @@ class Change {
     bool hasParent() const { return parentKey != 0; }
 
     std::size_t getParent() const { return parentKey; }
+
+    void setValidity(bool validity) { valid = validity; }
+
+    void pushChildren(std::vector<Change>& childChanges) {
+        for (const auto& change : childChanges) {
+            childrenKeys.push_back(change.getKey());
+        }
+    }
 };

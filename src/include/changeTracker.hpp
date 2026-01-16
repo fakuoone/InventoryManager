@@ -21,9 +21,6 @@ struct protectedChanges {
 struct uiChangeInfo {
     Change::ctPKMD idMappedChanges;
     Change::chHashM changes;
-    Change::chHashV sucChanges;
-    std::map<std::string, std::map<std::size_t, bool>> selection;
-    bool changesBeingApplied{false};
 };
 
 class ChangeTracker {
@@ -36,22 +33,20 @@ class ChangeTracker {
 
     void mergeCellChanges(Change& existingChange, const Change& newChange);
 
-    bool manageConflict(const Change& newChange, std::size_t hash);
+    bool manageConflictL(const Change& newChange);
 
-    void addChangeInternal(const Change& change);
+    void addChangeInternalL(const Change& change);
 
    public:
     ChangeTracker(DbService& cDbService, Logger& cLogger) : dbService(cDbService), logger(cLogger) {}
 
-    bool addChange(const Change& change);
+    bool addChange(Change change);
 
-    void addRelatedChange(std::size_t baseHash, const Change& change);
+    void collectRequiredChanges(Change& change, std::vector<Change>& out);
 
     void removeChanges(const Change::chHashV& changeHashes);
 
-    Change::chHashM getChanges();
-
-    Change::ctPKMD getRowMappedData();
+    uiChangeInfo getSnapShot();
 
     void removeChange(const std::size_t hash);
 
