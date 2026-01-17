@@ -31,8 +31,9 @@ const Change ChangeTracker::getChange(const std::size_t key) {
 }
 
 bool ChangeTracker::manageConflictL(const Change& newChange) {
-    if (!changes.flatData.contains(newChange.getKey())) { return true; }
-    Change& existingChange = changes.flatData.at(newChange.getKey());
+    // TODO: fix after switching to unique keys
+    return true;
+    Change& existingChange = changes.flatData.at(changes.pKeyMappedData.at(newChange.getTable()).at(newChange.getRowId()));
     switch (existingChange.getType()) {
         case changeType::DELETE_ROW:
             return false;
@@ -66,6 +67,7 @@ bool ChangeTracker::addChange(Change change) {
     std::vector<Change> allChanges;
     waitIfFrozen();
     collectRequiredChanges(change, allChanges);
+    allocateIds(allChanges);
     std::lock_guard<std::mutex> lg(changes.mtx);
 
     for (Change& c : allChanges) {
@@ -74,8 +76,7 @@ bool ChangeTracker::addChange(Change change) {
             propagateValidity(c);
             continue;
         }
-        if (addChangeInternalL(c)) { propagateValidity(c); }
-        // TODO: Roll back counters?
+        if (!addChangeInternalL(c)) { return false; }
     }
 
     return true;
@@ -92,15 +93,15 @@ void ChangeTracker::collectRequiredChanges(Change& change, std::vector<Change>& 
     out.push_back(change);
 }
 
+void ChangeTracker::allocateIds(std::vector<Change>& allChanges) {
+    for (Change& c : allChanges) {
+        if (!c.hasRowId()) { c.setRowId(++changes.maxPKeys[c.getTable()]); }
+    }
+}
+
 bool ChangeTracker::addChangeInternalL(const Change& change) {
     const std::string tableName = change.getTable();
-    if (change.getType() == changeType::INSERT_ROW) { changes.maxPKeys[tableName] += change.getRowId() - changes.maxPKeys[tableName]; }
-    // adding change
-    auto [it, inserted] = changes.flatData.emplace(change.getKey(), change);
-    if (!inserted) {
-        logger.pushLog(Log{std::format("DUPLICATE KEY {}", change.getKey())});
-        return false;
-    }
+    changes.flatData.emplace(change.getKey(), change);
     changes.pKeyMappedData[tableName].emplace(change.getRowId(), change.getKey());
     logger.pushLog(Log{std::format("    Adding change {} to table {} at id {}", change.getKey(), change.getTable(), change.getRowId())});
     return true;

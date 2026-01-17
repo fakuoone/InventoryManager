@@ -170,14 +170,7 @@ class DbService {
                 if (!checkReferencedPKeyValue(it1->referencedTable, it1->nullable, val)) {
                     Change::colValMap requiredCells;
                     requiredCells.emplace(dbData->headers.at(it1->referencedTable).uKeyName, val);
-                    // count up based on the parent change. This probably breaks in some conditions
-                    std::size_t childId;
-                    if (it1->referencedTable == change.getTable()) {
-                        childId = change.getRowId() + 1;
-                    } else {
-                        childId = ids.at(it1->referencedTable) + 1;
-                    }
-                    Change reqChange{requiredCells, changeType::INSERT_ROW, getTable(it1->referencedTable), childId};
+                    Change reqChange{requiredCells, changeType::INSERT_ROW, getTable(it1->referencedTable)};
                     reqChange.setParent(change.getKey());
                     changes.emplace_back(reqChange);
                 }

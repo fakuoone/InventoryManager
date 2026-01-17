@@ -39,6 +39,8 @@ class ChangeTracker {
     void mergeCellChanges(Change& existingChange, const Change& newChange);
     void waitIfFrozen();
     bool manageConflictL(const Change& newChange);
+    void collectRequiredChanges(Change& change, std::vector<Change>& out);
+    void allocateIds(std::vector<Change>& changes);
     bool addChangeInternalL(const Change& change);
     void collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected) const;
     void removeChangeL(std::size_t key);
@@ -53,7 +55,6 @@ class ChangeTracker {
     bool addChange(Change change);
     void removeChanges(const std::size_t key);
     void removeChanges(const Change::chHashV& changeHashes);
-    void collectRequiredChanges(Change& change, std::vector<Change>& out);
     uiChangeInfo getSnapShot();
     void setMaxPKeys(std::map<std::string, std::size_t> pk);
     std::size_t getMaxPKey(const std::string table);

@@ -7,6 +7,9 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <atomic>
+
+#include <optional>
 
 enum class changeType : uint8_t { NONE, INSERT_ROW, UPDATE_CELLS, DELETE_ROW };
 
@@ -33,12 +36,14 @@ class Change {
     using ctPKMD = std::map<std::string, chHHMap>;
 
    private:
+    static inline std::atomic<std::size_t> nextId{1};
+    std::size_t changeKey;
+
     colValMap changedCells;
     changeType type{changeType::UPDATE_CELLS};
     imTable tableData;
     inline static Logger* logger = nullptr;
-    uint32_t rowId{0};
-    std::size_t changeKey{0};
+    std::optional<uint32_t> rowId;
     std::size_t parentKey{0};
     std::vector<std::size_t> childrenKeys;
     bool selected{false};
@@ -46,29 +51,19 @@ class Change {
     bool valid{false};
 
    public:
-    Change(colValMap cCells, changeType cType, imTable cTable, std::size_t cRowId) : changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) { updateKey(); }
+    Change(colValMap cCells, changeType cType, imTable cTable, std::optional<std::size_t> cRowId = std::nullopt) : changeKey(nextId++), changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) {}
 
     static void setLogger(Logger& l) { logger = &l; }
 
-    [[nodiscard]] std::size_t getKey() const {
-        std::size_t typeEq;
-        switch (type) {
-            case changeType::INSERT_ROW:
-            case changeType::UPDATE_CELLS:
-                typeEq = 0;
-                break;
-            default:
-                typeEq = std::size_t(type);
-                break;
-        }
-        return (typeEq << 56) | (std::size_t(tableData.id) << 32) | std::size_t(rowId);
-    }
+    [[nodiscard]] std::size_t getKey() const { return changeKey; };
 
     changeType getType() const { return type; }
 
     const std::string& getTable() const { return tableData.name; }
 
-    std::size_t getRowId() const { return rowId; }
+    bool hasRowId() const { return rowId.has_value(); }
+
+    uint32_t getRowId() const { return rowId.value(); }
 
     colValMap getCells() const { return changedCells; }
 
@@ -102,7 +97,7 @@ class Change {
 
         switch (type) {
             case changeType::DELETE_ROW:
-                sqlString = std::format("DELETE FROM {} WHERE {} = {}", tableData.name, "id", rowId);
+                sqlString = std::format("DELETE FROM {} WHERE {} = {}", tableData.name, "id", rowId.value());
                 break;
             case changeType::INSERT_ROW: {
                 std::string columnNames;
@@ -112,7 +107,7 @@ class Change {
             }
             case changeType::UPDATE_CELLS: {
                 std::string columnValuePairs;
-                sqlString = std::format("UPDATE {} SET {} WHERE id = {};", tableData.name, columnValuePairs, rowId);
+                sqlString = std::format("UPDATE {} SET {} WHERE id = {};", tableData.name, columnValuePairs, rowId.value());
                 break;
             }
             default:
@@ -127,6 +122,11 @@ class Change {
     bool isSelected() const { return selected; }
 
     void setParent(std::size_t parent) { parentKey = parent; }
+
+    void setRowId(uint32_t aRowId) {
+        rowId = aRowId;
+        updateKey();
+    }
 
     bool hasParent() const { return parentKey != 0; }
 

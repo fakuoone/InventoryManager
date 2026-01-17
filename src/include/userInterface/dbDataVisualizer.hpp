@@ -199,7 +199,7 @@ class DbVisualizer {
 
     void drawRowHighlights(const Change* change) {
         if (!change) { return; }
-        bool valid = change->isLocallyValid();
+        bool valid = change->isValid();
         ImU32 col = valid ? IM_COL32(0, 255, 0, 60) : IM_COL32(255, 0, 0, 60);
         ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, col);
     }
