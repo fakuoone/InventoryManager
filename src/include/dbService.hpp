@@ -101,34 +101,63 @@ class DbService {
     }
 
     bool validateChange(Change& change, bool fromGeneration) {
-        // TODO: Implement details
         const tStringVector& tables = dbData->tables;
         if (std::find(tables.begin(), tables.end(), change.getTable()) == tables.end()) { return false; }
+        bool setValidity = true;
+        bool allowInvalidChange = change.hasParent() && fromGeneration;
+
         switch (change.getType()) {
             case changeType::DELETE_ROW:
                 break;
             case changeType::INSERT_ROW:
-            case changeType::UPDATE_CELLS:
-                for (const auto& [col, val] : change.getCells()) {
-                    // UKey needs to be provided, unless the change got auto-generated
-                    bool colIsUKeyOfTable = dbData->headers.at(change.getTable()).uKeyName == col;
-                    bool allowInvalidChange = change.hasParent() && fromGeneration;
-                    if (colIsUKeyOfTable && !allowInvalidChange && val.empty()) {
-                        logger.pushLog(Log{std::format("ERROR: Change is invalid, because column {} needs a value.", col)});
-                        return false;
-                    }
-                    //TODO: Richtige Logik?
-                    change.setValidity(!allowInvalidChange);
+            case changeType::UPDATE_CELLS: {
+                const Change::colValMap& cells = change.getCells();
+                const tHeadersInfo& headers = dbData->headers.at(change.getTable());
+                // check non-nullable column count
+                std::size_t reqColumnCount = std::count_if(headers.data.begin(), headers.data.end(), [](const tHeaderInfo& h) { return !h.nullable; });
+                if (reqColumnCount > cells.size() && change.getType() == changeType::INSERT_ROW) { setValidity = false; }
+                if (cells.size() > (headers.data.size() - 1) && !allowInvalidChange) {
+                    logger.pushLog(Log{std::format("ERROR: Change is invalid because not enough columns were supplied to satisfy the non-null table columns.")});
+                    return false;
                 }
-                break;
+
+                for (const auto& header : headers.data) {
+                    if (header.type == headerType::PRIMARY_KEY) {
+                        if (cells.contains(header.name)) {
+                            logger.pushLog(Log{std::format("ERROR: Change is not allowed to provide the primary key.")});
+                            return false;
+                        }
+                        continue;
+                    } else if (!header.nullable) {
+                        // non-nullable column is null
+                        if (!cells.contains(header.name)) {
+                            if (change.getType() == changeType::INSERT_ROW) {
+                                if (!allowInvalidChange) {
+                                    logger.pushLog(Log{std::format("ERROR: Header {} is not nullable and no value was provided.", header.name)});
+                                    return false;
+                                }
+                                setValidity = false;
+                            }
+                        } else {
+                            if (cells.at(header.name).empty()) {
+                                if (!allowInvalidChange) {
+                                    logger.pushLog(Log{std::format("ERROR: Header {} is not nullable but empty value was provided.", header.name)});
+                                    return false;
+                                }
+                                setValidity = false;
+                            }
+                        }
+                    }
+                }
+            } break;
             default:
                 break;
         }
-        change.setValidity(true);
+        change.setLocalValidity(setValidity);
         return true;
     }
 
-    std::vector<Change> getRequiredChanges(const Change& change, std::map<std::string, std::size_t>& ids) {
+    std::vector<Change> getRequiredChanges(const Change& change, const std::map<std::string, std::size_t>& ids) {
         const std::string& table = change.getTable();
         std::vector<Change> changes;
         const tHeadersInfo& headers = dbData->headers.at(table);
@@ -137,12 +166,18 @@ class DbService {
         for (const auto& [col, val] : cells) {
             // find foreign key thats required
             auto it1 = std::ranges::find_if(headers.data, [&](const tHeaderInfo& h) { return h.name == col && h.type == headerType::FOREIGN_KEY; });
-            if (it1 != headers.data.end() && it1->referencedTable != table) {
-                if (!checkReferencedPKeyValue(it1->referencedTable, val)) {
+            if (it1 != headers.data.end()) {  // && it1->referencedTable != table) {
+                if (!checkReferencedPKeyValue(it1->referencedTable, it1->nullable, val)) {
                     Change::colValMap requiredCells;
                     requiredCells.emplace(dbData->headers.at(it1->referencedTable).uKeyName, val);
-                    // std::size_t maxDataId = dbData->maxPKeys.at(getTable(it1->referencedTable));
-                    Change reqChange{requiredCells, changeType::INSERT_ROW, getTable(it1->referencedTable), ++(ids.at(it1->referencedTable))};
+                    // count up based on the parent change. This probably breaks in some conditions
+                    std::size_t childId;
+                    if (it1->referencedTable == change.getTable()) {
+                        childId = change.getRowId() + 1;
+                    } else {
+                        childId = ids.at(it1->referencedTable) + 1;
+                    }
+                    Change reqChange{requiredCells, changeType::INSERT_ROW, getTable(it1->referencedTable), childId};
                     reqChange.setParent(change.getKey());
                     changes.emplace_back(reqChange);
                 }
@@ -151,7 +186,9 @@ class DbService {
         return changes;
     }
 
-    bool checkReferencedPKeyValue(const std::string& ref, const std::string& val) {
+    bool checkReferencedPKeyValue(const std::string& ref, bool nullable, const std::string& val) {
+        // does pkey-value already exist
+        if (val.empty() && nullable) { return true; }
         std::string pKey = dbData->headers.at(ref).pkey;
         auto it1 = std::ranges::find_if(dbData->tableRows.at(ref).at(pKey), [&](const std::string& h) { return h == val; });
         if (it1 != dbData->tableRows.at(ref).at(pKey).end()) { return true; }

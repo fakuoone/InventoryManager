@@ -41,6 +41,7 @@ struct tHeaderInfo {
     std::string name;
     headerType type;
     std::string referencedTable;
+    bool nullable;
 };
 
 using tHeaderVector = std::vector<tHeaderInfo>;
@@ -152,7 +153,22 @@ class DbInterface {
         transactionData transaction = getTransaction();
 
         for (const std::string& header : rawHeaders) {
-            tHeaderInfo info{header, headerType::DATA, ""};
+            tHeaderInfo info{header, headerType::DATA, "", true};
+
+            // Nullable
+            const std::string nullQuery = std::format(
+                "SELECT NOT a.attnotnull AS is_nullable "
+                "FROM pg_attribute a "
+                "JOIN pg_class c ON c.oid = a.attrelid "
+                "WHERE c.relname = '{}' "
+                "  AND a.attname = '{}' "
+                "  AND a.attnum > 0 "
+                "  AND NOT a.attisdropped",
+                table, header);
+
+            pqxx::result nullResult = transaction.tx.exec(nullQuery);
+            if (!nullResult.empty()) { info.nullable = nullResult[0]["is_nullable"].as<bool>(); }
+
             // Primary key
             const std::string pkQuery = std::format(
                 "SELECT 1 "

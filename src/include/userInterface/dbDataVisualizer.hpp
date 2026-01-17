@@ -43,19 +43,16 @@ class DbVisualizer {
         for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
             const Change& change = uiChanges->changes.at(hash);
             if (change.getType() == changeType::INSERT_ROW) {
+                std::string displayString;
                 for (const auto& header : dbData->headers.at(table).data) {
                     ImGui::TableNextColumn();
                     const auto& cellChanges = change.getCells();
                     if (header.type == headerType::PRIMARY_KEY) {
-                        std::string pKeyFormat = std::format("({})", std::to_string(change.getRowId()));
-                        ImGui::TextUnformatted(pKeyFormat.c_str());
-                        continue;
+                        displayString = std::format("({})", std::to_string(change.getRowId()));
+                    } else {
+                        displayString = cellChanges.contains(header.name) ? (cellChanges.at(header.name)) : std::string("-");
                     }
-                    if (!cellChanges.contains(header.name)) {
-                        ImGui::TextUnformatted("-");
-                        continue;
-                    }
-                    ImGui::TextUnformatted(cellChanges.at(header.name).c_str());
+                    drawEditableData(table, displayString, header, changeType::INSERT_ROW, change.getRowId());
                     drawRowHighlights(&change);
                 }
                 ImGui::TableNextColumn();
@@ -67,6 +64,15 @@ class DbVisualizer {
 
                 if (ImGui::Button("x")) { changeTracker.removeChanges(change.getKey()); }
                 ImGui::EndDisabled();
+
+                ImGui::SameLine();
+                if (ImGui::Button("EDIT")) {
+                    if (edit.whichIds.contains(change.getRowId())) {
+                        edit.whichIds.erase(change.getRowId());
+                    } else {
+                        edit.whichIds.insert(change.getRowId());
+                    }
+                }
 
                 ImGui::PopID();
             }
@@ -132,10 +138,7 @@ class DbVisualizer {
                 }
             }
         }
-
         if (newCellValue.empty()) { newCellValue = originalCell; }
-
-        // Draw editable cell
         drawEditableData(tableName, newCellValue, header, cType, id);
     }
 
@@ -196,7 +199,7 @@ class DbVisualizer {
 
     void drawRowHighlights(const Change* change) {
         if (!change) { return; }
-        bool valid = change->isValid();
+        bool valid = change->isLocallyValid();
         ImU32 col = valid ? IM_COL32(0, 255, 0, 60) : IM_COL32(255, 0, 0, 60);
         ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, col);
     }
@@ -271,7 +274,7 @@ class DbVisualizer {
             // Edit row
             ImGui::SameLine();
             if (rowChange.has_value()) { ImGui::BeginDisabled((*rowChange)->getType() == changeType::DELETE_ROW); }
-            if (ImGui::Button("edit")) {
+            if (ImGui::Button("EDIT")) {
                 if (edit.whichIds.contains(indexes.pKeyId)) {
                     edit.whichIds.erase(indexes.pKeyId);
                 } else {

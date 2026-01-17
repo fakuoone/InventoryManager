@@ -8,7 +8,7 @@
 #include <map>
 #include <vector>
 
-enum class changeType : uint8_t { NONE, INSERT_ROW, DELETE_ROW, UPDATE_CELLS };
+enum class changeType : uint8_t { NONE, INSERT_ROW, UPDATE_CELLS, DELETE_ROW };
 
 enum class sqlAction : uint8_t { PREVIEW, EXECUTE };
 
@@ -42,6 +42,7 @@ class Change {
     std::size_t parentKey{0};
     std::vector<std::size_t> childrenKeys;
     bool selected{false};
+    bool locallyValid{false};
     bool valid{false};
 
    public:
@@ -49,7 +50,19 @@ class Change {
 
     static void setLogger(Logger& l) { logger = &l; }
 
-    [[nodiscard]] std::size_t getKey() const { return (std::size_t(type) << 56) | (std::size_t(tableData.id) << 32) | std::size_t(rowId); }
+    [[nodiscard]] std::size_t getKey() const {
+        std::size_t typeEq;
+        switch (type) {
+            case changeType::INSERT_ROW:
+            case changeType::UPDATE_CELLS:
+                typeEq = 0;
+                break;
+            default:
+                typeEq = std::size_t(type);
+                break;
+        }
+        return (typeEq << 56) | (std::size_t(tableData.id) << 32) | std::size_t(rowId);
+    }
 
     changeType getType() const { return type; }
 
@@ -119,7 +132,11 @@ class Change {
 
     std::size_t getParent() const { return parentKey; }
 
+    void setLocalValidity(bool validity) { locallyValid = validity; }
+
     void setValidity(bool validity) { valid = validity; }
+
+    bool isLocallyValid() const { return locallyValid; }
 
     bool isValid() const { return valid; }
 

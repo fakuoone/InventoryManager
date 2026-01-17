@@ -39,7 +39,7 @@ class ChangeTracker {
     void mergeCellChanges(Change& existingChange, const Change& newChange);
     void waitIfFrozen();
     bool manageConflictL(const Change& newChange);
-    void addChangeInternalL(const Change& change);
+    bool addChangeInternalL(const Change& change);
     void collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected) const;
     void removeChangeL(std::size_t key);
 
@@ -49,6 +49,7 @@ class ChangeTracker {
     void freeze();
     void unfreeze();
     const Change getChange(const std::size_t key);
+    void propagateValidity(Change& change);
     bool addChange(Change change);
     void removeChanges(const std::size_t key);
     void removeChanges(const Change::chHashV& changeHashes);

@@ -32,15 +32,11 @@ const Change ChangeTracker::getChange(const std::size_t key) {
 
 bool ChangeTracker::manageConflictL(const Change& newChange) {
     if (!changes.flatData.contains(newChange.getKey())) { return true; }
-    std::lock_guard<std::mutex> lg(changes.mtx);
     Change& existingChange = changes.flatData.at(newChange.getKey());
     switch (existingChange.getType()) {
-        case changeType::INSERT_ROW:
-            return false;
-
         case changeType::DELETE_ROW:
             return false;
-
+        case changeType::INSERT_ROW:
         case changeType::UPDATE_CELLS:
             mergeCellChanges(existingChange, newChange);
             return true;
@@ -48,6 +44,20 @@ bool ChangeTracker::manageConflictL(const Change& newChange) {
             break;
     }
     return false;
+}
+
+void ChangeTracker::propagateValidity(Change& change) {
+    if (change.hasChildren()) {
+        for (const std::size_t& childKey : change.getChildren()) {
+            if (!changes.flatData.at(childKey).isValid()) {
+                change.setValidity(false);
+                break;
+            }
+        }
+    }
+    if (change.hasParent()) {
+        if (changes.flatData.contains(change.getParent())) { propagateValidity(changes.flatData.at(change.getParent())); }
+    }
 }
 
 bool ChangeTracker::addChange(Change change) {
@@ -58,9 +68,14 @@ bool ChangeTracker::addChange(Change change) {
     collectRequiredChanges(change, allChanges);
     std::lock_guard<std::mutex> lg(changes.mtx);
 
-    for (const Change& c : allChanges) {
+    for (Change& c : allChanges) {
         if (!manageConflictL(c)) { return false; }
-        addChangeInternalL(c);
+        if (c.getType() == changeType::UPDATE_CELLS) {
+            propagateValidity(c);
+            continue;
+        }
+        if (addChangeInternalL(c)) { propagateValidity(c); }
+        // TODO: Roll back counters?
     }
 
     return true;
@@ -70,30 +85,25 @@ void ChangeTracker::collectRequiredChanges(Change& change, std::vector<Change>& 
     std::vector<Change> required = dbService.getRequiredChanges(change, changes.maxPKeys);
     for (Change& r : required) {
         if (!dbService.validateChange(r, true)) { return; }
+        if (changes.flatData.contains(change.getKey())) { continue; }
         change.pushChild(r);
         collectRequiredChanges(r, out);
     }
     out.push_back(change);
 }
 
-void ChangeTracker::addChangeInternalL(const Change& change) {
+bool ChangeTracker::addChangeInternalL(const Change& change) {
     const std::string tableName = change.getTable();
-    if (change.getType() == changeType::INSERT_ROW) {
-        if (change.getRowId() > changes.maxPKeys[tableName]) {
-            changes.maxPKeys[tableName] = change.getRowId();
-        } else {
-            changes.maxPKeys[tableName]++;
-        }
-    }
+    if (change.getType() == changeType::INSERT_ROW) { changes.maxPKeys[tableName] += change.getRowId() - changes.maxPKeys[tableName]; }
     // adding change
     auto [it, inserted] = changes.flatData.emplace(change.getKey(), change);
     if (!inserted) {
         logger.pushLog(Log{std::format("DUPLICATE KEY {}", change.getKey())});
-        return;
+        return false;
     }
-
-    if (inserted) { changes.pKeyMappedData[tableName].emplace(change.getRowId(), change.getKey()); }
+    changes.pKeyMappedData[tableName].emplace(change.getRowId(), change.getKey());
     logger.pushLog(Log{std::format("    Adding change {} to table {} at id {}", change.getKey(), change.getTable(), change.getRowId())});
+    return true;
 }
 
 void ChangeTracker::collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected) const {
@@ -167,7 +177,7 @@ std::size_t ChangeTracker::getMaxPKey(const std::string table) {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
 
     if (!changes.maxPKeys.contains(table)) { return 0; }
-    return changes.maxPKeys.at(table);
+    return changes.maxPKeys[table];
 }
 
 bool ChangeTracker::isChangeSelected(const std::size_t key) {

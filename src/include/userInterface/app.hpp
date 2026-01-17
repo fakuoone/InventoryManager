@@ -58,7 +58,7 @@ class App {
 
         if (ImGui::Begin("FPSOverlay", nullptr, flags)) {
             ImGuiIO& io = ImGui::GetIO();
-            if (io.Framerate < 239) { logger.pushLog(Log{std::format("FPS: {}", io.Framerate)}); }
+            // if (io.Framerate < 239) { logger.pushLog(Log{std::format("FPS: {}", io.Framerate)}); }
             ImGui::Text("FPS: %.1f", static_cast<double>(io.Framerate));
             ImGui::Text("Frame: %.3f ms", 1000.0 / static_cast<double>(io.Framerate));
             ImGui::End();
