@@ -76,10 +76,8 @@ class Change {
     Change& operator=(Change&& other) = default;
 
     Change& operator^(const Change& other) {
-        // merges changs if necessary
         if (this != &other) {
             for (auto const& [col, val] : other.changedCells) {
-                // TODO: Validate existence of col? Validate val?
                 this->changedCells[col] = val;
                 logger->pushLog(Log{std::format("            change now has column: {} with cell value: {}", col, val)});
             }
@@ -91,17 +89,14 @@ class Change {
     }
 
     std::string toSQLaction(sqlAction action) const {
-        // TODO: Basierend auf action entweder eine Vorschau präsentieren, oder exekutieren
         // TODO: INSERT und UPDATE sind anfällig für SQL Injektion. Beheben
         std::string sqlString;
 
         switch (type) {
             case changeType::DELETE_ROW:
-                // TODO: Wie komme ich an den Spaltennamen von der id-Spalte (muss es sie geben?)
                 sqlString = std::format("DELETE FROM {} WHERE {} = {}", tableData.name, "id", rowId);
                 break;
             case changeType::INSERT_ROW: {
-                // TODO: Tabellenkopf und Zellwerte aus change bauen
                 std::string columnNames;
                 std::string cellValues;
                 sqlString = std::format("INSERT INTO {} ({}) VALUES ({});", tableData.name, columnNames, cellValues);

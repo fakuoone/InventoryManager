@@ -11,7 +11,7 @@
 #include "userInterface/dbDataVisualizer.hpp"
 #include "userInterface/imGuiDX11Context.hpp"
 
-enum class AppState { DATA_OUTDATED, WAITING_FOR_DATA, DATA_READY, ENDING };
+enum class AppState { INIT, DATA_OUTDATED, WAITING_FOR_DATA, DATA_READY, ENDING };
 
 class App {
    private:
@@ -25,7 +25,7 @@ class App {
     ChangeExeService changeExe{dbService, changeTracker, logger};
     DbVisualizer dbVisualizer{dbService, changeTracker, changeExe, logger};
 
-    AppState appState{AppState::DATA_OUTDATED};
+    AppState appState{AppState::INIT};
     std::shared_ptr<const completeDbData> dbData;
     bool dataAvailable{false};
 
@@ -67,15 +67,37 @@ class App {
 
     bool handleAppState() {
         switch (appState) {
-            case AppState::DATA_OUTDATED:
+            case AppState::INIT:
                 dbService.startUp();
                 appState = AppState::WAITING_FOR_DATA;
                 break;
+            case AppState::DATA_OUTDATED: {
+                dbVisualizer.run(false);
+                ImVec2 buttonSize = ImGui::CalcTextSize("REFETCH");
+                buttonSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
+                buttonSize.y += ImGui::GetStyle().FramePadding.y * 2.0f;
+
+                ImVec2 padding = ImGui::GetStyle().WindowPadding;
+
+                // Top-right corner of the content region
+                ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - buttonSize.x - padding.x, padding.y));
+                if (ImGui::Button("REFETCH")) {
+                    dbService.startUp();
+                    appState = AppState::WAITING_FOR_DATA;
+                }
+                break;
+            }
             case AppState::WAITING_FOR_DATA:
                 if (waitForData()) { appState = AppState::DATA_READY; }
                 break;
             case AppState::DATA_READY:
-                if (false) { appState = AppState::DATA_OUTDATED; }
+                uiChanges = std::make_shared<uiChangeInfo>(changeTracker.getSnapShot());
+                dbVisualizer.setChangeData(uiChanges);
+                dbVisualizer.run(true);
+                if (changeExe.isChangeApplicationDone()) {
+                    changeExe.getSuccessfulChanges();
+                    appState = AppState::DATA_OUTDATED;
+                }
                 break;
             case AppState::ENDING:
                 return false;
@@ -107,18 +129,10 @@ class App {
                 break;
             }
 
-            running = handleAppState();
-
             if (!imguiCtx.beginFrame()) { continue; }
-            if (appState == AppState::DATA_READY) {
-                uiChanges = std::make_shared<uiChangeInfo>(changeTracker.getSnapShot());
-                dbVisualizer.setChangeData(uiChanges);
-                dbVisualizer.run();
-                if (changeExe.isChangeApplicationDone()) { changeExe.getSuccessfulChanges(); }
-            }
 
+            running = handleAppState();
             drawFpsOverlay();
-
             imguiCtx.endFrame();
         }
     }

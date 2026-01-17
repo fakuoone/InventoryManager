@@ -48,7 +48,7 @@ class ChangeTracker {
 
     uiChangeInfo getSnapShot();
 
-    void removeChange(const std::size_t hash);
+    void removeChangeL(const std::size_t hash);
 
     void setMaxPKeys(std::map<std::string, std::size_t> pk);
 

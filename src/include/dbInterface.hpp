@@ -340,7 +340,6 @@ class DbInterface {
 
     template <typename C>
     Change::chHashV applyChanges(C change_s, sqlAction action) {
-        // TODO: A change can require a nested tree of additional changes. The deepest change needs to be executed first
         Change::chHashV successfulChanges;
         if constexpr (std::same_as<C, Change>) {
             if (applySingleChange(change_s, action)) { successfulChanges.push_back(change_s.getKey()); };

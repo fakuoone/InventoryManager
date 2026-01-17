@@ -72,9 +72,8 @@ void ChangeTracker::addChangeInternalL(const Change& change) {
 }
 
 void ChangeTracker::removeChanges(const Change::chHashV& changeHashes) {
-    std::lock_guard<std::mutex> lgChanges(changes.mtx);
     for (const auto& key : changeHashes) {
-        removeChange(key);
+        removeChangeL(key);
     }
 }
 
@@ -83,7 +82,7 @@ uiChangeInfo ChangeTracker::getSnapShot() {
     return uiChangeInfo{changes.pKeyMappedData, changes.flatData};
 }
 
-void ChangeTracker::removeChange(const std::size_t key) {
+void ChangeTracker::removeChangeL(const std::size_t key) {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
     if (changes.flatData.contains(key)) {
         // TODO: ERror handling

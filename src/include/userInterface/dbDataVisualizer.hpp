@@ -69,7 +69,7 @@ class DbVisualizer {
                 ImGui::SameLine();
                 ImGui::BeginDisabled(change.hasParent());
 
-                if (ImGui::Button("x")) { changeTracker.removeChange(change.getKey()); }
+                if (ImGui::Button("x")) { changeTracker.removeChangeL(change.getKey()); }
                 ImGui::EndDisabled();
 
                 ImGui::PopID();
@@ -255,7 +255,7 @@ class DbVisualizer {
             ImGui::BeginDisabled(withParentChange);
             if (ImGui::Button("x")) {
                 if (rowChange.has_value()) {
-                    changeTracker.removeChange((*rowChange)->getKey());
+                    changeTracker.removeChangeL((*rowChange)->getKey());
                 } else {
                     Change::colValMap cvMap{};
                     changeTracker.addChange(Change{cvMap, changeType::DELETE_ROW, dbService.getTable(table), indexes.pKeyId});
@@ -282,15 +282,17 @@ class DbVisualizer {
         drawInsertionChanges(table);
     }
 
-    void createTableSplitters() {
+    void createTableSplitters(bool dataFresh) {
         if (ImGui::BeginTabBar("MainTabs")) {
             for (const auto& [table, data] : dbData->headers) {
                 ImGuiTabItemFlags flags = 0;
                 if (selectedTable == table) flags |= ImGuiTabItemFlags_SetSelected;
                 if (ImGui::BeginTabItem(table.c_str(), nullptr, flags)) {
+                    ImGui::BeginDisabled(!dataFresh);
                     if (selectedTable == table) { selectedTable.clear(); }
                     drawTableView(table, data.data);
                     ImGui::EndTabItem();
+                    ImGui::EndDisabled();
                 }
             }
             ImGui::EndTabBar();
@@ -318,11 +320,13 @@ class DbVisualizer {
         }
     }
 
-    void drawChangeOverview() {
+    void drawChangeOverview(bool dataFresh) {
+        ImGui::BeginDisabled(!dataFresh);
         for (const auto& [table, _] : uiChanges->idMappedChanges) {
             ImGui::TextUnformatted(table.c_str());
             drawTableChangeOverview(table);
         }
+        ImGui::EndDisabled();
     }
 
     void drawTableChangeOverview(const std::string& table) {
@@ -330,6 +334,7 @@ class DbVisualizer {
         ImGui::Text("CHANGE OVERVIEW");
         ImGui::BeginChild("TableChangeOverview", ImVec2{0, ImGui::GetContentRegionAvail().y}, false);
         ImGui::PushID("tableChangeOverview");
+        ImGui::PushID(table.c_str());
         for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
             const Change& change = uiChanges->changes.at(hash);
             std::size_t id = change.getRowId();
@@ -364,6 +369,7 @@ class DbVisualizer {
             ImGui::PopID();
         }
         ImGui::PopID();
+        ImGui::PopID();
         ImGui::EndChild();
     }
 
@@ -372,14 +378,14 @@ class DbVisualizer {
 
     void setChangeData(std::shared_ptr<uiChangeInfo> changeData) { uiChanges = changeData; }
 
-    void run() {
+    void run(bool dataFresh) {
         if (ImGui::BeginTabBar("Main")) {
             if (ImGui::BeginTabItem("Tables")) {
-                createTableSplitters();
+                createTableSplitters(dataFresh);
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Changes")) {
-                drawChangeOverview();
+                drawChangeOverview(dataFresh);
                 ImGui::EndTabItem();
             }
         }
