@@ -12,7 +12,7 @@ enum class changeType : uint8_t { NONE, INSERT_ROW, DELETE_ROW, UPDATE_CELLS };
 
 enum class sqlAction : uint8_t { PREVIEW, EXECUTE };
 
-struct table {
+struct imTable {
     std::string name;
     uint16_t id;
 };
@@ -35,7 +35,7 @@ class Change {
    private:
     colValMap changedCells;
     changeType type{changeType::UPDATE_CELLS};
-    table tableData;
+    imTable tableData;
     inline static Logger* logger = nullptr;
     uint32_t rowId{0};
     std::size_t changeKey{0};
@@ -45,7 +45,7 @@ class Change {
     bool valid{false};
 
    public:
-    Change(colValMap cCells, changeType cType, table cTable, std::size_t cRowId) : changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) { updateKey(); }
+    Change(colValMap cCells, changeType cType, imTable cTable, std::size_t cRowId) : changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) { updateKey(); }
 
     static void setLogger(Logger& l) { logger = &l; }
 
@@ -120,6 +120,8 @@ class Change {
     std::size_t getParent() const { return parentKey; }
 
     void setValidity(bool validity) { valid = validity; }
+
+    bool isValid() const { return valid; }
 
     void pushChild(const Change& change) { childrenKeys.push_back(change.getKey()); }
 

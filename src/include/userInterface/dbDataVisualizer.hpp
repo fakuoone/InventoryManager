@@ -40,11 +40,6 @@ class DbVisualizer {
     void drawInsertionChanges(const std::string& table) {
         if (!uiChanges->idMappedChanges.contains(table) || !dbData->headers.contains(table)) { return; }
         ImGui::TableNextRow();
-        if (table == "categories") {
-            int a = 0;
-            int b = 1;
-            b = a + b;
-        }
         for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
             const Change& change = uiChanges->changes.at(hash);
             if (change.getType() == changeType::INSERT_ROW) {
@@ -61,6 +56,7 @@ class DbVisualizer {
                         continue;
                     }
                     ImGui::TextUnformatted(cellChanges.at(header.name).c_str());
+                    drawRowHighlights(&change);
                 }
                 ImGui::TableNextColumn();
                 ImGui::PushID(static_cast<int>(change.getRowId()));
@@ -198,6 +194,13 @@ class DbVisualizer {
         }
     }
 
+    void drawRowHighlights(const Change* change) {
+        if (!change) { return; }
+        bool valid = change->isValid();
+        ImU32 col = valid ? IM_COL32(0, 255, 0, 60) : IM_COL32(255, 0, 0, 60);
+        ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, col);
+    }
+
     void createRows(const std::string& table) {
         // Check data validity
         if (!dbData->headers.contains(table)) { return; }
@@ -221,8 +224,7 @@ class DbVisualizer {
             if (indexes.pKeyId == INVALID_ID) { break; }
             if (indexes.pKeyId > maxId) { maxId = indexes.pKeyId; }
             auto rowChange = getChangeOfRow(table, indexes.pKeyId);
-            ImGui::TableNextRow();  // TODO: Das Problem mit der leeren Zeile ist genau hier. Man merkt erst nach dem "nextrow"-AUfruf, dass keine Daten da sind
-            // Draw every column for this row index
+            ImGui::TableNextRow();
             ImGui::PushID(static_cast<int>(indexes.pKeyId));
             for (const auto& header : dbData->headers.at(table).data) {
                 ImGui::TableNextColumn();
@@ -239,6 +241,8 @@ class DbVisualizer {
                 drawCellWithChange(rowChange, cell, table, header, indexes.pKeyId);
                 maxNotReached = true;
             }
+            if (rowChange.has_value()) { drawRowHighlights(*rowChange); }
+
             // Exit if all data has been printed
             if (!maxNotReached) {
                 ImGui::PopID();

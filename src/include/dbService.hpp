@@ -100,13 +100,12 @@ class DbService {
         return true;
     }
 
-    bool validateChange(const Change& change, bool fromGeneration) {
-        // TODO: Implement logic
+    bool validateChange(Change& change, bool fromGeneration) {
+        // TODO: Implement details
         const tStringVector& tables = dbData->tables;
         if (std::find(tables.begin(), tables.end(), change.getTable()) == tables.end()) { return false; }
         switch (change.getType()) {
             case changeType::DELETE_ROW:
-                /* code */
                 break;
             case changeType::INSERT_ROW:
             case changeType::UPDATE_CELLS:
@@ -118,11 +117,14 @@ class DbService {
                         logger.pushLog(Log{std::format("ERROR: Change is invalid, because column {} needs a value.", col)});
                         return false;
                     }
+                    //TODO: Richtige Logik?
+                    change.setValidity(!allowInvalidChange);
                 }
                 break;
             default:
                 break;
         }
+        change.setValidity(true);
         return true;
     }
 
@@ -163,9 +165,9 @@ class DbService {
         //      return pool.submit(&DbInterface::applyChanges, &dbInterface, std::move(change_s), action);
     }
 
-    table getTable(const std::string& tableName) {
+    imTable getTable(const std::string& tableName) {
         auto it = std::find(dbData->tables.begin(), dbData->tables.end(), tableName);
-        table tableData{tableName, 0};
+        imTable tableData{tableName, 0};
         if (it != dbData->tables.end()) { tableData.id = static_cast<uint16_t>(std::distance(dbData->tables.begin(), it)); }
         return tableData;
     }
