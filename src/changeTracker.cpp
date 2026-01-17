@@ -26,7 +26,7 @@ bool ChangeTracker::manageConflictL(const Change& newChange) {
 
 bool ChangeTracker::addChange(Change change) {
     logger.pushLog(Log{"ADDCHANGE CALLED"});
-    if (!dbService.validateChange(change)) { return false; }
+    if (!dbService.validateChange(change, false)) { return false; }
 
     std::vector<Change> allChanges;
     collectRequiredChanges(change, allChanges);
@@ -42,12 +42,13 @@ bool ChangeTracker::addChange(Change change) {
 }
 
 void ChangeTracker::collectRequiredChanges(Change& change, std::vector<Change>& out) {
-    out.push_back(change);
-    auto required = dbService.getRequiredChanges(change, changes.maxPKeys);
-    change.pushChildren(required);
+    std::vector<Change> required = dbService.getRequiredChanges(change, changes.maxPKeys);
     for (Change& r : required) {
+        if (!dbService.validateChange(r, true)) { return; }
+        change.pushChild(r);
         collectRequiredChanges(r, out);
     }
+    out.push_back(change);
 }
 
 void ChangeTracker::addChangeInternalL(const Change& change) {
