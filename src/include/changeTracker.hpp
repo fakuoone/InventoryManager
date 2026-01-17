@@ -9,6 +9,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <unordered_set>
 
 struct protectedChanges {
     std::mutex mtx;
@@ -36,41 +37,27 @@ class ChangeTracker {
     std::map<std::string, std::size_t> initialMaxPKeys;
 
     void mergeCellChanges(Change& existingChange, const Change& newChange);
-
     void waitIfFrozen();
-
     bool manageConflictL(const Change& newChange);
-
     void addChangeInternalL(const Change& change);
+    void collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected) const;
+    void removeChangeL(std::size_t key);
 
    public:
     ChangeTracker(DbService& cDbService, Logger& cLogger) : dbService(cDbService), logger(cLogger) {}
 
     void freeze();
-
     void unfreeze();
-
     const Change getChange(const std::size_t key);
-
     bool addChange(Change change);
-
-    void collectRequiredChanges(Change& change, std::vector<Change>& out);
-
+    void removeChanges(const std::size_t key);
     void removeChanges(const Change::chHashV& changeHashes);
-
+    void collectRequiredChanges(Change& change, std::vector<Change>& out);
     uiChangeInfo getSnapShot();
-
-    void removeChangeL(const std::size_t hash);
-
     void setMaxPKeys(std::map<std::string, std::size_t> pk);
-
     std::size_t getMaxPKey(const std::string table);
-
     bool isChangeSelected(const std::size_t hash);
-
     void toggleChangeSelect(const std::size_t hash);
-
     bool hasChild(const std::size_t hash);
-
     std::vector<std::size_t> getChildren(const std::size_t key);
 };

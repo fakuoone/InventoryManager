@@ -45,11 +45,7 @@ class Change {
     bool valid{false};
 
    public:
-    Change(colValMap cCells, changeType cType, table cTable, std::size_t cRowId) : changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) {
-
-        updateKey();
-        logger->pushLog(Log{std::format("CTOR with table {}, rowId {} and key {} constructed.", tableData.name, rowId, changeKey)});
-    }
+    Change(colValMap cCells, changeType cType, table cTable, std::size_t cRowId) : changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) { updateKey(); }
 
     static void setLogger(Logger& l) { logger = &l; }
 
@@ -67,7 +63,6 @@ class Change {
         if (!changedCells.contains(header)) { return std::string(); }
         return changedCells.at(header);
     }
-
     void updateKey() { changeKey = getKey(); }
 
     Change(const Change& other) = default;
@@ -128,7 +123,7 @@ class Change {
 
     void pushChild(const Change& change) { childrenKeys.push_back(change.getKey()); }
 
-    bool hasChildren() const { return childrenKeys.size() == 0; }
+    bool hasChildren() const { return childrenKeys.size() != 0; }
 
     const std::vector<std::size_t>& getChildren() const { return childrenKeys; }
 };

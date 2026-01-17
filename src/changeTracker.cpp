@@ -96,8 +96,37 @@ void ChangeTracker::addChangeInternalL(const Change& change) {
     logger.pushLog(Log{std::format("    Adding change {} to table {} at id {}", change.getKey(), change.getTable(), change.getRowId())});
 }
 
+void ChangeTracker::collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected) const {
+    if (collected.contains(key)) return;
+
+    collected.insert(key);
+
+    // Will throw std::out_of_range if key does not exist
+    const Change& change = changes.flatData.at(key);
+
+    for (std::size_t childKey : change.getChildren()) {
+        collectAllDescendants(childKey, collected);
+    }
+}
+
+void ChangeTracker::removeChanges(const std::size_t changeKey) {
+    waitIfFrozen();
+    std::unordered_set<std::size_t> toRemove;
+    std::lock_guard<std::mutex> lg(changes.mtx);
+    collectAllDescendants(changeKey, toRemove);
+    for (std::size_t key : toRemove) {
+        removeChangeL(key);
+    }
+}
+
 void ChangeTracker::removeChanges(const Change::chHashV& changeHashes) {
-    for (const auto& key : changeHashes) {
+    waitIfFrozen();
+    std::unordered_set<std::size_t> toRemove;
+    std::lock_guard<std::mutex> lg(changes.mtx);
+    for (std::size_t key : changeHashes) {
+        collectAllDescendants(key, toRemove);
+    }
+    for (std::size_t key : toRemove) {
         removeChangeL(key);
     }
 }
@@ -107,24 +136,25 @@ uiChangeInfo ChangeTracker::getSnapShot() {
     return uiChangeInfo{changes.pKeyMappedData, changes.flatData};
 }
 
-void ChangeTracker::removeChangeL(const std::size_t key) {
-    waitIfFrozen();
-    std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    if (changes.flatData.contains(key)) {
-        // TODO: ERror handling
-        const Change& change = changes.flatData.at(key);
-        changes.pKeyMappedData.at(change.getTable()).erase(change.getRowId());
-        if (change.getRowId() == changes.maxPKeys.at(change.getTable())) {
-            const Change::chHHMap& pkmd = changes.pKeyMappedData.at(change.getTable());
-            if (pkmd.size() != 0) {
-                changes.maxPKeys[change.getTable()] = pkmd.rbegin()->first;
-            } else {
-                changes.maxPKeys[change.getTable()] = initialMaxPKeys.at(change.getTable());
-            }
+void ChangeTracker::removeChangeL(std::size_t key) {
+    if (!changes.flatData.contains(key)) return;
+
+    const Change& change = changes.flatData.at(key);
+
+    auto& tableMap = changes.pKeyMappedData.at(change.getTable());
+    tableMap.erase(change.getRowId());
+
+    if (change.getRowId() == changes.maxPKeys.at(change.getTable())) {
+        if (!tableMap.empty()) {
+            changes.maxPKeys[change.getTable()] = tableMap.rbegin()->first;
+        } else {
+            changes.maxPKeys[change.getTable()] = initialMaxPKeys.at(change.getTable());
         }
-        logger.pushLog(Log{std::format("    Removing change {}", key)});
-        changes.flatData.erase(key);
     }
+
+    logger.pushLog(Log{std::format("    Removing change {}", key)});
+
+    changes.flatData.erase(key);
 }
 
 void ChangeTracker::setMaxPKeys(std::map<std::string, std::size_t> pk) {

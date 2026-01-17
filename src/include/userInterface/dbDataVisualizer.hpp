@@ -69,7 +69,7 @@ class DbVisualizer {
                 ImGui::SameLine();
                 ImGui::BeginDisabled(change.hasParent());
 
-                if (ImGui::Button("x")) { changeTracker.removeChangeL(change.getKey()); }
+                if (ImGui::Button("x")) { changeTracker.removeChanges(change.getKey()); }
                 ImGui::EndDisabled();
 
                 ImGui::PopID();
@@ -255,7 +255,7 @@ class DbVisualizer {
             ImGui::BeginDisabled(withParentChange);
             if (ImGui::Button("x")) {
                 if (rowChange.has_value()) {
-                    changeTracker.removeChangeL((*rowChange)->getKey());
+                    changeTracker.removeChanges((*rowChange)->getKey());
                 } else {
                     Change::colValMap cvMap{};
                     changeTracker.addChange(Change{cvMap, changeType::DELETE_ROW, dbService.getTable(table), indexes.pKeyId});
