@@ -131,9 +131,5 @@ class Change {
 
     void setValidity(bool validity) { valid = validity; }
 
-    void pushChildren(std::vector<Change>& childChanges) {
-        for (const auto& change : childChanges) {
-            childrenKeys.push_back(change.getKey());
-        }
-    }
+    void pushChild(const Change& change) { childrenKeys.push_back(change.getKey()); }
 };

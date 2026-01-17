@@ -100,9 +100,8 @@ class DbService {
         return true;
     }
 
-    bool validateChange(const Change& change) {
+    bool validateChange(const Change& change, bool fromGeneration) {
         // TODO: Implement logic
-        // 1.
         const tStringVector& tables = dbData->tables;
         if (std::find(tables.begin(), tables.end(), change.getTable()) == tables.end()) { return false; }
         switch (change.getType()) {
@@ -110,15 +109,19 @@ class DbService {
                 /* code */
                 break;
             case changeType::INSERT_ROW:
-                break;
             case changeType::UPDATE_CELLS:
+                for (const auto& [col, val] : change.getCells()) {
+                    // UKey needs to be provided, unless the change got auto-generated
+                    bool colIsUKeyOfTable = dbData->headers.at(change.getTable()).uKeyName == col;
+                    bool allowInvalidChange = change.hasParent() && fromGeneration;
+                    if (colIsUKeyOfTable && !allowInvalidChange && val.empty()) {
+                        logger.pushLog(Log{std::format("ERROR: Change is invalid, because column {} needs a value.", col)});
+                        return false;
+                    }
+                }
                 break;
             default:
                 break;
-        }
-        if (false) {
-            std::string reasons = "";
-            logger.pushLog(Log{std::format("Change is invalid, because:\n    {}", reasons)});
         }
         return true;
     }
