@@ -5,8 +5,34 @@ void ChangeTracker::mergeCellChanges(Change& existingChange, const Change& newCh
     existingChange ^ newChange;
 }
 
+void ChangeTracker::freeze() {
+    std::unique_lock lock(freezeMtx);
+    frozen.store(true, std::memory_order_release);
+}
+
+void ChangeTracker::unfreeze() {
+    {
+        std::unique_lock lock(freezeMtx);
+        frozen.store(false, std::memory_order_release);
+    }
+    freezeCv.notify_all();
+}
+
+void ChangeTracker::waitIfFrozen() {
+    std::unique_lock lock(freezeMtx);
+    freezeCv.wait(lock, [this] { return !frozen.load(std::memory_order_acquire); });
+}
+
+const Change ChangeTracker::getChange(const std::size_t key) {
+    std::lock_guard<std::mutex> lg(changes.mtx);
+    assert(changes.flatData.contains(key));
+    if (changes.flatData.contains(key)) { return changes.flatData.at(key); }
+    return changes.flatData.at(key);  // TODO: fix
+}
+
 bool ChangeTracker::manageConflictL(const Change& newChange) {
     if (!changes.flatData.contains(newChange.getKey())) { return true; }
+    std::lock_guard<std::mutex> lg(changes.mtx);
     Change& existingChange = changes.flatData.at(newChange.getKey());
     switch (existingChange.getType()) {
         case changeType::INSERT_ROW:
@@ -25,12 +51,11 @@ bool ChangeTracker::manageConflictL(const Change& newChange) {
 }
 
 bool ChangeTracker::addChange(Change change) {
-    logger.pushLog(Log{"ADDCHANGE CALLED"});
     if (!dbService.validateChange(change, false)) { return false; }
 
     std::vector<Change> allChanges;
+    waitIfFrozen();
     collectRequiredChanges(change, allChanges);
-
     std::lock_guard<std::mutex> lg(changes.mtx);
 
     for (const Change& c : allChanges) {
@@ -83,6 +108,7 @@ uiChangeInfo ChangeTracker::getSnapShot() {
 }
 
 void ChangeTracker::removeChangeL(const std::size_t key) {
+    waitIfFrozen();
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
     if (changes.flatData.contains(key)) {
         // TODO: ERror handling
@@ -115,6 +141,7 @@ std::size_t ChangeTracker::getMaxPKey(const std::string table) {
 }
 
 bool ChangeTracker::isChangeSelected(const std::size_t key) {
+    std::lock_guard<std::mutex> lgChanges(changes.mtx);
     auto it = changes.flatData.find(key);
     if (it == changes.flatData.end()) { return false; }
 
@@ -127,7 +154,22 @@ bool ChangeTracker::isChangeSelected(const std::size_t key) {
 }
 
 void ChangeTracker::toggleChangeSelect(const std::size_t key) {
+    std::lock_guard<std::mutex> lgChanges(changes.mtx);
     if (!changes.flatData.contains(key)) { return; }
     if (changes.flatData.at(key).hasParent()) { return; }
     return changes.flatData.at(key).toggleSelect();
+}
+
+bool ChangeTracker::hasChild(const std::size_t key) {
+    std::lock_guard<std::mutex> lgChanges(changes.mtx);
+    if (!changes.flatData.contains(key)) { return false; }
+    return changes.flatData.at(key).hasChildren();
+}
+
+std::vector<std::size_t> ChangeTracker::getChildren(const std::size_t key) {
+    if (hasChild(key)) {
+        std::lock_guard<std::mutex> lgChanges(changes.mtx);
+        return changes.flatData.at(key).getChildren();
+    }
+    return std::vector<std::size_t>{};
 }

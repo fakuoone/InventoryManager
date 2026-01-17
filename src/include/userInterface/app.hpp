@@ -72,6 +72,9 @@ class App {
                 appState = AppState::WAITING_FOR_DATA;
                 break;
             case AppState::DATA_OUTDATED: {
+                // TEST: request data anyways
+                uiChanges = std::make_shared<uiChangeInfo>(changeTracker.getSnapShot());
+                dbVisualizer.setChangeData(uiChanges);
                 dbVisualizer.run(false);
                 ImVec2 buttonSize = ImGui::CalcTextSize("REFETCH");
                 buttonSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;

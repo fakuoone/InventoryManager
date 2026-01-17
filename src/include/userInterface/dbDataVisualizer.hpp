@@ -65,7 +65,7 @@ class DbVisualizer {
                 ImGui::TableNextColumn();
                 ImGui::PushID(static_cast<int>(change.getRowId()));
 
-                if (ImGui::Button("RUN")) { changeExe.requestChangeApplication(Change{change}, sqlAction::EXECUTE); }
+                if (ImGui::Button("RUN")) { changeExe.requestChangeApplication(change.getKey(), sqlAction::EXECUTE); }
                 ImGui::SameLine();
                 ImGui::BeginDisabled(change.hasParent());
 

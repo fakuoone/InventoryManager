@@ -338,15 +338,10 @@ class DbInterface {
         return completeDbData{tables.data, tableHeaders.data, tableRows.data, std::map<std::string, std::size_t>{}};
     }
 
-    template <typename C>
-    Change::chHashV applyChanges(C change_s, sqlAction action) {
+    Change::chHashV applyChanges(std::vector<Change> changes, sqlAction action) {
         Change::chHashV successfulChanges;
-        if constexpr (std::same_as<C, Change>) {
-            if (applySingleChange(change_s, action)) { successfulChanges.push_back(change_s.getKey()); };
-        } else {
-            for (const auto& [hash, change] : change_s) {
-                if (applySingleChange(change, action)) { successfulChanges.push_back(hash); }
-            }
+        for (const auto& change : changes) {
+            if (applySingleChange(change, action)) { successfulChanges.push_back(change.getKey()); }
         }
         return successfulChanges;
     }

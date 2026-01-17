@@ -127,4 +127,8 @@ class Change {
     void setValidity(bool validity) { valid = validity; }
 
     void pushChild(const Change& change) { childrenKeys.push_back(change.getKey()); }
+
+    bool hasChildren() const { return childrenKeys.size() == 0; }
+
+    const std::vector<std::size_t>& getChildren() const { return childrenKeys; }
 };
