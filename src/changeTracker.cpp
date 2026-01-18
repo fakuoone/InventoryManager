@@ -63,12 +63,11 @@ Change& ChangeTracker::manageConflictL(Change& newChange) {
 
 void ChangeTracker::propagateValidity(Change& change) {
     if (change.hasChildren()) {
+        bool childSum = true;
         for (const std::size_t& childKey : change.getChildren()) {
-            if (!changes.flatData.at(childKey).isValid()) {
-                change.setValidity(false);
-                break;
-            }
+            childSum &= changes.flatData.at(childKey).isValid();
         }
+        change.setValidity(childSum);
     }
     if (change.hasParent()) {
         if (changes.flatData.contains(change.getParent())) { propagateValidity(changes.flatData.at(change.getParent())); }
@@ -149,9 +148,9 @@ void ChangeTracker::releaseDependancy(Change& change, const Change& rC) {
             if (!changes.flatData.contains(childKey)) { continue; }  // not created yet
             Change& child = changes.flatData.at(childKey);
             const std::string childTableUKey = dbService.getTableUKey(child.getTable());
-            if (headerInfoChange.referencedTable == childTableUKey) {
-                for (const auto& [_, valC] : child.getCells()) {
-                    if (val != valC) {
+            if (headerInfoChange.referencedTable == child.getTable()) {
+                for (const auto& [colC, valC] : child.getCells()) {
+                    if (val != valC && colC == childTableUKey) {
                         change.removeChild(childKey);
                         child.resetParent();
                         break;
