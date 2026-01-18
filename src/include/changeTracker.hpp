@@ -38,8 +38,12 @@ class ChangeTracker {
 
     void mergeCellChanges(Change& existingChange, const Change& newChange);
     void waitIfFrozen();
-    bool manageConflictL(const Change& newChange);
+    bool isConflicting(const Change& newChange);
+    Change& manageConflictL(Change& newChange);
     void collectRequiredChanges(Change& change, std::vector<Change>& out);
+    bool findRequiredAlreadyExists(const Change& change);
+    void releaseDependancy(Change& change, const Change& rC);
+    void releaseAllDependancies(Change& change);
     void allocateIds(std::vector<Change>& changes);
     bool addChangeInternalL(const Change& change);
     void collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected) const;
@@ -52,7 +56,7 @@ class ChangeTracker {
     void unfreeze();
     const Change getChange(const std::size_t key);
     void propagateValidity(Change& change);
-    bool addChange(Change change);
+    bool addChange(Change change, std::optional<uint32_t> existingRowId = std::nullopt);
     void removeChanges(const std::size_t key);
     void removeChanges(const Change::chHashV& changeHashes);
     uiChangeInfo getSnapShot();

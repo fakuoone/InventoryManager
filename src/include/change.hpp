@@ -71,7 +71,6 @@ class Change {
         if (!changedCells.contains(header)) { return std::string(); }
         return changedCells.at(header);
     }
-    void updateKey() { changeKey = getKey(); }
 
     Change(const Change& other) = default;
     Change& operator=(const Change& other) = default;
@@ -84,7 +83,8 @@ class Change {
                 this->changedCells[col] = val;
                 logger->pushLog(Log{std::format("            change now has column: {} with cell value: {}", col, val)});
             }
-            this->updateKey();
+            // this->parentKey = other.getParent();
+            // this->selected = other.isSelected();
         }
         if (logger) { logger->pushLog(Log{std::format("^^ operator")}); }
 
@@ -123,24 +123,34 @@ class Change {
 
     void setParent(std::size_t parent) { parentKey = parent; }
 
-    void setRowId(uint32_t aRowId) {
-        rowId = aRowId;
-        updateKey();
-    }
+    void setRowId(uint32_t aRowId) { rowId = aRowId; }
 
     bool hasParent() const { return parentKey != 0; }
 
     std::size_t getParent() const { return parentKey; }
 
-    void setLocalValidity(bool validity) { locallyValid = validity; }
+    void resetParent() { parentKey = 0; }
 
-    void setValidity(bool validity) { valid = validity; }
+    void setLocalValidity(bool validity) {
+        locallyValid = validity;
+        if (!hasChildren()) { setValidity(validity); }
+    }
+
+    void setValidity(bool validity) {
+        if (validity) { locallyValid = validity; }
+        valid = validity;
+    }
 
     bool isLocallyValid() const { return locallyValid; }
 
     bool isValid() const { return valid; }
 
     void pushChild(const Change& change) { childrenKeys.push_back(change.getKey()); }
+
+    void removeChild(const std::size_t key) {
+        auto it = std::find(childrenKeys.begin(), childrenKeys.end(), key);
+        if (it != childrenKeys.end()) { childrenKeys.erase(it); }
+    }
 
     bool hasChildren() const { return childrenKeys.size() != 0; }
 

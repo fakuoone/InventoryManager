@@ -114,10 +114,11 @@ class DbService {
                 const Change::colValMap& cells = change.getCells();
                 const tHeadersInfo& headers = dbData->headers.at(change.getTable());
                 // check non-nullable column count
-                std::size_t reqColumnCount = std::count_if(headers.data.begin(), headers.data.end(), [](const tHeaderInfo& h) { return !h.nullable; });
+                std::size_t reqColumnCount = std::count_if(headers.data.begin(), headers.data.end(), [](const tHeaderInfo& h) { return !h.nullable; }) - 1;
                 if (reqColumnCount > cells.size() && change.getType() == changeType::INSERT_ROW) { setValidity = false; }
                 if (cells.size() > (headers.data.size() - 1) && !allowInvalidChange) {
                     logger.pushLog(Log{std::format("ERROR: Change is invalid because not enough columns were supplied to satisfy the non-null table columns.")});
+                    change.setLocalValidity(false);
                     return false;
                 }
 
@@ -125,6 +126,7 @@ class DbService {
                     if (header.type == headerType::PRIMARY_KEY) {
                         if (cells.contains(header.name)) {
                             logger.pushLog(Log{std::format("ERROR: Change is not allowed to provide the primary key.")});
+                            change.setLocalValidity(false);
                             return false;
                         }
                         continue;
@@ -134,6 +136,7 @@ class DbService {
                             if (change.getType() == changeType::INSERT_ROW) {
                                 if (!allowInvalidChange) {
                                     logger.pushLog(Log{std::format("ERROR: Header {} is not nullable and no value was provided.", header.name)});
+                                    change.setLocalValidity(false);
                                     return false;
                                 }
                                 setValidity = false;
@@ -200,5 +203,13 @@ class DbService {
         imTable tableData{tableName, 0};
         if (it != dbData->tables.end()) { tableData.id = static_cast<uint16_t>(std::distance(dbData->tables.begin(), it)); }
         return tableData;
+    }
+
+    std::string getTableUKey(const std::string& table) { return dbData->headers.at(table).uKeyName; }
+
+    tHeaderInfo getTableHeaderInfo(const std::string& table, const std::string& header) {
+        const tHeaderVector& headers = dbData->headers.at(table).data;
+        auto it = std::find_if(headers.begin(), headers.end(), [&](const tHeaderInfo& h) { return h.name == header; });
+        return *it;
     }
 };
