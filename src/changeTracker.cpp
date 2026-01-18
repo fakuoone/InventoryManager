@@ -160,6 +160,7 @@ void ChangeTracker::releaseDependancy(Change& change, const Change& rC) {
         }
     }
 }
+
 void ChangeTracker::allocateIds(std::vector<Change>& allChanges) {
     for (Change& c : allChanges) {
         if (!c.hasRowId()) { c.setRowId(++changes.maxPKeys[c.getTable()]); }

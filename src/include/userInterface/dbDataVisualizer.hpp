@@ -347,43 +347,56 @@ class DbVisualizer {
 
     void drawTableChangeOverview(const std::string& table) {
         if (!uiChanges->idMappedChanges.contains(table)) { return; }
+
         ImGui::Text("CHANGE OVERVIEW");
         ImGui::BeginChild("TableChangeOverview", ImVec2{0, ImGui::GetContentRegionAvail().y}, false);
         ImGui::PushID("tableChangeOverview");
         ImGui::PushID(table.c_str());
+
         for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
             const Change& change = uiChanges->changes.at(hash);
-            std::size_t id = change.getRowId();
-            std::string type;
-            switch (change.getType()) {
-                case changeType::DELETE_ROW:
-                    type = "DELETE";
-                    break;
-                case changeType::INSERT_ROW:
-                    type = "INSERT";
-                    break;
-                case changeType::UPDATE_CELLS:
-                    type = "UPDATE";
-                    break;
-                default:
-                    type = "UNKNOWN";
-                    break;
+            const std::size_t id = change.getRowId();
+
+            const char* type = "UNKNOWN";
+            if (change.getType() == changeType::DELETE_ROW) {
+                type = "DELETE";
+            } else if (change.getType() == changeType::INSERT_ROW) {
+                type = "INSERT";
+            } else if (change.getType() == changeType::UPDATE_CELLS) {
+                type = "UPDATE";
             }
-            // visualize change
+
+            const bool selected = changeTracker.isChangeSelected(hash);
+            const ImU32 bgCol = change.isValid() ? IM_COL32(0, 255, 0, 60) : IM_COL32(255, 0, 0, 60);
+
             ImGui::PushID(static_cast<int>(id));
-            ImGui::TextUnformatted(std::format("{}: ", type).c_str());
-            ImGui::SameLine();
-            ImGui::TextUnformatted(std::format("ID: {}", id).c_str());
-            ImGui::SameLine();
 
-            // select change
-            bool selected = changeTracker.isChangeSelected(hash);
+            const float rowHeight = ImGui::GetFrameHeight();
+            const float rowWidth = ImGui::GetContentRegionAvail().x;
 
-            if (ImGui::Checkbox("TEST", &selected)) { changeTracker.toggleChangeSelect(hash); }
-            ImGui::BeginDisabled(change.hasParent());
-            ImGui::EndDisabled();
+            ImGui::Selectable("##row", selected, ImGuiSelectableFlags_SpanAllColumns, ImVec2(rowWidth, rowHeight));
+
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            ImVec2 min = ImGui::GetItemRectMin();
+            ImVec2 max = ImGui::GetItemRectMax();
+
+            dl->AddRectFilled(min, max, bgCol);
+
+            if (ImGui::IsItemClicked()) {
+                selectedTable = table;
+                changeTracker.toggleChangeSelect(hash);
+            }
+
+            ImGui::SetCursorScreenPos(min);
+            ImGui::AlignTextToFramePadding();
+
+            ImGui::TextUnformatted(type);
+            ImGui::SameLine();
+            ImGui::Text("ID: %zu", id);
+
             ImGui::PopID();
         }
+
         ImGui::PopID();
         ImGui::PopID();
         ImGui::EndChild();
