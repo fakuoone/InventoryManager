@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <concepts>
 #include <condition_variable>
 #include <iostream>
 #include <map>
@@ -13,9 +12,6 @@
 #include "change.hpp"
 #include "logger.hpp"
 #include "timing.hpp"
-
-template <typename T>
-concept C = std::same_as<T, const Change&> || std::same_as<T, const Change::chHashM&>;
 
 template <typename T>
 struct protectedData {

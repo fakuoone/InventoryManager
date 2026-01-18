@@ -101,6 +101,7 @@ class DbService {
     }
 
     bool validateChange(Change& change, bool fromGeneration) {
+        // TODO: test with stock
         const tStringVector& tables = dbData->tables;
         if (std::find(tables.begin(), tables.end(), change.getTable()) == tables.end()) { return false; }
         bool setValidity = true;

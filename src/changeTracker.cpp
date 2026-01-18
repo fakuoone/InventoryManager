@@ -31,7 +31,6 @@ const Change ChangeTracker::getChange(const std::size_t key) {
 }
 
 bool ChangeTracker::isConflicting(const Change& newChange) {
-    // This function assumes, that the changes are already in pKeyMappedData and flatData. Is this true?
     if (!newChange.hasRowId() || newChange.getType() == changeType::INSERT_ROW) { return false; }
     const std::string& table = newChange.getTable();
     const uint32_t rowId = newChange.getRowId();
@@ -41,8 +40,7 @@ bool ChangeTracker::isConflicting(const Change& newChange) {
 }
 
 Change& ChangeTracker::manageConflictL(Change& newChange) {
-    // TODO: fix after switching to unique keys
-    // This function assumes, that the changes are already in pKeyMappedData and flatData. Is this true?
+    // TODO: only allow changes with the same UKEY, if it is updatecells (dont allow insertrow, if its the same content)
     if (!isConflicting(newChange)) { return newChange; }
     const std::string& table = newChange.getTable();
     const uint32_t rowId = newChange.getRowId();
@@ -62,6 +60,7 @@ Change& ChangeTracker::manageConflictL(Change& newChange) {
 }
 
 void ChangeTracker::propagateValidity(Change& change) {
+    // TODO: Doesnt really work, intense testing necessary
     if (change.hasChildren()) {
         bool childSum = true;
         for (const std::size_t& childKey : change.getChildren()) {

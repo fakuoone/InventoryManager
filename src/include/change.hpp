@@ -10,6 +10,7 @@
 #include <atomic>
 
 #include <optional>
+#include <cstdint>
 
 enum class changeType : uint8_t { NONE, INSERT_ROW, UPDATE_CELLS, DELETE_ROW };
 
@@ -155,4 +156,18 @@ class Change {
     bool hasChildren() const { return childrenKeys.size() != 0; }
 
     const std::vector<std::size_t>& getChildren() const { return childrenKeys; }
+
+    std::string getCellSummary(const uint8_t len) const {
+        std::string summary;
+        std::string concat = selected ? "\n" : ",";
+        for (const auto& [col, val] : changedCells) {
+            if (!summary.empty()) { summary += concat; }
+            summary += std::format("{}={}", col, val);
+            if (summary.size() >= len && !selected) {
+                summary.resize(len - 3);
+                summary += "...";
+            }
+        }
+        return summary;
+    }
 };
