@@ -7,3 +7,4 @@
 /keylog
 .vscode
 *.json
+*.ini
