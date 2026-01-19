@@ -171,7 +171,7 @@ class DbService {
             // find foreign key thats required
             auto it1 = std::ranges::find_if(headers.data, [&](const tHeaderInfo& h) { return h.name == col && h.type == headerType::FOREIGN_KEY; });
             if (it1 != headers.data.end()) {  // && it1->referencedTable != table) {
-                if (!checkReferencedPKeyValue(it1->referencedTable, it1->nullable, val)) {
+                if (!checkReferencedUKeyValue(it1->referencedTable, it1->nullable, val)) {
                     Change::colValMap requiredCells;
                     requiredCells.emplace(dbData->headers.at(it1->referencedTable).uKeyName, val);
                     Change reqChange{requiredCells, changeType::INSERT_ROW, getTable(it1->referencedTable)};
@@ -183,12 +183,12 @@ class DbService {
         return changes;
     }
 
-    bool checkReferencedPKeyValue(const std::string& ref, bool nullable, const std::string& val) {
-        // does pkey-value already exist
+    bool checkReferencedUKeyValue(const std::string& ref, bool nullable, const std::string& val) {
+        // does ukey-value already exist
         if (val.empty() && nullable) { return true; }
-        std::string pKey = dbData->headers.at(ref).pkey;
-        auto it1 = std::ranges::find_if(dbData->tableRows.at(ref).at(pKey), [&](const std::string& h) { return h == val; });
-        if (it1 != dbData->tableRows.at(ref).at(pKey).end()) { return true; }
+        std::string uKey = dbData->headers.at(ref).uKeyName;
+        auto it1 = std::ranges::find_if(dbData->tableRows.at(ref).at(uKey), [&](const std::string& h) { return h == val; });
+        if (it1 != dbData->tableRows.at(ref).at(uKey).end()) { return true; }
         return false;
     }
 

@@ -11,6 +11,8 @@
 #include "changeTracker.hpp"
 #include "changeExeService.hpp"
 
+#include "userInterface/widgets.hpp"
+
 #include "logger.hpp"
 
 constexpr const std::size_t INVALID_ID = std::numeric_limits<std::size_t>::max();
@@ -38,6 +40,7 @@ class DbVisualizer {
     std::shared_ptr<uiChangeInfo> uiChanges;
     editingData edit;
     std::string selectedTable;
+    std::unordered_set<std::size_t> changeHighlight;
 
     void drawInsertionChanges(const std::string& table) {
         if (!uiChanges->idMappedChanges.contains(table) || !dbData->headers.contains(table)) { return; }
@@ -207,6 +210,7 @@ class DbVisualizer {
         if (!change) { return; }
         bool valid = change->isValid();
         ImU32 col = valid ? IM_COL32(0, 255, 0, 60) : IM_COL32(255, 0, 0, 60);
+        if (changeHighlight.contains(change->getKey())) { col = IM_COL32(217, 159, 0, 255); }
         ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, col);
     }
 
@@ -299,7 +303,7 @@ class DbVisualizer {
         if (ImGui::BeginTabBar("MainTabs")) {
             for (const auto& [table, data] : dbData->headers) {
                 ImGuiTabItemFlags flags = 0;
-                if (selectedTable == table) flags |= ImGuiTabItemFlags_SetSelected;
+                if (selectedTable == table) { flags |= ImGuiTabItemFlags_SetSelected; }
                 if (ImGui::BeginTabItem(table.c_str(), nullptr, flags)) {
                     ImGui::BeginDisabled(!dataFresh);
                     if (selectedTable == table) { selectedTable.clear(); }
@@ -334,6 +338,7 @@ class DbVisualizer {
     }
 
     void drawChangeOverview(bool dataFresh) {
+        ImGui::Text("CHANGE OVERVIEW");
         ImGui::BeginDisabled(!dataFresh);
         for (const auto& [table, _] : uiChanges->idMappedChanges) {
             ImGui::Separator();
@@ -346,121 +351,14 @@ class DbVisualizer {
     void drawTableChangeOverview(const std::string& table) {
         if (!uiChanges->idMappedChanges.contains(table)) { return; }
 
-        ImGui::Text("CHANGE OVERVIEW");
         ImGui::PushID(table.c_str());
 
-        if (ImGui::BeginTable("ChangeOverviewTable", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp)) {
-            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 24.0f);
-            ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, 40.0f);
-            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 50.0f);
-            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 50.0f);
-
-            ImVec2 pendingRowMin{};
-            bool hasPendingRow = false;
-            ImU32 pendingBorderColor = 0;
-            bool pendingDrawBorder = false;
-
-            for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
-                const Change& change = uiChanges->changes.at(hash);
-                const uint32_t id = change.getRowId();
-                const bool selected = changeTracker.isChangeSelected(hash);
-                const std::size_t uid = change.getKey();
-
-                const char* type = "UNKNOWN";
-                if (change.getType() == changeType::DELETE_ROW) {
-                    type = "DELETE";
-                } else if (change.getType() == changeType::INSERT_ROW) {
-                    type = "INSERT";
-                } else if (change.getType() == changeType::UPDATE_CELLS) {
-                    type = "UPDATE";
-                }
-
-                ImGui::PushID(static_cast<int>(change.getRowId()));
-                ImGui::TableNextRow();
-                if (hasPendingRow && pendingDrawBorder) {
-                    ImVec2 rowMax = ImGui::GetCursorScreenPos();
-                    rowMax.x = ImGui::GetWindowContentRegionMax().x + ImGui::GetWindowPos().x;
-
-                    ImDrawList* dl = ImGui::GetWindowDrawList();
-                    dl->AddRect(pendingRowMin, rowMax, pendingBorderColor, 0.0f, 0, 1.5f);
-                }
-
-                ImVec2 rowMin = ImGui::GetCursorScreenPos();
-
-                // selector
-                ImGui::TableSetColumnIndex(0);
-                bool clicked = drawSelectableCircle(selected, !change.hasParent());
-
-                // uid
-                ImGui::TableSetColumnIndex(1);
-                ImGui::Text("%zu", uid);
-
-                // Type
-                ImGui::TableSetColumnIndex(2);
-                ImGui::TextUnformatted(std::format("{}", type).c_str());
-
-                // Summary
-                ImGui::TableSetColumnIndex(3);
-                ImGui::PushTextWrapPos(0.0f);
-                const std::string summary = change.getCellSummary(60);
-                ImGui::TextUnformatted(summary.c_str());
-                ImGui::PopTextWrapPos();
-
-                // row-id
-                ImGui::TableSetColumnIndex(4);
-                ImGui::Text("%u", id);
-
-                if (clicked) { changeTracker.toggleChangeSelect(hash); }
-
-                ImU32 col = change.isValid() ? IM_COL32(0, 255, 0, 60) : IM_COL32(255, 0, 0, 60);
-                ImU32 borderCol = change.isValid() ? IM_COL32(80, 200, 120, 255) : IM_COL32(220, 80, 80, 255);
-                ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, col);
-
-                ImGui::PopID();
-
-                pendingRowMin = rowMin;
-                pendingBorderColor = borderCol;
-                pendingDrawBorder = selected;
-                hasPendingRow = true;
-            }
-
-            if (hasPendingRow && pendingDrawBorder) {
-                ImVec2 rowMax = ImGui::GetCursorScreenPos();
-                rowMax.x = ImGui::GetWindowContentRegionMax().x + ImGui::GetWindowPos().x;
-
-                ImDrawList* dl = ImGui::GetWindowDrawList();
-                dl->AddRect(pendingRowMin, rowMax, pendingBorderColor, 0.0f, 0, 1.5f);
-            }
-
-            ImGui::EndTable();
+        for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
+            const Change& change = uiChanges->changes.at(hash);
+            Widgets::drawSingleChangeOverview(change, changeTracker, uiChanges, selectedTable, changeHighlight);
         }
-        ImGui::PopID();
-    }
-
-    bool drawSelectableCircle(bool selected, bool enabled) {
-        const float radius = 6.0f;
-        ImGui::PushID(&selected);
-
-        if (!enabled) { ImGui::BeginDisabled(); }
-
-        ImVec2 pos = ImGui::GetCursorScreenPos();
-        ImVec2 center(pos.x + radius, pos.y + radius);
-        ImGui::InvisibleButton("##circle", ImVec2(radius * 2.0f, radius * 2.0f));
-
-        bool clicked = ImGui::IsItemClicked();
-
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        ImU32 borderCol = IM_COL32(160, 160, 160, 255);
-        ImU32 fillCol = IM_COL32(80, 200, 120, 255);
-
-        dl->AddCircle(center, radius, borderCol, 16, 1.5f);
-        if (selected) { dl->AddCircleFilled(center, radius - 2.0f, fillCol, 16); }
-
-        if (!enabled) { ImGui::EndDisabled(); }
 
         ImGui::PopID();
-        return clicked;
     }
 
    public:
@@ -470,7 +368,9 @@ class DbVisualizer {
 
     void run(bool dataFresh) {
         if (ImGui::BeginTabBar("Main")) {
-            if (ImGui::BeginTabItem("Tables")) {
+            ImGuiTabItemFlags flags = 0;
+            if (!selectedTable.empty()) { flags |= ImGuiTabItemFlags_SetSelected; };
+            if (ImGui::BeginTabItem("Tables", nullptr, flags)) {
                 createTableSplitters(dataFresh);
                 ImGui::EndTabItem();
             }

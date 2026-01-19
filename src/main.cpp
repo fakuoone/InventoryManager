@@ -6,6 +6,7 @@
 #include "threadPool.hpp"
 #include "timing.hpp"
 #include "userInterface/app.hpp"
+#include "bom/bomReader.hpp"
 
 int main() {
     Logger logger;
@@ -14,10 +15,13 @@ int main() {
 
     ThreadPool pool{5, logger};
 
-    DbInterface dbStorage{logger};
-    DbService dbService{dbStorage, pool, config, logger};
+    DbInterface dbInterface{logger};
+    DbService dbService{dbInterface, pool, config, logger};
 
     ChangeTracker changeTracker{dbService, logger};
+
+    BomReader bomReader{pool, changeTracker, config, logger};
+
     App app{dbService, changeTracker, config, logger};
 
     app.run();

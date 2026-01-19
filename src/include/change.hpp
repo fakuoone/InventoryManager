@@ -31,10 +31,13 @@ class Change {
     */
    public:
     using colValMap = std::map<std::string, std::string>;
-    using chHHMap = std::map<std::size_t, std::size_t>;
+    template <class T>
+    using chSimpleMap = std::map<T, std::size_t>;
+    using chHHMap = chSimpleMap<std::size_t>;
     using chHashV = std::vector<std::size_t>;
     using chHashM = std::map<std::size_t, Change>;
     using ctPKMD = std::map<std::string, chHHMap>;
+    using ctUKMD = std::map<std::string, chSimpleMap<std::string>>;
 
    private:
     static inline std::atomic<std::size_t> nextId{1};
@@ -118,7 +121,10 @@ class Change {
         return sqlString;
     }
 
-    void toggleSelect() { selected = !selected; }
+    void toggleSelect() {
+        // TODO: propagate select to children
+        selected = !selected;
+    }
 
     bool isSelected() const { return selected; }
 

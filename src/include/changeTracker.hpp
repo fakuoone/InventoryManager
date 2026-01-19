@@ -15,7 +15,8 @@ struct protectedChanges {
     std::mutex mtx;
     Change::chHashM flatData;
     Change::chHashV orderedTree;
-    Change::ctPKMD pKeyMappedData;
+    Change::ctPKMD pKeyMappedData;  // table -> primaryKey -> changeKey
+    Change::ctUKMD uKeyMappedData;  // table -> uKey value -> changeKey
     std::map<std::string, std::size_t> maxPKeys;
 };
 
@@ -41,8 +42,8 @@ class ChangeTracker {
     bool isConflicting(const Change& newChange);
     Change& manageConflictL(Change& newChange);
     void collectRequiredChanges(Change& change, std::vector<Change>& out);
-    bool findRequiredAlreadyExists(const Change& change);
-    void releaseDependancy(Change& change, const Change& rC);
+    std::size_t findExistingRequired(const Change& change);
+    bool releaseDependancy(Change& change, const Change& rC);
     void releaseAllDependancies(Change& change);
     void allocateIds(std::vector<Change>& changes);
     bool addChangeInternalL(const Change& change);
