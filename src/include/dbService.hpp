@@ -175,7 +175,7 @@ class DbService {
                     Change::colValMap requiredCells;
                     requiredCells.emplace(dbData->headers.at(it1->referencedTable).uKeyName, val);
                     Change reqChange{requiredCells, changeType::INSERT_ROW, getTable(it1->referencedTable)};
-                    reqChange.setParent(change.getKey());
+                    reqChange.addParent(change.getKey());
                     changes.emplace_back(reqChange);
                 }
             }

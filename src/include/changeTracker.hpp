@@ -47,7 +47,7 @@ class ChangeTracker {
     void releaseAllDependancies(Change& change);
     void allocateIds(std::vector<Change>& changes);
     bool addChangeInternalL(const Change& change);
-    void collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected) const;
+    void collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected);
     void removeChangeL(std::size_t key);
 
    public:
@@ -65,6 +65,7 @@ class ChangeTracker {
     std::size_t getMaxPKey(const std::string table);
     bool isChangeSelected(const std::size_t hash);
     void toggleChangeSelect(const std::size_t hash);
+    void setChangeRecL(Change& change, bool value);
     bool hasChild(const std::size_t hash);
     std::vector<std::size_t> getChildren(const std::size_t key);
 };

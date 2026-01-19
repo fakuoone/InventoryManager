@@ -70,7 +70,9 @@ void ChangeTracker::propagateValidity(Change& change) {
         change.setValidity(childSum);
     }
     if (change.hasParent()) {
-        if (changes.flatData.contains(change.getParent())) { propagateValidity(changes.flatData.at(change.getParent())); }
+        for (const std::size_t& parentKey : change.getParents()) {
+            if (changes.flatData.contains(parentKey)) { propagateValidity(changes.flatData.at(parentKey)); }
+        }
     }
 }
 
@@ -118,14 +120,12 @@ void ChangeTracker::collectRequiredChanges(Change& change, std::vector<Change>& 
     if (required.size() == 0) { releaseAllDependancies(change); }
     for (Change& r : required) {
         if (!dbService.validateChange(r, true)) { return; }
-        // TODO: Wenn der erforderliche change bereits existiert, dann muss das vorherige Child entfernt werden und das neue verknüpft
-        // Wenn ich die Zeile aber 2x nach unten schiebe, explodiert irgendwas
         std::size_t existingRequiredKey = findExistingRequired(r);
         bool released = releaseDependancy(change, r);
         if (existingRequiredKey != 0) {
             Change& existingChange = changes.flatData.at(existingRequiredKey);
             if (released) {
-                existingChange.setParent(change.getKey());
+                existingChange.addParent(change.getKey());
                 change.pushChild(existingChange);  // has to be set here, instead of getRequiredChanges, because this will not get added to flatData
             }
         } else {
@@ -150,7 +150,7 @@ void ChangeTracker::releaseAllDependancies(Change& change) {
     for (const std::size_t& childKey : change.getChildren()) {
         Change& child = changes.flatData.at(childKey);
         change.removeChild(childKey);
-        child.resetParent();
+        child.removeParent(change.getKey());
     }
 }
 
@@ -182,7 +182,7 @@ bool ChangeTracker::releaseDependancy(Change& change, const Change& rC) {
         hadRelevantChildren = true;
         if (child.getCell(rCUKeyHeader) != newRValue) {  // previous requiredChange found
             change.removeChild(childKey);
-            child.resetParent();
+            child.removeParent(change.getKey());
             return true;
         };
     }
@@ -206,12 +206,14 @@ bool ChangeTracker::addChangeInternalL(const Change& change) {
     return true;
 }
 
-void ChangeTracker::collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected) const {
-    if (collected.contains(key)) return;
-    collected.insert(key);
+void ChangeTracker::collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected) {
+    if (collected.contains(key)) { return; }
     const Change& change = changes.flatData.at(key);
+    if (change.getParentCount() > 1) { return; }  // dont delete, when multiple parents exist
+    collected.insert(key);
     for (std::size_t childKey : change.getChildren()) {
         collectAllDescendants(childKey, collected);
+        changes.flatData.at(childKey).removeParent(key);
     }
 }
 
@@ -279,24 +281,26 @@ std::size_t ChangeTracker::getMaxPKey(const std::string table) {
 }
 
 bool ChangeTracker::isChangeSelected(const std::size_t key) {
-    // TODO: change to change.isSelected() once change forwards selection to children
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    auto it = changes.flatData.find(key);
-    if (it == changes.flatData.end()) { return false; }
-
-    const Change* change = &it->second;
-    while (change->hasParent()) {
-        change = &changes.flatData.at(change->getParent());
-    }
-
-    return change->isSelected();
+    if (!changes.flatData.contains(key)) { return false; }
+    return changes.flatData.at(key).isSelected();
 }
 
 void ChangeTracker::toggleChangeSelect(const std::size_t key) {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
     if (!changes.flatData.contains(key)) { return; }
     if (changes.flatData.at(key).hasParent()) { return; }
-    return changes.flatData.at(key).toggleSelect();
+    setChangeRecL(changes.flatData.at(key), !changes.flatData.at(key).isSelected());
+    return;
+}
+
+void ChangeTracker::setChangeRecL(Change& change, bool value) {
+    if (change.getParents().size() > 1) { return; }
+    change.setSelected(value);
+    for (const std::size_t& childKey : change.getChildren()) {
+        Change& childChange = changes.flatData.at(childKey);
+        setChangeRecL(childChange, value);
+    }
 }
 
 bool ChangeTracker::hasChild(const std::size_t key) {

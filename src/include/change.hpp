@@ -41,15 +41,19 @@ class Change {
 
    private:
     static inline std::atomic<std::size_t> nextId{1};
+    inline static Logger* logger = nullptr;
+
     std::size_t changeKey;
 
     colValMap changedCells;
     changeType type{changeType::UPDATE_CELLS};
+
     imTable tableData;
-    inline static Logger* logger = nullptr;
     std::optional<uint32_t> rowId;
-    std::size_t parentKey{0};
+
+    std::vector<std::size_t> parentKeys;
     std::vector<std::size_t> childrenKeys;
+
     bool selected{false};
     bool locallyValid{false};
     bool valid{false};
@@ -121,22 +125,24 @@ class Change {
         return sqlString;
     }
 
-    void toggleSelect() {
-        // TODO: propagate select to children
-        selected = !selected;
-    }
+    void setSelected(bool value) { selected = value; }
 
     bool isSelected() const { return selected; }
 
-    void setParent(std::size_t parent) { parentKey = parent; }
+    void addParent(std::size_t parent) { parentKeys.push_back(parent); }
 
     void setRowId(uint32_t aRowId) { rowId = aRowId; }
 
-    bool hasParent() const { return parentKey != 0; }
+    bool hasParent() const { return parentKeys.size() != 0; }
 
-    std::size_t getParent() const { return parentKey; }
+    std::size_t getParentCount() const { return parentKeys.size(); }
 
-    void resetParent() { parentKey = 0; }
+    const std::vector<std::size_t>& getParents() const { return parentKeys; }
+
+    void removeParent(const std::size_t key) {
+        auto it = std::find(parentKeys.begin(), parentKeys.end(), key);
+        if (it != parentKeys.end()) { parentKeys.erase(it); }
+    }
 
     void setLocalValidity(bool validity) {
         locallyValid = validity;

@@ -88,7 +88,6 @@ class DbVisualizer {
     }
 
     void drawUserInputRowFields(const std::string& tableName) {
-        // TODO: Evtl in createRows in den loop integrieren?
         if (!dbData->headers.contains(tableName)) { return; }
         ImGui::PushID(1);
         Change::colValMap newChangeColVal{};
@@ -99,7 +98,6 @@ class DbVisualizer {
             ImGui::TableNextColumn();
             if (!(header.type == headerType::PRIMARY_KEY)) {
                 ImGui::PushID(header.name.c_str());
-                //std::snprintf(edit.buffer, BUFFER_SIZE, "%s", newCellValue.c_str());
                 ImGui::InputText("##edit", edit.insertBuffer.at(i).data(), BUFFER_SIZE);
                 std::string newValue = newChangeColVal[header.name] = std::string(edit.insertBuffer.at(i).data());
                 ImGui::PopID();
