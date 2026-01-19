@@ -175,6 +175,8 @@ void drawSingleChangeOverview(const Change& change, ChangeTracker& changeTracker
     ImGui::PopID();
 
     // padding
+    ImVec2 end = ImGui::GetCursorScreenPos();
+    ImGui::SetCursorScreenPos({end.x, max.y});
     ImGui::Dummy(ImVec2(0.0f, VPADDING));
 }
 
