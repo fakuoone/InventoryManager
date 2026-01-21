@@ -41,7 +41,7 @@ class ChangeTracker {
     void waitIfFrozen();
     bool isConflicting(const Change& newChange);
     Change& manageConflictL(Change& newChange);
-    void collectRequiredChanges(Change& change, std::vector<Change>& out);
+    void collectRequiredChangesL(Change& change, std::vector<Change>& out);
     std::size_t findExistingRequired(const Change& change);
     bool releaseDependancy(Change& change, const Change& rC);
     void releaseAllDependancies(Change& change);
@@ -68,4 +68,5 @@ class ChangeTracker {
     void setChangeRecL(Change& change, bool value);
     bool hasChild(const std::size_t hash);
     std::vector<std::size_t> getChildren(const std::size_t key);
+    std::vector<std::size_t> getRoots();
 };

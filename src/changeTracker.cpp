@@ -101,7 +101,7 @@ bool ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRow
     {
         std::lock_guard<std::mutex> lg(changes.mtx);
         change = manageConflictL(change);
-        collectRequiredChanges(change, allChanges);
+        collectRequiredChangesL(change, allChanges);
     }
     allocateIds(allChanges);
 
@@ -115,7 +115,7 @@ bool ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRow
     return true;
 }
 
-void ChangeTracker::collectRequiredChanges(Change& change, std::vector<Change>& out) {
+void ChangeTracker::collectRequiredChangesL(Change& change, std::vector<Change>& out) {
     std::vector<Change> required = dbService.getRequiredChanges(change, changes.maxPKeys);
     if (required.size() == 0) { releaseAllDependancies(change); }
     for (Change& r : required) {
@@ -126,13 +126,14 @@ void ChangeTracker::collectRequiredChanges(Change& change, std::vector<Change>& 
             Change& existingChange = changes.flatData.at(existingRequiredKey);
             if (released) {
                 existingChange.addParent(change.getKey());
+                existingChange.setSelected(change.isSelected());
                 change.pushChild(existingChange);  // has to be set here, instead of getRequiredChanges, because this will not get added to flatData
             }
         } else {
             change.pushChild(r);
         }
         if (existingRequiredKey != 0) { continue; }
-        collectRequiredChanges(r, out);
+        collectRequiredChangesL(r, out);
     }
     out.push_back(change);
 }
@@ -295,7 +296,7 @@ void ChangeTracker::toggleChangeSelect(const std::size_t key) {
 }
 
 void ChangeTracker::setChangeRecL(Change& change, bool value) {
-    if (change.getParents().size() > 1) { return; }
+    // if (change.getParents().size() > 1) { return; }
     change.setSelected(value);
     for (const std::size_t& childKey : change.getChildren()) {
         Change& childChange = changes.flatData.at(childKey);
@@ -315,4 +316,17 @@ std::vector<std::size_t> ChangeTracker::getChildren(const std::size_t key) {
         return changes.flatData.at(key).getChildren();
     }
     return std::vector<std::size_t>{};
+}
+
+std::vector<std::size_t> ChangeTracker::getRoots() {
+    std::lock_guard<std::mutex> lgChanges(changes.mtx);
+    std::vector<std::size_t> all;
+    std::size_t count = changes.flatData.size();
+    all.reserve(count);
+
+    for (auto it = changes.flatData.begin(); it != changes.flatData.end(); ++it) {
+        if (!it->second.hasParent()) { all.push_back(it->first); }
+    }
+
+    return all;
 }

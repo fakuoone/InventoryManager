@@ -42,9 +42,13 @@ class DbVisualizer {
     std::string selectedTable;
     std::unordered_set<std::size_t> changeHighlight;
 
+    Widgets::ChangeOverviewer changeOverviewer{changeTracker, changeExe, uiChanges, 60, changeHighlight, selectedTable};
+
     void drawInsertionChanges(const std::string& table) {
         if (!uiChanges->idMappedChanges.contains(table) || !dbData->headers.contains(table)) { return; }
         ImGui::TableNextRow();
+        ImVec2 rowMin = ImGui::GetCursorScreenPos();
+
         for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
             const Change& change = uiChanges->changes.at(hash);
             if (change.getType() == changeType::INSERT_ROW) {
@@ -58,8 +62,9 @@ class DbVisualizer {
                         displayString = cellChanges.contains(header.name) ? (cellChanges.at(header.name)) : "";
                     }
                     drawEditableData(table, displayString, header, &change, change.getRowId());
-                    drawRowHighlights(&change);
                 }
+                drawRowHighlights(&change, rowMin);
+
                 ImGui::TableNextColumn();
                 ImGui::PushID(static_cast<int>(change.getRowId()));
 
@@ -204,12 +209,22 @@ class DbVisualizer {
         }
     }
 
-    void drawRowHighlights(const Change* change) {
+    void drawRowHighlights(const Change* change, ImVec2& rowMin) {
         if (!change) { return; }
         bool valid = change->isValid();
         ImU32 col = valid ? IM_COL32(0, 255, 0, 60) : IM_COL32(255, 0, 0, 60);
         if (changeHighlight.contains(change->getKey())) { col = IM_COL32(217, 159, 0, 255); }
         ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, col);
+        // Border
+        if (change->isSelected()) {
+            ImVec2 rowMax = ImGui::GetCursorScreenPos();
+
+            // Full table width
+            float tableMinX = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMin().x;
+            float tableMaxX = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+
+            ImGui::GetWindowDrawList()->AddRect(ImVec2(tableMinX, rowMin.y), ImVec2(tableMaxX, rowMax.y), change->isValid() ? Widgets::colValid.second : Widgets::colInvalid.second, 0.0f, 0, 2.0f);
+        }
     }
 
     void createRows(const std::string& table) {
@@ -236,6 +251,7 @@ class DbVisualizer {
             if (indexes.pKeyId > maxId) { maxId = indexes.pKeyId; }
             auto rowChange = getChangeOfRow(table, indexes.pKeyId);
             ImGui::TableNextRow();
+            ImVec2 rowMin = ImGui::GetCursorScreenPos();
             ImGui::PushID(static_cast<int>(indexes.pKeyId));
             for (const auto& header : dbData->headers.at(table).data) {
                 ImGui::TableNextColumn();
@@ -252,7 +268,7 @@ class DbVisualizer {
                 drawCellWithChange(rowChange, cell, table, header, indexes.pKeyId);
                 maxNotReached = true;
             }
-            if (rowChange.has_value()) { drawRowHighlights(*rowChange); }
+            if (rowChange.has_value()) { drawRowHighlights(*rowChange, rowMin); }
 
             // Exit if all data has been printed
             if (!maxNotReached) {
@@ -338,6 +354,7 @@ class DbVisualizer {
     void drawChangeOverview(bool dataFresh) {
         ImGui::Text("CHANGE OVERVIEW");
         ImGui::BeginDisabled(!dataFresh);
+        if (ImGui::Button("Execute all")) { changeExe.requestChangeApplication(sqlAction::EXECUTE); }
         for (const auto& [table, _] : uiChanges->idMappedChanges) {
             ImGui::Separator();
             ImGui::TextUnformatted(table.c_str());
@@ -353,7 +370,7 @@ class DbVisualizer {
 
         for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
             const Change& change = uiChanges->changes.at(hash);
-            Widgets::drawSingleChangeOverview(change, changeTracker, uiChanges, selectedTable, changeHighlight);
+            changeOverviewer.drawSingleChangeOverview(change);
         }
 
         ImGui::PopID();

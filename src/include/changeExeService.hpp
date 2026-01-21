@@ -27,7 +27,7 @@ class ChangeExeService {
         order.push_back(changeTracker.getChange(key));
     }
 
-    std::vector<Change> collectAll(const std::vector<std::size_t>& roots) {
+    std::vector<Change> collectDescendants(const std::vector<std::size_t>& roots) {
         std::unordered_set<std::size_t> visited;
         std::vector<Change> order;
 
@@ -54,13 +54,23 @@ class ChangeExeService {
     }
 
     void requestChangeApplication(std::size_t changeKey, sqlAction action) {
+        // reqests executiion for 1 changeKey (and its descendants)
         std::vector<std::size_t> keys = {changeKey};
         requestChangeApplication(keys, action);
     }
 
     void requestChangeApplication(const std::vector<std::size_t> changeKeys, sqlAction action) {
+        // requests execution for vector of changeKey
         changeTracker.freeze();
-        std::vector<Change> allChanges = collectAll(changeKeys);
+        std::vector<Change> allChanges = collectDescendants(changeKeys);
+        fApplyChanges = dbService.requestChangeApplication(allChanges, action);
+        changeTracker.unfreeze();
+    }
+
+    void requestChangeApplication(sqlAction action) {
+        // request execution for all changes
+        changeTracker.freeze();
+        std::vector<Change> allChanges = collectDescendants(changeTracker.getRoots());
         fApplyChanges = dbService.requestChangeApplication(allChanges, action);
         changeTracker.unfreeze();
     }
