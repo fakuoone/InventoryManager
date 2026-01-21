@@ -73,7 +73,6 @@ target_link_libraries(imgui PUBLIC
 )
 
 
-
 # --- Includes ---
 target_include_directories(InventoryManager PRIVATE
     ${PROJECT_SOURCE_DIR}/src/include
@@ -83,6 +82,8 @@ target_include_directories(InventoryManager PRIVATE
 find_package(libpqxx CONFIG REQUIRED)
 find_package(PostgreSQL REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
+
+target_precompile_headers(InventoryManager PRIVATE ${PROJECT_SOURCE_DIR}/src/include/pch.hpp)
 
 target_link_libraries(InventoryManager PRIVATE
     libpqxx::pqxx

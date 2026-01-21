@@ -1,15 +1,12 @@
 #pragma once
 
+#include "pch.hpp"
+
 #include "logger.hpp"
 
-#include <map>
 #include <mutex>
-#include <string>
-#include <map>
-#include <vector>
 #include <atomic>
 
-#include <optional>
 #include <cstdint>
 
 enum class changeType : uint8_t { NONE, INSERT_ROW, UPDATE_CELLS, DELETE_ROW };
@@ -110,11 +107,28 @@ class Change {
             case changeType::INSERT_ROW: {
                 std::string columnNames;
                 std::string cellValues;
+                bool first = true;
+                for (const auto& [col, val] : changedCells) {
+                    if (col.empty() || val.empty()) { continue; }
+                    if (!first) {
+                        columnNames += ", ";
+                        cellValues += ", ";
+                    }
+                    first = false;
+                    columnNames += col;
+                    cellValues += std::format("'{}'", val);
+                }
                 sqlString = std::format("INSERT INTO {} ({}) VALUES ({});", tableData.name, columnNames, cellValues);
                 break;
             }
             case changeType::UPDATE_CELLS: {
                 std::string columnValuePairs;
+                bool first = true;
+                for (const auto& [col, val] : changedCells) {
+                    if (!first) { columnValuePairs += ", "; }
+                    first = false;
+                    columnValuePairs += std::format("{} = '{}'", col, val);
+                }
                 sqlString = std::format("UPDATE {} SET {} WHERE id = {};", tableData.name, columnValuePairs, rowId.value());
                 break;
             }

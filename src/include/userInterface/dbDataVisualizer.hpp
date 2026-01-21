@@ -1,9 +1,5 @@
 #pragma once
 
-#include <unordered_set>
-#include <array>
-#include <limits>
-
 #include "imgui.h"
 
 #include "dbService.hpp"
@@ -14,6 +10,9 @@
 #include "userInterface/widgets.hpp"
 
 #include "logger.hpp"
+
+#include <array>
+#include <limits>
 
 constexpr const std::size_t INVALID_ID = std::numeric_limits<std::size_t>::max();
 constexpr const std::size_t BUFFER_SIZE = 256;

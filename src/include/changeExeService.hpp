@@ -1,7 +1,5 @@
 #pragma once
 
-#include <unordered_set>
-
 #include "change.hpp"
 #include "logger.hpp"
 #include "changeTracker.hpp"

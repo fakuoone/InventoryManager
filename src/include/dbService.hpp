@@ -1,13 +1,13 @@
 #pragma once
 
-#include <future>
-#include <expected>
-
 #include "change.hpp"
 #include "config.hpp"
 #include "dbInterface.hpp"
 #include "logger.hpp"
 #include "threadPool.hpp"
+
+#include <future>
+#include <expected>
 
 class DbService {
    private:

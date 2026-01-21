@@ -1,17 +1,15 @@
 #pragma once
 
-#include <algorithm>
-#include <condition_variable>
-#include <iostream>
-#include <map>
-#include <mutex>
-#include <string>
-
-#include <pqxx/pqxx>
-
 #include "change.hpp"
 #include "logger.hpp"
 #include "timing.hpp"
+
+#include <algorithm>
+#include <condition_variable>
+#include <iostream>
+#include <mutex>
+
+#include <pqxx/pqxx>
 
 template <typename T>
 struct protectedData {
