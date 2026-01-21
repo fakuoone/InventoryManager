@@ -359,8 +359,20 @@ class DbInterface {
     }
 
     bool applySingleChange(const Change& change, sqlAction action) {
-        logger.pushLog(Log{std::format("    Applying change {}", change.getKey())});
-        logger.pushLog(Log{std::format("        SQL-command: {}", change.toSQLaction(action))});
+        try {
+            logger.pushLog(Log{std::format("    Applying change {}", change.getKey())});
+            const std::string changeQuery = change.toSQLaction(action);
+            logger.pushLog(Log{changeQuery});
+
+            transactionData transaction = getTransaction();
+            pqxx::result r = transaction.tx.exec(changeQuery);
+            transaction.tx.commit();
+            logger.pushLog(Log{std::format("SUCCESS: Affected rows: {}", r.affected_rows())});
+
+        } catch (std::exception const& e) {
+            logger.pushLog(Log{std::format("ERROR: {}", e.what())});
+            return false;
+        }
         return true;
     }
 };
