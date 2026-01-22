@@ -18,7 +18,7 @@ class DbService {
 
     std::future<completeDbData> fCompleteDbData;
     std::shared_ptr<const completeDbData> dbData;
-    std::shared_ptr<completeDbData> pendingData;
+    std::unique_ptr<completeDbData> pendingData;
     std::future<std::map<std::string, std::size_t>> fMaxPKeys;
 
     std::atomic<bool> dataAvailable{false};
@@ -40,7 +40,7 @@ class DbService {
         if (!pendingData && fCompleteDbData.valid() && fCompleteDbData.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
             auto data = fCompleteDbData.get();
             if (!validateCompleteDbData(data)) { return false; }
-            pendingData = std::make_shared<completeDbData>(std::move(data));
+            pendingData = std::make_unique<completeDbData>(std::move(data));
             fMaxPKeys = pool.submit(&DbService::calcMaxPKeys, this, std::cref(*pendingData));
         }
 
@@ -57,8 +57,16 @@ class DbService {
     DbService(DbInterface& cDbData, ThreadPool& cPool, Config& cConfig, Logger& cLogger) : dbInterface(cDbData), pool(cPool), config(cConfig), logger(cLogger) {}
 
     void startUp() {
+        pendingData.reset();
+        dataAvailable.store(false, std::memory_order_release);
         pool.submit(&DbInterface::acquireTables, &dbInterface);
         pool.submit(&DbInterface::acquireTableContent, &dbInterface);
+        fCompleteDbData = pool.submit(&DbInterface::acquireAllTablesRows, &dbInterface);
+    }
+
+    void refetch() {
+        pendingData.reset();
+        dataAvailable.store(false, std::memory_order_release);
         fCompleteDbData = pool.submit(&DbInterface::acquireAllTablesRows, &dbInterface);
     }
 

@@ -321,7 +321,7 @@ class DbInterface {
         }
         {
             std::lock_guard<std::mutex> lgTableRows{tableRows.mtx};
-            tableRows.data.emplace(table, std::move(colCellMap));
+            tableRows.data.insert_or_assign(table, std::move(colCellMap));
             tableRows.ready = true;
         }
     }

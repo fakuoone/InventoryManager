@@ -68,11 +68,13 @@ class App {
     bool handleAppState() {
         switch (appState) {
             case AppState::INIT:
+                dataAvailable = false;
                 dbService.startUp();
                 appState = AppState::WAITING_FOR_DATA;
                 break;
             case AppState::DATA_OUTDATED: {
                 // TEST: request data anyways
+                dataAvailable = false;
                 uiChanges = std::make_shared<uiChangeInfo>(changeTracker.getSnapShot());
                 dbVisualizer.setChangeData(uiChanges);
                 dbVisualizer.run(false);
@@ -85,7 +87,7 @@ class App {
                 // Top-right corner of the content region
                 ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - buttonSize.x - padding.x, padding.y));
                 if (ImGui::Button("REFETCH")) {
-                    dbService.startUp();
+                    dbService.refetch();
                     appState = AppState::WAITING_FOR_DATA;
                 }
                 break;
