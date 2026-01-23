@@ -14,15 +14,6 @@
 #include <array>
 #include <limits>
 
-constexpr const std::size_t INVALID_ID = std::numeric_limits<std::size_t>::max();
-constexpr const std::size_t BUFFER_SIZE = 256;
-
-struct editingData {
-    std::unordered_set<std::size_t> whichIds;
-    std::vector<std::array<char, BUFFER_SIZE>> insertBuffer;
-    std::array<char, BUFFER_SIZE> editBuffer;
-};
-
 struct rowIds {
     std::size_t loopId;
     uint32_t pKeyId;
@@ -41,6 +32,7 @@ class DbVisualizer {
     std::string selectedTable;
     std::unordered_set<std::size_t> changeHighlight;
 
+    Widgets::DbTable dbTable{edit, selectedTable, changeHighlight, logger};  // TODO: Finish this
     Widgets::ChangeOverviewer changeOverviewer{changeTracker, changeExe, uiChanges, 60, changeHighlight, selectedTable};
 
     void drawInsertionChanges(const std::string& table) {
@@ -376,9 +368,15 @@ class DbVisualizer {
     }
 
    public:
-    void setData(std::shared_ptr<const completeDbData> newData) { dbData = newData; }
+    void setData(std::shared_ptr<const completeDbData> newData) {
+        dbData = newData;
+        dbTable.setData(newData);
+    }
 
-    void setChangeData(std::shared_ptr<uiChangeInfo> changeData) { uiChanges = changeData; }
+    void setChangeData(std::shared_ptr<uiChangeInfo> changeData) {
+        uiChanges = changeData;
+        dbTable.setChangeData(changeData);
+    }
 
     void run(bool dataFresh) {
         if (ImGui::BeginTabBar("Main")) {
@@ -390,6 +388,10 @@ class DbVisualizer {
             }
             if (ImGui::BeginTabItem("Changes")) {
                 drawChangeOverview(dataFresh);
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("table dev")) {
+                dbTable.drawTable(std::string("stock"));
                 ImGui::EndTabItem();
             }
         }

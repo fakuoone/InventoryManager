@@ -3,22 +3,171 @@
 #include "imgui.h"
 
 #include "change.hpp"
+#include "logger.hpp"
 
 #include <unordered_set>
+
+constexpr const std::size_t INVALID_ID = std::numeric_limits<std::size_t>::max();
+constexpr const std::size_t BUFFER_SIZE = 256;
+
+struct editingData {
+    std::unordered_set<std::size_t> whichIds;
+    std::vector<std::array<char, BUFFER_SIZE>> insertBuffer;
+    std::array<char, BUFFER_SIZE> editBuffer;
+};
 
 namespace Widgets {
 static inline float childSelectTimer = 0;
 
 static constexpr const std::pair<ImU32, ImU32> colValid = std::pair<ImU32, ImU32>{IM_COL32(0, 120, 0, 120), IM_COL32(80, 200, 120, 255)};
 static constexpr const std::pair<ImU32, ImU32> colInvalid = std::pair<ImU32, ImU32>{IM_COL32(120, 0, 0, 120), IM_COL32(220, 80, 80, 255)};
-
 static constexpr const std::pair<ImU32, ImU32> colSelected = std::pair<ImU32, ImU32>{IM_COL32(217, 159, 0, 255), IM_COL32(179, 123, 0, 255)};
+static constexpr const ImU32 colPaleRed = IM_COL32(200, 100, 100, 105);
+
+struct headerPos {
+    ImVec2 start;
+    ImVec2 end;
+};
 
 class DbTable {
    private:
-    // TODO: Eigene Tabellenklasse bauen, damit Gestalung beliebig ist
+    std::shared_ptr<const completeDbData> dbData;
+    std::shared_ptr<uiChangeInfo> uiChanges;
+    editingData& edit;
+    std::string& selectedTable;
+    std::unordered_set<std::size_t>& changeHighlight;
+    Logger& logger;
+
+    float rowHeight = 0;
+    headerPos header;
+
+    ImDrawList* drawList;
+    std::map<std::string, std::vector<float>> columnWidths;  // one per column
+
+    static constexpr const float SPLITTER_WIDTH = 10;
+    static constexpr const float SPLITTER_MIN_DIST = 40;
+    static constexpr const float PAD_OUTER_X = 4;
+    static constexpr const float LEFT_RESERVE = 10;
+    static constexpr const float RIGHT_RESERVE = 40;
+
+    void handleSplitterDrag(std::vector<float>& splitters, const std::size_t index) {
+        float mouseX = ImGui::GetIO().MousePos.x - header.start.x;
+        const float minRef = index <= 0 ? 0 : splitters[index - 1] + SPLITTER_MIN_DIST;
+        const float maxRef = index >= splitters.size() - 1 ? (header.end.x - header.start.x) : splitters[index + 1] - SPLITTER_MIN_DIST;
+        // check if limits violated (splitter doesnt move other splitters)
+        if (mouseX <= minRef || mouseX >= maxRef) { return; }
+        splitters[index] = mouseX;
+    }
+
+    void splitterRefit(std::vector<float>& splitters, const float space) {
+        const float oldWidth = header.end.x - header.start.x;
+        if (fabs(oldWidth - space) < 1e-3f) { return; }
+        const std::size_t columnSize = splitters.size();
+        if (space < (columnSize * SPLITTER_MIN_DIST + (columnSize - 1) * SPLITTER_WIDTH)) { return; }
+        if (oldWidth < (columnSize * SPLITTER_MIN_DIST + (columnSize - 1) * SPLITTER_WIDTH)) { return; }
+        for (std::size_t i = 0; i < columnSize; i++) {
+            splitters[i] *= space / oldWidth;
+        }
+    }
+
+    void drawHeader(const std::string& tableName) {
+        const auto& headers = dbData->headers.at(tableName).data;
+        auto& splitterPoss = columnWidths.at(tableName);
+
+        header.start = ImGui::GetCursorScreenPos();
+        header.start.x += PAD_OUTER_X + LEFT_RESERVE;
+        const float available = ImGui::GetContentRegionAvail().x - 2 * PAD_OUTER_X - LEFT_RESERVE - RIGHT_RESERVE;
+        splitterRefit(splitterPoss, available);
+        header.end = ImVec2(header.start.x + available, header.start.y + rowHeight);
+
+        ImVec2 cursor = ImVec2(0, 0);  // screen coordinates
+        for (size_t i = 0; i < headers.size(); ++i) {
+            float width = i > 0 ? splitterPoss[i] - splitterPoss[i - 1] - SPLITTER_WIDTH : splitterPoss[0] - 0.5 * SPLITTER_WIDTH;
+            drawCellSC(headers[i].name, width, cursor);
+            cursor.x = splitterPoss[i] + 0.5 * SPLITTER_WIDTH;
+            if (i + 1 < headers.size()) { drawSplitterSC(tableName, i, cursor.x); }
+        }
+
+        ImGui::Dummy(ImVec2(cursor.x, rowHeight));
+    }
+
+    void drawSplitterSC(const std::string& tableName, size_t index, float rightEdgeAbs) {
+        const float rightEdge = rightEdgeAbs + header.start.x;
+        const float leftEdge = rightEdge - SPLITTER_WIDTH;
+        ImGui::SetCursorScreenPos(ImVec2(leftEdge, header.start.y));
+        ImGui::InvisibleButton(("##splitter" + std::to_string(index)).c_str(), ImVec2(SPLITTER_WIDTH, rowHeight));
+        if (ImGui::IsItemActive()) { handleSplitterDrag(columnWidths.at(tableName), index); }
+        if (ImGui::IsItemHovered() || ImGui::IsItemActive()) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+            drawList->AddRectFilled(ImVec2(leftEdge, header.start.y), ImVec2(rightEdge, header.start.y + rowHeight), IM_COL32(255, 255, 255, 150));
+        }
+    }
+
+    void drawRows(const std::string& tableName) {
+        const std::vector<float>& splitterPoss = columnWidths.at(tableName);
+        for (const auto& headerInfo : dbData->headers.at(tableName).data) {
+            ImGui::PushID(headerInfo.name.c_str());
+            ImVec2 cursor = ImVec2(0, header.end.y);
+            for (std::size_t i = 0; i < dbData->headers.at(tableName).data.size(); i++) {
+                // table -> header -> vector of cells
+                ImGui::PushID(i);
+                for (const std::string& cell : dbData->tableRows.at(tableName).at(headerInfo.name)) {
+                    float width = i > 0 ? splitterPoss[i] - splitterPoss[i - 1] : splitterPoss[0];
+                    drawCellSC(cell, width, cursor);
+                    cursor.y += rowHeight;
+                }
+                cursor.x = splitterPoss[i] + 0.5 * SPLITTER_WIDTH;
+                cursor.y = header.end.y;
+                ImGui::PopID();
+            }
+            ImGui::PopID();
+        }
+    }
+
+    void drawCellSC(const std::string& value, float width, const ImVec2& pos) {
+        ImVec2 min = ImVec2(pos.x + header.start.x, pos.y + header.start.y);
+        ImVec2 max(min.x + width, min.y + rowHeight);
+        ImVec2 size = ImVec2(max.x - min.x, max.y - min.y);
+        ImGui::SetCursorScreenPos(min);
+        ImGui::InvisibleButton(("##cell" + value).c_str(), size);
+
+        if (ImGui::IsItemHovered()) {
+            drawList->AddRect(min, max, IM_COL32(255, 255, 255, 150));  // optional hover outline
+        }
+
+        if (ImGui::IsItemClicked()) { logger.pushLog(Log{std::format("Clicked cell '{}'", value)}); }
+
+        drawList->AddRectFilled(min, max, colPaleRed);
+        ImVec2 textSize = ImGui::CalcTextSize(value.c_str());
+        ImVec2 textPos(min.x + 4.0f, min.y + (rowHeight - textSize.y) * 0.5f);
+        drawList->AddText(textPos, IM_COL32_WHITE, value.c_str());
+    }
+
    public:
-    DbTable() {}
+    DbTable(editingData& cEdit, std::string& cSelectedTable, std::unordered_set<std::size_t>& cChangeHighlight, Logger& cLogger) : edit(cEdit), selectedTable(cSelectedTable), changeHighlight(cChangeHighlight), logger(cLogger) {}
+
+    void drawTable(const std::string& tableName) {
+        if (rowHeight == 0) { rowHeight = ImGui::CalcTextSize("test").y; }
+        drawList = ImGui::GetWindowDrawList();
+        ImGui::PushID(tableName.c_str());
+        drawHeader(tableName);
+        drawRows(tableName);
+        ImGui::PopID();
+    }
+
+    void setData(std::shared_ptr<const completeDbData> newData) {
+        dbData = newData;
+        for (const auto& [tableName, tableInfo] : dbData->headers) {
+            std::size_t colCount = tableInfo.data.size();
+            float widthPerColumn = (ImGui::GetContentRegionAvail().x - 2 * PAD_OUTER_X - LEFT_RESERVE - RIGHT_RESERVE) / (float)colCount;
+            columnWidths[tableName].clear();
+            for (std::size_t i = 0; i < colCount; i++) {
+                columnWidths[tableName].push_back((i + 1) * widthPerColumn);
+            }
+        }
+    }
+
+    void setChangeData(std::shared_ptr<uiChangeInfo> changeData) { uiChanges = changeData; }
 };
 
 class ChangeOverviewer {
