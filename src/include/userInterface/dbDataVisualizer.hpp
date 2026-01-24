@@ -1,6 +1,6 @@
 #pragma once
 
-#include "imgui.h"
+#include "pch.hpp"
 
 #include "dbService.hpp"
 #include "dbInterface.hpp"
@@ -391,7 +391,17 @@ class DbVisualizer {
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("table dev")) {
-                dbTable.drawTable(std::string("stock"));
+                if (ImGui::BeginTabBar("MainTabs")) {
+                    for (const auto& [table, data] : dbData->headers) {
+                        if (ImGui::BeginTabItem(table.c_str())) {
+                            ImGui::BeginDisabled(!dataFresh);
+                            dbTable.drawTable(table);
+                            ImGui::EndDisabled();
+                            ImGui::EndTabItem();
+                        }
+                    }
+                    ImGui::EndTabBar();
+                }
                 ImGui::EndTabItem();
             }
         }

@@ -9,8 +9,9 @@
 
 #include <cstdint>
 
-enum class changeType : uint8_t { NONE, INSERT_ROW, UPDATE_CELLS, DELETE_ROW };
+constexpr const std::size_t INVALID_ID = std::numeric_limits<std::size_t>::max();
 
+enum class changeType : uint8_t { NONE, INSERT_ROW, UPDATE_CELLS, DELETE_ROW };
 enum class sqlAction : uint8_t { PREVIEW, EXECUTE };
 
 struct imTable {
@@ -197,3 +198,20 @@ class Change {
         return summary;
     }
 };
+
+struct uiChangeInfo {
+    Change::ctPKMD idMappedChanges;
+    Change::chHashM changes;
+};
+
+namespace ChangeHelpers {
+inline std::unique_ptr<Change> getChangeOfRow(const std::shared_ptr<uiChangeInfo>& uiChanges, const std::string& table, const std::size_t id) {
+    if (!uiChanges->idMappedChanges.contains(table)) { return nullptr; }
+    if (id == INVALID_ID) { return nullptr; }
+    if (uiChanges->idMappedChanges.at(table).contains(id)) {
+        const std::size_t changeKey = uiChanges->idMappedChanges.at(table).at(id);
+        return std::make_unique<Change>(uiChanges->changes.at(changeKey));
+    }
+    return nullptr;
+}
+}  // namespace ChangeHelpers

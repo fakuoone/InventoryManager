@@ -15,11 +15,6 @@ struct protectedChanges {
     std::map<std::string, std::size_t> maxPKeys;
 };
 
-struct uiChangeInfo {
-    Change::ctPKMD idMappedChanges;
-    Change::chHashM changes;
-};
-
 class ChangeTracker {
    private:
     protectedChanges changes;
