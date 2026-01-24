@@ -29,7 +29,7 @@ struct rect {
 };
 
 enum class MOUSE_EVENT_TYPE { NONE, HOVER, CLICK };
-enum class ACTION_TYPE { NONE, EDIT, REMOVE, DATA, HEADER };
+enum class ACTION_TYPE { NONE, REQUEST_EDIT, EDIT, REMOVE, DATA, HEADER };
 
 struct dataEvent {
     std::string tableName;
@@ -49,7 +49,7 @@ struct event {
 };
 
 template <typename F, typename... Args>
-concept drawFunction = std::invocable<F, const ImVec2&, const float, const rect&, Args...>;
+concept drawFunction = std::invocable<F, const ImVec2&, const float, const bool, const rect&, Args...>;
 
 class DbTable {
    private:
@@ -115,9 +115,9 @@ class DbTable {
             float width = i > 0 ? splitterPoss[i] - splitterPoss[i - 1] - SPLITTER_WIDTH : splitterPoss[0] - 0.5 * SPLITTER_WIDTH;
             ImGui::PushID(headers[i].name.c_str());
             eventTypes fromHeader = drawCellSC(
-                cursor, width,
-                [this](const ImVec2& p, const float w, const rect& r, const std::string& v) -> ACTION_TYPE {
-                    return drawHeaderCell(p, w, r, v);
+                cursor, width, true,
+                [this](const ImVec2& p, const float w, const bool e, const rect& r, const std::string& v) -> ACTION_TYPE {
+                    return drawHeaderCell(p, w, e, r, v);
                 },
                 headers[i].name);
             if (fromHeader.mouse != MOUSE_EVENT_TYPE::NONE) {
@@ -152,8 +152,8 @@ class DbTable {
 
         for (std::size_t i = 0; i < headers.size(); ++i) {
             // call helper that iterates cells for this column and invokes the provided drawer
-            drawColumn(tableName, i, splitterPoss, cursor, [this](const ImVec2& p, const float w, const rect& r, const std::string& v) -> ACTION_TYPE {
-                return drawDataCell(p, w, r, v);
+            drawColumn(tableName, i, splitterPoss, cursor, [this](const ImVec2& p, const float w, const bool e, const rect& r, const std::string& v) -> ACTION_TYPE {
+                return drawDataCell(p, w, e, r, v);
             });
             cursor.x = splitterPoss[i] + 0.5f * SPLITTER_WIDTH;
             cursor.y = headerPos.end.y - headerPos.start.y;
@@ -182,7 +182,7 @@ class DbTable {
             }
 
             // data cell via provided drawer
-            eventTypes fromData = drawCellSC(cursor, width, std::forward<CellDrawer>(cellDrawer), cell);
+            eventTypes fromData = drawCellSC(cursor, width, true, std::forward<CellDrawer>(cellDrawer), cell);
             if (fromData.mouse != MOUSE_EVENT_TYPE::NONE) {
                 lastEvent.type = fromData;
                 lastEvent.origin = Widgets::dataEvent(tableName, pKey, headerInfo.name);
@@ -216,8 +216,8 @@ class DbTable {
         eventTypes fromFirst;
         ImVec2 firstColumnStart = ImVec2(-LEFT_RESERVE, cursor.y);
         ImGui::PushID("FIRST");
-        fromFirst = drawCellSC(firstColumnStart, LEFT_RESERVE, [this](const ImVec2& p, const float w, const rect& r) -> ACTION_TYPE {
-            return drawFirstColumnSC(p, w, r);
+        fromFirst = drawCellSC(firstColumnStart, LEFT_RESERVE, true, [this](const ImVec2& p, const float w, const bool e, const rect& r) -> ACTION_TYPE {
+            return drawFirstColumnSC(p, w, e, r);
         });
         ImGui::PopID();
         if (fromFirst.mouse != MOUSE_EVENT_TYPE::NONE) {
@@ -283,7 +283,7 @@ class DbTable {
 
             // data cell: use changed value if present, otherwise empty
             const std::string changedVal = change.getCell(headerInfo.name);
-            eventTypes fromData = drawCellSC(cursor, width, std::forward<CellDrawer>(cellDrawer), changedVal);
+            eventTypes fromData = drawCellSC(cursor, width, true, std::forward<CellDrawer>(cellDrawer), changedVal);
             if (fromData.mouse != MOUSE_EVENT_TYPE::NONE) {
                 lastEvent.type = fromData;
                 lastEvent.origin = Widgets::dataEvent(tableName, pKey, headerInfo.name);
@@ -323,20 +323,26 @@ class DbTable {
     eventTypes drawActionColumn(const ImVec2& pos, const std::vector<float>& splitterPoss, const std::size_t columnIndex, const Change* change) {
         eventTypes actionEvent;
         float individualWidth = RIGHT_RESERVE;
-        if (change) { individualWidth /= 2; }
+        bool enableDelete = true;
+        bool enableUpdate = true;
+        if (change) {
+            individualWidth /= 2;
+            if (change->hasParent()) { enableDelete = false; }
+            if (change->getType() == changeType::DELETE_ROW) { enableUpdate = false; }
+        }
 
         ImVec2 actionColumnStart = ImVec2(splitterPoss[columnIndex] + 0.5 * SPLITTER_WIDTH, pos.y);
         ImGui::PushID("ACTIONX");
-        actionEvent = drawCellSC(actionColumnStart, individualWidth, [this](const ImVec2& p, const float w, const rect& r) -> ACTION_TYPE {
-            return drawActionColumnXSC(p, w, r);
+        actionEvent = drawCellSC(actionColumnStart, individualWidth, enableDelete, [this](const ImVec2& p, const float w, const bool e, const rect& r) -> ACTION_TYPE {
+            return drawActionColumnXSC(p, w, e, r);
         });
         ImGui::PopID();
 
         if (change) {
             ImVec2 actionColumn2nd = ImVec2(actionColumnStart.x + individualWidth, pos.y);
             ImGui::PushID("ACTIONED");
-            eventTypes editEvent = drawCellSC(actionColumn2nd, individualWidth, [this](const ImVec2& p, const float w, const rect& r) -> ACTION_TYPE {
-                return drawActionColumnEditSC(p, w, r);
+            eventTypes editEvent = drawCellSC(actionColumn2nd, individualWidth, enableUpdate, [this](const ImVec2& p, const float w, const bool e, const rect& r) -> ACTION_TYPE {
+                return drawActionColumnEditSC(p, w, e, r);
             });
             if (actionEvent.mouse == MOUSE_EVENT_TYPE::NONE) { actionEvent = editEvent; }
             ImGui::PopID();
@@ -344,8 +350,15 @@ class DbTable {
         return actionEvent;
     }
 
+    struct cellBoilerPlate {
+        const ImVec2& pos;
+        const float width;
+        const bool enabled;
+        const bool editable;
+    };
+
     template <typename F, typename... Args>
-    requires drawFunction<F, Args...> eventTypes drawCellSC(const ImVec2& pos, const float width, F&& function, Args&&... args) {
+    requires drawFunction<F, Args...> eventTypes drawCellSC(const ImVec2& pos, const float width, const bool enabled, F&& function, Args&&... args) {
         eventTypes result;
 
         ImVec2 min = ImVec2(pos.x + headerPos.start.x + PAD_INNER, pos.y + headerPos.start.y + PAD_INNER);
@@ -353,10 +366,12 @@ class DbTable {
         rect minMax(min, max);
         ImVec2 size = ImVec2(max.x - min.x, max.y - min.y);
         ImGui::SetCursorScreenPos(min);
+        if (!enabled) { ImGui::BeginDisabled(); }
         ImGui::InvisibleButton("##cell", size);
+        if (!enabled) { ImGui::EndDisabled(); }
 
         if (ImGui::IsItemHovered()) {
-            drawList->AddRect(min, max, IM_COL32(255, 255, 255, 150));  // optional hover outline
+            drawList->AddRect(min, max, IM_COL32(255, 255, 255, 100));  // optional hover outline
             result.mouse = MOUSE_EVENT_TYPE::HOVER;
         }
 
@@ -365,39 +380,43 @@ class DbTable {
             logger.pushLog(Log{"hello"});
         }
 
-        result.action = std::forward<F>(function)(pos, width, minMax, std::forward<Args>(args)...);
+        result.action = std::forward<F>(function)(pos, width, enabled, minMax, std::forward<Args>(args)...);
         return result;
     }
 
-    ACTION_TYPE drawDataCell(const ImVec2& pos, const float width, const rect& rect, const std::string& value) {
+    ACTION_TYPE drawDataCell(const ImVec2& pos, const float width, const bool enabled, const rect& rect, const std::string& value) {
         drawList->AddRectFilled(rect.start, rect.end, colGreyBg);
         ImVec2 textSize = ImGui::CalcTextSize(value.c_str());
         float yOffset = (rect.end.y - rect.start.y - textSize.y) * 0.5f;
         if (yOffset < PAD_INNER_CONTENT) { yOffset = PAD_INNER_CONTENT; }
 
         ImVec2 textPos(rect.start.x + PAD_INNER_CONTENT, rect.start.y + yOffset);
-        drawList->AddText(textPos, IM_COL32_WHITE, value.c_str());
+        if (enabled) {
+            drawList->AddText(textPos, IM_COL32_WHITE, value.c_str());
+        } else {
+            drawList->AddText(textPos, IM_COL32(255, 255, 255, 100), value.c_str());
+        }
         return ACTION_TYPE::DATA;
     }
 
-    ACTION_TYPE drawHeaderCell(const ImVec2& pos, const float width, const rect& rect, const std::string& header) {
-        drawDataCell(pos, width, rect, header);
+    ACTION_TYPE drawHeaderCell(const ImVec2& pos, const float width, const bool enabled, const rect& rect, const std::string& header) {
+        drawDataCell(pos, width, enabled, rect, header);
         return ACTION_TYPE::HEADER;
     }
 
-    ACTION_TYPE drawActionColumnXSC(const ImVec2& pos, const float width, const rect& rect) {
+    ACTION_TYPE drawActionColumnXSC(const ImVec2& pos, const float width, const bool enabled, const rect& rect) {
         // TODO:
-        drawDataCell(pos, width, rect, "X");
+        drawDataCell(pos, width, enabled, rect, "X");
         return ACTION_TYPE::REMOVE;
     }
-    ACTION_TYPE drawActionColumnEditSC(const ImVec2& pos, const float width, const rect& rect) {
-        drawDataCell(pos, width, rect, "ED");
-        return ACTION_TYPE::EDIT;
+    ACTION_TYPE drawActionColumnEditSC(const ImVec2& pos, const float width, const bool enabled, const rect& rect) {
+        drawDataCell(pos, width, enabled, rect, "ED");
+        return ACTION_TYPE::REQUEST_EDIT;
     }
 
-    ACTION_TYPE drawFirstColumnSC(const ImVec2& pos, const float width, const rect& rect) {
+    ACTION_TYPE drawFirstColumnSC(const ImVec2& pos, const float width, const bool enabled, const rect& rect) {
         // TODO:
-        drawDataCell(pos, width, rect, "X");
+        drawDataCell(pos, width, enabled, rect, "X");
         return ACTION_TYPE::REMOVE;
     }
 

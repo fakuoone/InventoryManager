@@ -369,7 +369,7 @@ class DbVisualizer {
 
     void handleTableEvent() {
         const Widgets::event tableEvent = dbTable.getEvent();
-        if (std::holds_alternative<Widgets::dataEvent>(tableEvent.origin)) {
+        if (std::holds_alternative<Widgets::dataEvent>(tableEvent.origin)) {  // NO CHANGE EXISTS ON THIS ROW
             const Widgets::dataEvent event = std::get<Widgets::dataEvent>(tableEvent.origin);
             if (tableEvent.type.mouse == Widgets::MOUSE_EVENT_TYPE::CLICK) {
                 switch (tableEvent.type.action) {
@@ -386,12 +386,20 @@ class DbVisualizer {
                         break;
                     case Widgets::ACTION_TYPE::EDIT:
                         changeTracker.addChange(Change(tableEvent.cells, changeType::UPDATE_CELLS, dbService.getTable(event.tableName)), static_cast<std::size_t>(std::stoi(event.pKey)));
-
+                        break;
+                    case Widgets::ACTION_TYPE::REQUEST_EDIT:
+                        const std::size_t pKeyId = static_cast<std::size_t>(std::stoi(event.pKey)));
+                        if (edit.whichIds.contains(pKeyId)) {
+                            edit.whichIds.erase(pKeyId);
+                        } else {
+                            edit.whichIds.insert(pKeyId);
+                        }
+                        break;
                     default:
                         break;
                 }
             }
-        } else {
+        } else {  // CHANGE ALREADY EXISTS ON THIS ROW
             const Change change = std::get<Change>(tableEvent.origin);
             if (tableEvent.type.mouse == Widgets::MOUSE_EVENT_TYPE::CLICK) {
                 switch (tableEvent.type.action) {
@@ -400,7 +408,15 @@ class DbVisualizer {
                         break;
                     case Widgets::ACTION_TYPE::EDIT:
                         changeTracker.addChange(change);
-
+                        break;
+                    case Widgets::ACTION_TYPE::REQUEST_EDIT:
+                        const std::size_t change.getRowId();
+                        if (edit.whichIds.contains(pKeyId)) {
+                            edit.whichIds.erase(pKeyId);
+                        } else {
+                            edit.whichIds.insert(pKeyId);
+                        }
+                        break;
                     default:
                         break;
                 }
