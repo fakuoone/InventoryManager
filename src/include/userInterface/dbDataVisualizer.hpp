@@ -367,6 +367,48 @@ class DbVisualizer {
         ImGui::PopID();
     }
 
+    void handleTableEvent() {
+        const Widgets::event tableEvent = dbTable.getEvent();
+        if (std::holds_alternative<Widgets::dataEvent>(tableEvent.origin)) {
+            const Widgets::dataEvent event = std::get<Widgets::dataEvent>(tableEvent.origin);
+            if (tableEvent.type.mouse == Widgets::MOUSE_EVENT_TYPE::CLICK) {
+                switch (tableEvent.type.action) {
+                    case Widgets::ACTION_TYPE::HEADER: {
+                        const tHeaderVector& header = dbData->headers.at(event.tableName).data;
+                        auto it = std::find_if(header.begin(), header.end(), [&](const tHeaderInfo& h) {
+                            return h.name == event.headerName;
+                        });
+                        if (it != header.end()) { selectedTable = it->referencedTable; }
+                        break;
+                    }
+                    case Widgets::ACTION_TYPE::REMOVE:
+                        changeTracker.addChange(Change(Change::colValMap{}, changeType::DELETE_ROW, dbService.getTable(event.tableName), static_cast<std::size_t>(std::stoi(event.pKey))));
+                        break;
+                    case Widgets::ACTION_TYPE::EDIT:
+                        changeTracker.addChange(Change(tableEvent.cells, changeType::UPDATE_CELLS, dbService.getTable(event.tableName)), static_cast<std::size_t>(std::stoi(event.pKey)));
+
+                    default:
+                        break;
+                }
+            }
+        } else {
+            const Change change = std::get<Change>(tableEvent.origin);
+            if (tableEvent.type.mouse == Widgets::MOUSE_EVENT_TYPE::CLICK) {
+                switch (tableEvent.type.action) {
+                    case Widgets::ACTION_TYPE::REMOVE:
+                        changeTracker.removeChanges(change.getKey());
+                        break;
+                    case Widgets::ACTION_TYPE::EDIT:
+                        changeTracker.addChange(change);
+
+                    default:
+                        break;
+                }
+            }
+        }
+        dbTable.popEvent();
+    }
+
    public:
     void setData(std::shared_ptr<const completeDbData> newData) {
         dbData = newData;
@@ -396,6 +438,7 @@ class DbVisualizer {
                         if (ImGui::BeginTabItem(table.c_str())) {
                             ImGui::BeginDisabled(!dataFresh);
                             dbTable.drawTable(table);
+                            handleTableEvent();
                             ImGui::EndDisabled();
                             ImGui::EndTabItem();
                         }

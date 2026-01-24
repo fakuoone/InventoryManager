@@ -44,7 +44,8 @@ struct eventTypes {
 
 struct event {
     eventTypes type;
-    std::variant<dataEvent, std::size_t> origin;
+    std::variant<dataEvent, Change> origin;
+    Change::colValMap cells;
 };
 
 template <typename F, typename... Args>
@@ -116,7 +117,7 @@ class DbTable {
             eventTypes fromHeader = drawCellSC(
                 cursor, width,
                 [this](const ImVec2& p, const float w, const rect& r, const std::string& v) -> ACTION_TYPE {
-                    return drawDataCell(p, w, r, v);
+                    return drawHeaderCell(p, w, r, v);
                 },
                 headers[i].name);
             if (fromHeader.mouse != MOUSE_EVENT_TYPE::NONE) {
@@ -177,7 +178,7 @@ class DbTable {
             // special first column (draw full-row background here if requested)
             if (i == 0) {
                 drawRowBackgroundIfNeeded(cursor, splitterPoss, rowChange.get());
-                handleFirstColumnIfNeeded(tableName, pKey, cursor);
+                handleFirstColumnIfNeeded(tableName, pKey, cursor, rowChange.get());
             }
 
             // data cell via provided drawer
@@ -196,7 +197,7 @@ class DbTable {
             }
 
             // special last/action column
-            if (i + 1 == dbData->headers.at(tableName).data.size()) { handleLastActionIfNeeded(tableName, splitterPoss, i, cursor, pKey); }
+            if (i + 1 == dbData->headers.at(tableName).data.size()) { handleLastActionIfNeeded(tableName, splitterPoss, i, cursor, pKey, rowChange.get()); }
 
             cursor.y += rowHeight;
             cellIndex++;
@@ -211,7 +212,7 @@ class DbTable {
     }
 
     // Helper: draw the first column cell (left reserved area) for the current row and update lastEvent
-    eventTypes handleFirstColumnIfNeeded(const std::string& tableName, const std::string& pKey, ImVec2& cursor) {
+    eventTypes handleFirstColumnIfNeeded(const std::string& tableName, const std::string& pKey, ImVec2& cursor, const Change* change) {
         eventTypes fromFirst;
         ImVec2 firstColumnStart = ImVec2(-LEFT_RESERVE, cursor.y);
         ImGui::PushID("FIRST");
@@ -221,17 +222,26 @@ class DbTable {
         ImGui::PopID();
         if (fromFirst.mouse != MOUSE_EVENT_TYPE::NONE) {
             lastEvent.type = fromFirst;
-            lastEvent.origin = static_cast<std::size_t>(std::stoi(pKey));
+            if (change) {
+                lastEvent.origin = *change;
+            } else {
+                lastEvent.origin = dataEvent(tableName, pKey, "FIRST");
+            }
         }
         return fromFirst;
     }
 
     // Helper: draw the last/action column(s) for the current row and update lastEvent
-    eventTypes handleLastActionIfNeeded(const std::string& tableName, const std::vector<float>& splitterPoss, const std::size_t columnIndex, ImVec2& cursor, const std::string& pKey) {
-        eventTypes fromAction = drawActionColumn(cursor, splitterPoss, columnIndex);
+    eventTypes handleLastActionIfNeeded(const std::string& tableName, const std::vector<float>& splitterPoss, const std::size_t columnIndex, ImVec2& cursor, const std::string& pKey, const Change* change) {
+        eventTypes fromAction = drawActionColumn(cursor, splitterPoss, columnIndex, change);
         if (fromAction.mouse != MOUSE_EVENT_TYPE::NONE) {
             lastEvent.type = fromAction;
-            lastEvent.origin = static_cast<std::size_t>(std::stoi(pKey));
+            if (change) {
+                lastEvent.origin = *change;
+
+            } else {
+                lastEvent.origin = dataEvent(tableName, pKey, "LAST");
+            }
         }
         return fromAction;
     }
@@ -268,7 +278,7 @@ class DbTable {
             // first column for insertion row
             if (i == 0) {
                 drawRowBackgroundIfNeeded(cursor, splitterPoss, &change);
-                handleFirstColumnIfNeeded(tableName, pKey, cursor);
+                handleFirstColumnIfNeeded(tableName, pKey, cursor, &change);
             }
 
             // data cell: use changed value if present, otherwise empty
@@ -288,7 +298,7 @@ class DbTable {
             }
 
             // last/action column for insertion row
-            if (i + 1 == dbData->headers.at(tableName).data.size()) { handleLastActionIfNeeded(tableName, splitterPoss, i, cursor, pKey); }
+            if (i + 1 == dbData->headers.at(tableName).data.size()) { handleLastActionIfNeeded(tableName, splitterPoss, i, cursor, pKey, &change); }
 
             cursor.y += rowHeight;
             cellIndex++;
@@ -310,10 +320,10 @@ class DbTable {
         drawList->AddText(textPos, IM_COL32_WHITE, val.c_str());
     }
 
-    eventTypes drawActionColumn(const ImVec2& pos, const std::vector<float>& splitterPoss, const std::size_t columnIndex) {
+    eventTypes drawActionColumn(const ImVec2& pos, const std::vector<float>& splitterPoss, const std::size_t columnIndex, const Change* change) {
         eventTypes actionEvent;
         float individualWidth = RIGHT_RESERVE;
-        if (rowChange) { individualWidth /= 2; }
+        if (change) { individualWidth /= 2; }
 
         ImVec2 actionColumnStart = ImVec2(splitterPoss[columnIndex] + 0.5 * SPLITTER_WIDTH, pos.y);
         ImGui::PushID("ACTIONX");
@@ -322,12 +332,13 @@ class DbTable {
         });
         ImGui::PopID();
 
-        if (rowChange) {
+        if (change) {
             ImVec2 actionColumn2nd = ImVec2(actionColumnStart.x + individualWidth, pos.y);
             ImGui::PushID("ACTIONED");
-            actionEvent = drawCellSC(actionColumn2nd, individualWidth, [this](const ImVec2& p, const float w, const rect& r) -> ACTION_TYPE {
+            eventTypes editEvent = drawCellSC(actionColumn2nd, individualWidth, [this](const ImVec2& p, const float w, const rect& r) -> ACTION_TYPE {
                 return drawActionColumnEditSC(p, w, r);
             });
+            if (actionEvent.mouse == MOUSE_EVENT_TYPE::NONE) { actionEvent = editEvent; }
             ImGui::PopID();
         }
         return actionEvent;
@@ -349,7 +360,10 @@ class DbTable {
             result.mouse = MOUSE_EVENT_TYPE::HOVER;
         }
 
-        if (ImGui::IsItemClicked()) { result.mouse = MOUSE_EVENT_TYPE::CLICK; }
+        if (ImGui::IsItemClicked()) {
+            result.mouse = MOUSE_EVENT_TYPE::CLICK;
+            logger.pushLog(Log{"hello"});
+        }
 
         result.action = std::forward<F>(function)(pos, width, minMax, std::forward<Args>(args)...);
         return result;
@@ -364,6 +378,11 @@ class DbTable {
         ImVec2 textPos(rect.start.x + PAD_INNER_CONTENT, rect.start.y + yOffset);
         drawList->AddText(textPos, IM_COL32_WHITE, value.c_str());
         return ACTION_TYPE::DATA;
+    }
+
+    ACTION_TYPE drawHeaderCell(const ImVec2& pos, const float width, const rect& rect, const std::string& header) {
+        drawDataCell(pos, width, rect, header);
+        return ACTION_TYPE::HEADER;
     }
 
     ACTION_TYPE drawActionColumnXSC(const ImVec2& pos, const float width, const rect& rect) {
@@ -407,6 +426,10 @@ class DbTable {
     }
 
     void setChangeData(std::shared_ptr<uiChangeInfo> changeData) { uiChanges = changeData; }
+
+    event getEvent() const { return lastEvent; }
+
+    void popEvent() { lastEvent = event(); }
 };
 
 class ChangeOverviewer {
