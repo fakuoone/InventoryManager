@@ -387,14 +387,15 @@ class DbVisualizer {
                     case Widgets::ACTION_TYPE::EDIT:
                         changeTracker.addChange(Change(tableEvent.cells, changeType::UPDATE_CELLS, dbService.getTable(event.tableName)), static_cast<std::size_t>(std::stoi(event.pKey)));
                         break;
-                    case Widgets::ACTION_TYPE::REQUEST_EDIT:
-                        const std::size_t pKeyId = static_cast<std::size_t>(std::stoi(event.pKey)));
+                    case Widgets::ACTION_TYPE::REQUEST_EDIT: {
+                        const std::size_t pKeyId = static_cast<std::size_t>(std::stoi(event.pKey));
                         if (edit.whichIds.contains(pKeyId)) {
                             edit.whichIds.erase(pKeyId);
                         } else {
                             edit.whichIds.insert(pKeyId);
                         }
                         break;
+                    }
                     default:
                         break;
                 }
@@ -409,14 +410,15 @@ class DbVisualizer {
                     case Widgets::ACTION_TYPE::EDIT:
                         changeTracker.addChange(change);
                         break;
-                    case Widgets::ACTION_TYPE::REQUEST_EDIT:
-                        const std::size_t change.getRowId();
+                    case Widgets::ACTION_TYPE::REQUEST_EDIT: {
+                        const std::size_t pKeyId = change.getRowId();
                         if (edit.whichIds.contains(pKeyId)) {
                             edit.whichIds.erase(pKeyId);
                         } else {
                             edit.whichIds.insert(pKeyId);
                         }
                         break;
+                    }
                     default:
                         break;
                 }
