@@ -176,7 +176,7 @@ class DbTable {
 
             // special first column (draw full-row background here if requested)
             if (i == 0) {
-                drawRowBackgroundIfNeeded(cursor, splitterPoss);
+                drawRowBackgroundIfNeeded(cursor, splitterPoss, rowChange.get());
                 handleFirstColumnIfNeeded(tableName, pKey, cursor);
             }
 
@@ -187,6 +187,14 @@ class DbTable {
                 lastEvent.origin = Widgets::dataEvent(tableName, pKey, headerInfo.name);
             }
 
+            // draw any insertion/change overlay for this cell (uses same rect as the cell)
+            {
+                ImVec2 min = ImVec2(cursor.x + headerPos.start.x + PAD_INNER, cursor.y + headerPos.start.y + PAD_INNER);
+                ImVec2 max = ImVec2(min.x + width - PAD_INNER, min.y + rowHeight - PAD_INNER);
+                rect cellRect(min, max);
+                drawChangeOverlayIfNeeded(rowChange.get(), headerInfo.name, cellRect);
+            }
+
             // special last/action column
             if (i + 1 == dbData->headers.at(tableName).data.size()) { handleLastActionIfNeeded(tableName, splitterPoss, i, cursor, pKey); }
 
@@ -194,6 +202,9 @@ class DbTable {
             cellIndex++;
             ImGui::PopID();
         }
+
+        // --- Render insertion changes (rows that don't exist in dbData but are in uiChanges)
+        drawInsertionRowsIfAny<CellDrawer>(tableName, headerInfo, i, splitterPoss, cursor, std::forward<CellDrawer>(cellDrawer), cellIndex);
 
         ImGui::PopID();
         ImGui::PopID();
@@ -226,17 +237,77 @@ class DbTable {
     }
 
     // Draw a translucent full-row background if this row is the highlighted one
-    void drawRowBackgroundIfNeeded(const ImVec2& cursor, const std::vector<float>& splitterPoss) {
-        if (!rowChange) { return; }
+    void drawRowBackgroundIfNeeded(const ImVec2& cursor, const std::vector<float>& splitterPoss, const Change* change) {
+        if (!change) { return; }
 
         ImVec2 min = ImVec2(headerPos.start.x + PAD_INNER, headerPos.start.y + cursor.y + PAD_INNER);
         ImVec2 max = ImVec2(splitterPoss.back() + headerPos.start.x + 0.5f * SPLITTER_WIDTH, min.y + rowHeight - PAD_INNER);
         // semi-transparent blue-ish highlight
-        ImU32 bgCol = rowChange->isValid() ? colValid.first : colInvalid.first;
+        ImU32 bgCol = change->isValid() ? colValid.first : colInvalid.first;
         drawList->AddRectFilled(min, max, bgCol);
 
-        ImU32 borderCol = rowChange->isValid() ? colValid.second : colInvalid.first;  // adjust as needed
+        ImU32 borderCol = change->isValid() ? colValid.second : colInvalid.first;  // adjust as needed
         drawList->AddRect(min, max, borderCol, 0.0f, ~0, 1.0f);
+    }
+
+    // Render insertion changes for the given column (draws rows that are INSERT_ROW)
+    template <typename CellDrawer>
+    void drawInsertionRowsIfAny(const std::string& tableName, const tHeaderInfo& headerInfo, const std::size_t i, const std::vector<float>& splitterPoss, ImVec2& cursor, CellDrawer&& cellDrawer, std::size_t& cellIndex) {
+        if (!uiChanges) { return; }
+        if (!uiChanges->idMappedChanges.contains(tableName)) { return; }
+
+        for (const auto& [pKeyNum, changeKey] : uiChanges->idMappedChanges.at(tableName)) {
+            Change& change = uiChanges->changes.at(changeKey);
+            if (change.getType() != changeType::INSERT_ROW) { continue; }
+
+            const std::string pKey = std::to_string(pKeyNum);
+
+            float width = i > 0 ? splitterPoss[i] - splitterPoss[i - 1] : splitterPoss[0] + 0.5f * SPLITTER_WIDTH;
+            ImGui::PushID((int)cellIndex);
+
+            // first column for insertion row
+            if (i == 0) {
+                drawRowBackgroundIfNeeded(cursor, splitterPoss, &change);
+                handleFirstColumnIfNeeded(tableName, pKey, cursor);
+            }
+
+            // data cell: use changed value if present, otherwise empty
+            const std::string changedVal = change.getCell(headerInfo.name);
+            eventTypes fromData = drawCellSC(cursor, width, std::forward<CellDrawer>(cellDrawer), changedVal);
+            if (fromData.mouse != MOUSE_EVENT_TYPE::NONE) {
+                lastEvent.type = fromData;
+                lastEvent.origin = Widgets::dataEvent(tableName, pKey, headerInfo.name);
+            }
+
+            // overlay for insertion (draw over cell)
+            {
+                ImVec2 min = ImVec2(cursor.x + headerPos.start.x + PAD_INNER, cursor.y + headerPos.start.y + PAD_INNER);
+                ImVec2 max = ImVec2(min.x + width - PAD_INNER, min.y + rowHeight - PAD_INNER);
+                rect cellRect(min, max);
+                drawChangeOverlayIfNeeded(&change, headerInfo.name, cellRect);
+            }
+
+            // last/action column for insertion row
+            if (i + 1 == dbData->headers.at(tableName).data.size()) { handleLastActionIfNeeded(tableName, splitterPoss, i, cursor, pKey); }
+
+            cursor.y += rowHeight;
+            cellIndex++;
+            ImGui::PopID();
+        }
+    }
+
+    // Draw overlay for inserted/updated cell values for given Change
+    void drawChangeOverlayIfNeeded(Change* ch, const std::string& headerName, const rect& r) {
+        if (!ch) { return; }
+        const std::string val = ch->getCell(headerName);
+        if (val.empty()) { return; }
+
+        // semi-transparent overlay to show changed/inserted value
+        ImVec2 textSize = ImGui::CalcTextSize(val.c_str());
+        float yOffset = ((r.end.y - r.start.y) - textSize.y) * 0.5f;
+        if (yOffset < PAD_INNER_CONTENT) { yOffset = PAD_INNER_CONTENT; }
+        ImVec2 textPos(r.start.x + PAD_INNER_CONTENT, r.start.y + yOffset);
+        drawList->AddText(textPos, IM_COL32_WHITE, val.c_str());
     }
 
     eventTypes drawActionColumn(const ImVec2& pos, const std::vector<float>& splitterPoss, const std::size_t columnIndex) {
@@ -309,16 +380,6 @@ class DbTable {
         // TODO:
         drawDataCell(pos, width, rect, "X");
         return ACTION_TYPE::REMOVE;
-    }
-
-    void drawInsertionChanges(const std::string& tableName) {
-        for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
-            const Change& change = uiChanges->changes.at(hash);
-            if (change.getType() == changeType::INSERT_ROW) { continue; }
-            for (const auto& header : dbData->headers.at(table).data) {
-                const cell = change.getCell(header.name);
-            }
-        }
     }
 
    public:
