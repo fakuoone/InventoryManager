@@ -13,7 +13,7 @@
 class Config {
    private:
     std::string dbString;
-    std::string primaryKey;
+    std::string fontPath;
     Logger& logger;
 
     std::string databaseJsonToDbString(const nlohmann::json& j) {
@@ -22,7 +22,7 @@ class Config {
             const std::string user = j.at("user").get<std::string>();
             const std::string password = j.at("password").get<std::string>();
             std::string connectionString = std::format("dbname={} user={} password={}", dbname, user, password);
-            primaryKey = j.at("primary_key").get<std::string>();
+            if (j.contains("font")) { fontPath = j.at("font").get<std::string>(); }
             return connectionString;
         } catch (const nlohmann::json::exception& e) {
             logger.pushLog(Log{std::format("ERROR PARSING CONFIG: ", e.what())});
@@ -61,14 +61,11 @@ class Config {
         return dbString;
     }
 
-    std::string getPrimaryKey() {
-        if (primaryKey.empty()) { return std::string{"id"}; }
-        return primaryKey;
-    }
-
     std::filesystem::path getExeDir() {
         char buffer[MAX_PATH];
         GetModuleFileName(nullptr, buffer, MAX_PATH);
         return std::filesystem::path(buffer).parent_path();
     }
+
+    std::string getFont() { return fontPath; }
 };

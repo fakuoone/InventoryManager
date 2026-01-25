@@ -112,6 +112,14 @@ class App {
         return true;
     }
 
+    void initFont(const std::string& font) {
+        if (!font.empty()) {
+            ImGuiIO& io = ImGui::GetIO();
+            ImFont* fontPtr = io.Fonts->AddFontFromFileTTF(font.c_str(), 20.0f);
+            IM_ASSERT(fontPtr != nullptr);
+        }
+    }
+
    public:
     App(DbService& cDbService, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger) : dbService(cDbService), changeTracker(cChangeTracker), config(cConfig), logger(cLogger) {}
 
@@ -122,6 +130,7 @@ class App {
 
     void supplyConfigString() {
         std::string dbString = config.setConfigString(std::filesystem::path{});  // OPTIONAL USER SUPPLIED CONFIG PATH
+        initFont(config.getFont());
         dbService.initializeDbInterface(dbString);
     }
 

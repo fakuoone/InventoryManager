@@ -28,7 +28,9 @@ class DbService {
         for (const auto& table : data.tables) {
             // Get max index of pkeys
             const tStringVector& keyVector = data.tableRows.at(table).at(data.headers.at(table).pkey);
-            auto it2 = std::max_element(keyVector.begin(), keyVector.end(), [](const std::string& key1, const std::string& key2) { return std::stoll(key1) < std::stoll(key2); });
+            auto it2 = std::max_element(keyVector.begin(), keyVector.end(), [](const std::string& key1, const std::string& key2) {
+                return std::stoll(key1) < std::stoll(key2);
+            });
             std::size_t maxKey = 0;
             if (it2 != keyVector.end()) { maxKey = static_cast<std::size_t>(std::stoll(*it2)); }
             maxPKeys[table] = maxKey;
@@ -101,7 +103,7 @@ class DbService {
                 }
             }
             if (!pKeyFound) {
-                logger.pushLog(Log{std::format("ERROR: Table {} has no primary key {}.", table, config.getPrimaryKey())});
+                logger.pushLog(Log{std::format("ERROR: Table {} has no primary key.", table)});
                 return false;
             }
         }
@@ -123,7 +125,11 @@ class DbService {
                 const Change::colValMap& cells = change.getCells();
                 const tHeadersInfo& headers = dbData->headers.at(change.getTable());
                 // check non-nullable column count
-                std::size_t reqColumnCount = std::count_if(headers.data.begin(), headers.data.end(), [](const tHeaderInfo& h) { return !h.nullable; }) - 1;
+                std::size_t reqColumnCount = std::count_if(headers.data.begin(), headers.data.end(),
+                                                           [](const tHeaderInfo& h) {
+                                                               return !h.nullable;
+                                                           }) -
+                                             1;
                 if (reqColumnCount > cells.size() && change.getType() == changeType::INSERT_ROW) { setValidity = false; }
                 if (cells.size() > (headers.data.size() - 1) && !allowInvalidChange) {
                     logger.pushLog(Log{std::format("ERROR: Change is invalid because not enough columns were supplied to satisfy the non-null table columns.")});
@@ -177,7 +183,9 @@ class DbService {
 
         for (const auto& [col, val] : cells) {
             // find foreign key thats required
-            auto it1 = std::ranges::find_if(headers.data, [&](const tHeaderInfo& h) { return h.name == col && h.type == headerType::FOREIGN_KEY; });
+            auto it1 = std::ranges::find_if(headers.data, [&](const tHeaderInfo& h) {
+                return h.name == col && h.type == headerType::FOREIGN_KEY;
+            });
             if (it1 != headers.data.end()) {  // && it1->referencedTable != table) {
                 if (!checkReferencedUKeyValue(it1->referencedTable, it1->nullable, val)) {
                     Change::colValMap requiredCells;
@@ -195,7 +203,9 @@ class DbService {
         // does ukey-value already exist
         if (val.empty() && nullable) { return true; }
         std::string uKey = dbData->headers.at(ref).uKeyName;
-        auto it1 = std::ranges::find_if(dbData->tableRows.at(ref).at(uKey), [&](const std::string& h) { return h == val; });
+        auto it1 = std::ranges::find_if(dbData->tableRows.at(ref).at(uKey), [&](const std::string& h) {
+            return h == val;
+        });
         if (it1 != dbData->tableRows.at(ref).at(uKey).end()) { return true; }
         return false;
     }
@@ -203,7 +213,11 @@ class DbService {
     void initializeDbInterface(const std::string& configString) { dbInterface.initializeWithConfigString(configString); }
 
     std::future<Change::chHashV> requestChangeApplication(std::vector<Change> changes, sqlAction action) {
-        return pool.submit([this](auto change, sqlAction act) { return dbInterface.applyChanges(std::move(change), act); }, std::move(changes), action);
+        return pool.submit(
+            [this](auto change, sqlAction act) {
+                return dbInterface.applyChanges(std::move(change), act);
+            },
+            std::move(changes), action);
         //      return pool.submit(&DbInterface::applyChanges, &dbInterface, std::move(change_s), action);
     }
 
@@ -218,7 +232,9 @@ class DbService {
 
     tHeaderInfo getTableHeaderInfo(const std::string& table, const std::string& header) {
         const tHeaderVector& headers = dbData->headers.at(table).data;
-        auto it = std::find_if(headers.begin(), headers.end(), [&](const tHeaderInfo& h) { return h.name == header; });
+        auto it = std::find_if(headers.begin(), headers.end(), [&](const tHeaderInfo& h) {
+            return h.name == header;
+        });
         return *it;
     }
 };
