@@ -10,7 +10,7 @@
 constexpr const std::size_t BUFFER_SIZE = 256;
 
 struct editingData {
-    std::unordered_set<std::size_t> whichIds;
+    std::size_t whichId;
     std::vector<std::array<char, BUFFER_SIZE>> insertBuffer;
     std::array<char, BUFFER_SIZE> editBuffer;
 };
@@ -29,7 +29,7 @@ struct rect {
 };
 
 enum class MOUSE_EVENT_TYPE { NONE, HOVER, CLICK };
-enum class ACTION_TYPE { NONE, REQUEST_EDIT, EDIT, REMOVE, DATA, HEADER };
+enum class ACTION_TYPE { NONE, REQUEST_EDIT, EDIT, REMOVE, SELECT, DATA, HEADER };
 
 struct dataEvent {
     std::string tableName;
@@ -49,10 +49,12 @@ struct event {
 };
 
 struct cellBoilerPlate {
+    const std::string headerName;
     const ImVec2& pos;
     float width;
     bool enabled;
     bool editable;
+    bool selected;
 };
 
 template <typename F, typename... Args>
@@ -121,7 +123,7 @@ class DbTable {
         for (size_t i = 0; i < headers.size(); ++i) {
             float width = i > 0 ? splitterPoss[i] - splitterPoss[i - 1] - SPLITTER_WIDTH : splitterPoss[0] - 0.5 * SPLITTER_WIDTH;
             ImGui::PushID(headers[i].name.c_str());
-            const cellBoilerPlate cellBoiler = cellBoilerPlate(cursor, width, true, false);
+            const cellBoilerPlate cellBoiler = cellBoilerPlate(headers[i].name, cursor, width, true, false, false);
             eventTypes fromHeader = drawCellSC(
                 cellBoiler,
                 [this](const cellBoilerPlate& cb, const rect& r, const std::string& v) -> ACTION_TYPE {
@@ -187,16 +189,16 @@ class DbTable {
             // special first column (draw full-row background here if requested)
             if (i == 0) {
                 drawRowBackgroundIfNeeded(cursor, splitterPoss, rowChange.get());
-                handleFirstColumnIfNeeded(tableName, pKey, cursor, rowChange.get());
+                handleFirstColumnIfNeeded(tableName, headerInfo.name, pKey, cursor, rowChange.get());
             }
 
             // data cell via provided drawer
             bool isUkeyAndHasParent = false;
             if (rowChange) { isUkeyAndHasParent = headerInfo.type == headerType::UNIQUE_KEY && rowChange->hasParent(); }
-            bool editable = edit.whichIds.contains(pKeyId) && headerInfo.type != headerType::PRIMARY_KEY && !isUkeyAndHasParent;
-            const cellBoilerPlate cellBoiler = cellBoilerPlate(cursor, width, true, editable);
+            bool editable = edit.whichId == pKeyId && headerInfo.type != headerType::PRIMARY_KEY && !isUkeyAndHasParent;
+            const cellBoilerPlate cellBoiler = cellBoilerPlate(headerInfo.name, cursor, width, true, editable, false);
             eventTypes fromData = drawCellSC(cellBoiler, std::forward<CellDrawer>(cellDrawer), cell);
-            if (fromData.mouse != MOUSE_EVENT_TYPE::NONE) {
+            if (fromData.mouse != MOUSE_EVENT_TYPE::NONE || fromData.action == ACTION_TYPE::EDIT) {
                 lastEvent.type = fromData;
                 lastEvent.origin = Widgets::dataEvent(tableName, pKey, headerInfo.name);
             }
@@ -225,11 +227,13 @@ class DbTable {
     }
 
     // Helper: draw the first column cell (left reserved area) for the current row and update lastEvent
-    eventTypes handleFirstColumnIfNeeded(const std::string& tableName, const std::string& pKey, ImVec2& cursor, const Change* change) {
+    eventTypes handleFirstColumnIfNeeded(const std::string& tableName, const std::string& headerName, const std::string& pKey, ImVec2& cursor, const Change* change) {
         eventTypes fromFirst;
         ImVec2 firstColumnStart = ImVec2(-LEFT_RESERVE, cursor.y);
         ImGui::PushID("FIRST");
-        const cellBoilerPlate cellBoiler = cellBoilerPlate(firstColumnStart, LEFT_RESERVE, true, false);
+        bool selected = false;
+        if (change) { selected = change->isSelected(); }
+        const cellBoilerPlate cellBoiler = cellBoilerPlate(headerName, firstColumnStart, LEFT_RESERVE, true, false, selected);
         fromFirst = drawCellSC(cellBoiler, [this](const cellBoilerPlate& cell, const rect& r) -> ACTION_TYPE {
             return drawFirstColumnSC(cell, r);
         });
@@ -291,14 +295,14 @@ class DbTable {
             // first column for insertion row
             if (i == 0) {
                 drawRowBackgroundIfNeeded(cursor, splitterPoss, &change);
-                handleFirstColumnIfNeeded(tableName, pKey, cursor, &change);
+                handleFirstColumnIfNeeded(tableName, headerInfo.name, pKey, cursor, &change);
             }
 
             // data cell: use changed value if present, otherwise empty
             const std::string changedVal = change.getCell(headerInfo.name);
             bool isUkeyAndHasParent = headerInfo.type == headerType::UNIQUE_KEY && change.hasParent();
-            bool editable = edit.whichIds.contains(pKeyNum) && headerInfo.type != headerType::PRIMARY_KEY && !isUkeyAndHasParent;
-            const cellBoilerPlate cellBoiler = cellBoilerPlate(cursor, width, true, editable);
+            bool editable = edit.whichId == pKeyNum && headerInfo.type != headerType::PRIMARY_KEY && !isUkeyAndHasParent;
+            const cellBoilerPlate cellBoiler = cellBoilerPlate(headerInfo.name, cursor, width, true, editable, false);
             eventTypes fromData = drawCellSC(cellBoiler, std::forward<CellDrawer>(cellDrawer), changedVal);
             if (fromData.mouse != MOUSE_EVENT_TYPE::NONE) {
                 lastEvent.type = fromData;
@@ -352,7 +356,7 @@ class DbTable {
         float individualWidth = showEdit ? RIGHT_RESERVE / 2 : RIGHT_RESERVE;
         ImVec2 actionColumnStart = ImVec2(splitterPoss[columnIndex] + 0.5 * SPLITTER_WIDTH, pos.y);
         ImGui::PushID("ACTIONX");
-        const cellBoilerPlate cellBoilerStart = cellBoilerPlate(actionColumnStart, individualWidth, enableDelete, false);
+        const cellBoilerPlate cellBoilerStart = cellBoilerPlate("LAST", actionColumnStart, individualWidth, enableDelete, false, false);
         actionEvent = drawCellSC(cellBoilerStart, [this](const cellBoilerPlate& cell, const rect& r) -> ACTION_TYPE {
             return drawActionColumnXSC(cell, r);
         });
@@ -361,7 +365,7 @@ class DbTable {
         if (showEdit) {
             ImVec2 actionColumn2nd = ImVec2(actionColumnStart.x + individualWidth, pos.y);
             ImGui::PushID("ACTIONED");
-            const cellBoilerPlate cellBoiler = cellBoilerPlate(actionColumn2nd, individualWidth, enableUpdate, false);
+            const cellBoilerPlate cellBoiler = cellBoilerPlate("LAST", actionColumn2nd, individualWidth, enableUpdate, false, false);
             eventTypes editEvent = drawCellSC(cellBoiler, [this](const cellBoilerPlate& cell, const rect& r) -> ACTION_TYPE {
                 return drawActionColumnEditSC(cell, r);
             });
@@ -401,7 +405,8 @@ class DbTable {
 
     ACTION_TYPE drawDataCell(const cellBoilerPlate& cell, const rect& r, const std::string& value) {
         ACTION_TYPE action{ACTION_TYPE::DATA};
-        drawList->AddRectFilled(r.start, r.end, colGreyBg);
+        ImU32 colBg = cell.selected ? colSelected.first : colGreyBg;
+        drawList->AddRectFilled(r.start, r.end, colBg);
 
         ImVec2 textSize = ImGui::CalcTextSize(value.c_str());
         float yOffset = (r.end.y - r.start.y - textSize.y) * 0.5f;
@@ -415,7 +420,12 @@ class DbTable {
             ImGui::SetNextItemWidth(r.end.x - textPos.x - PAD_INNER_CONTENT);
             std::snprintf(edit.editBuffer.data(), BUFFER_SIZE, "%s", value.c_str());
             bool enterPressed = ImGui::InputText("##edit", edit.editBuffer.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
-            if (enterPressed && ImGui::IsItemEdited()) { action = ACTION_TYPE::EDIT; }
+            if (enterPressed && ImGui::IsItemEdited()) {
+                Change::colValMap newChangeColVal{{cell.headerName, std::string(edit.editBuffer.data())}};
+                lastEvent.cells = std::move(newChangeColVal);
+                edit.whichId = INVALID_ID;
+                action = ACTION_TYPE::EDIT;
+            }
             ImGui::PopStyleVar();
         } else {
             ImU32 col = cell.enabled ? IM_COL32_WHITE : IM_COL32(255, 255, 255, 100);
@@ -441,8 +451,8 @@ class DbTable {
     }
 
     ACTION_TYPE drawFirstColumnSC(const cellBoilerPlate& cell, const rect& r) {
-        drawDataCell(cell, r, "X");
-        return ACTION_TYPE::REMOVE;
+        drawDataCell(cell, r, "^");
+        return ACTION_TYPE::SELECT;
     }
 
    public:

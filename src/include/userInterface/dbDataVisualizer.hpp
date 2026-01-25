@@ -70,10 +70,10 @@ class DbVisualizer {
 
                 ImGui::SameLine();
                 if (ImGui::Button("EDIT")) {
-                    if (edit.whichIds.contains(change.getRowId())) {
-                        edit.whichIds.erase(change.getRowId());
+                    if (edit.whichId == change.getRowId()) {
+                        edit.whichId = INVALID_ID;
                     } else {
-                        edit.whichIds.insert(change.getRowId());
+                        edit.whichId = change.getRowId();
                     }
                 }
 
@@ -112,7 +112,7 @@ class DbVisualizer {
             cType = change->getType();
             isUkeyAndHasParent = header.type == headerType::UNIQUE_KEY && change->hasParent();
         }
-        if (edit.whichIds.contains(id) && header.type != headerType::PRIMARY_KEY && !isUkeyAndHasParent) {
+        if (edit.whichId == id && header.type != headerType::PRIMARY_KEY && !isUkeyAndHasParent) {
             ImGui::PushID(header.name.c_str());
             std::snprintf(edit.editBuffer.data(), BUFFER_SIZE, "%s", newCellValue.c_str());
             bool enterPressed = ImGui::InputText("##edit", edit.editBuffer.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
@@ -281,7 +281,7 @@ class DbVisualizer {
                 } else {
                     Change::colValMap cvMap{};
                     changeTracker.addChange(Change{cvMap, changeType::DELETE_ROW, dbService.getTable(table), indexes.pKeyId});
-                    if (edit.whichIds.contains(indexes.pKeyId)) { edit.whichIds.erase(indexes.pKeyId); }
+                    if (edit.whichId == indexes.pKeyId) { edit.whichId = INVALID_ID; }
                 }
             }
             ImGui::EndDisabled();
@@ -290,10 +290,10 @@ class DbVisualizer {
             ImGui::SameLine();
             if (rowChange.has_value()) { ImGui::BeginDisabled((*rowChange)->getType() == changeType::DELETE_ROW); }
             if (ImGui::Button("EDIT")) {
-                if (edit.whichIds.contains(indexes.pKeyId)) {
-                    edit.whichIds.erase(indexes.pKeyId);
+                if (edit.whichId == indexes.pKeyId) {
+                    edit.whichId = INVALID_ID;
                 } else {
-                    edit.whichIds.insert(indexes.pKeyId);
+                    edit.whichId = indexes.pKeyId;
                 }
             }
             if (rowChange.has_value()) { ImGui::EndDisabled(); }
@@ -369,59 +369,61 @@ class DbVisualizer {
 
     void handleTableEvent() {
         const Widgets::event tableEvent = dbTable.getEvent();
+        const bool handleEvent = tableEvent.type.mouse == Widgets::MOUSE_EVENT_TYPE::CLICK || tableEvent.type.action == Widgets::ACTION_TYPE::EDIT;
+        if (!handleEvent) { return; }
+
         if (std::holds_alternative<Widgets::dataEvent>(tableEvent.origin)) {  // NO CHANGE EXISTS ON THIS ROW
             const Widgets::dataEvent event = std::get<Widgets::dataEvent>(tableEvent.origin);
-            if (tableEvent.type.mouse == Widgets::MOUSE_EVENT_TYPE::CLICK) {
-                switch (tableEvent.type.action) {
-                    case Widgets::ACTION_TYPE::HEADER: {
-                        const tHeaderVector& header = dbData->headers.at(event.tableName).data;
-                        auto it = std::find_if(header.begin(), header.end(), [&](const tHeaderInfo& h) {
-                            return h.name == event.headerName;
-                        });
-                        if (it != header.end()) { selectedTable = it->referencedTable; }
-                        break;
-                    }
-                    case Widgets::ACTION_TYPE::REMOVE:
-                        changeTracker.addChange(Change(Change::colValMap{}, changeType::DELETE_ROW, dbService.getTable(event.tableName), static_cast<std::size_t>(std::stoi(event.pKey))));
-                        break;
-                    case Widgets::ACTION_TYPE::EDIT:
-                        changeTracker.addChange(Change(tableEvent.cells, changeType::UPDATE_CELLS, dbService.getTable(event.tableName)), static_cast<std::size_t>(std::stoi(event.pKey)));
-                        break;
-                    case Widgets::ACTION_TYPE::REQUEST_EDIT: {
-                        const std::size_t pKeyId = static_cast<std::size_t>(std::stoi(event.pKey));
-                        if (edit.whichIds.contains(pKeyId)) {
-                            edit.whichIds.erase(pKeyId);
-                        } else {
-                            edit.whichIds.insert(pKeyId);
-                        }
-                        break;
-                    }
-                    default:
-                        break;
+            switch (tableEvent.type.action) {
+                case Widgets::ACTION_TYPE::HEADER: {
+                    const tHeaderVector& header = dbData->headers.at(event.tableName).data;
+                    auto it = std::find_if(header.begin(), header.end(), [&](const tHeaderInfo& h) {
+                        return h.name == event.headerName;
+                    });
+                    if (it != header.end()) { selectedTable = it->referencedTable; }
+                    break;
                 }
+                case Widgets::ACTION_TYPE::REMOVE:
+                    changeTracker.addChange(Change(Change::colValMap{}, changeType::DELETE_ROW, dbService.getTable(event.tableName), static_cast<std::size_t>(std::stoi(event.pKey))));
+                    break;
+                case Widgets::ACTION_TYPE::EDIT:
+                    changeTracker.addChange(Change(tableEvent.cells, changeType::UPDATE_CELLS, dbService.getTable(event.tableName)), static_cast<std::size_t>(std::stoi(event.pKey)));
+                    break;
+                case Widgets::ACTION_TYPE::REQUEST_EDIT: {
+                    const std::size_t pKeyId = static_cast<std::size_t>(std::stoi(event.pKey));
+                    if (edit.whichId == pKeyId) {
+                        edit.whichId = INVALID_ID;
+                    } else {
+                        edit.whichId = pKeyId;
+                    }
+                    break;
+                }
+                default:
+                    break;
             }
         } else {  // CHANGE ALREADY EXISTS ON THIS ROW
             const Change change = std::get<Change>(tableEvent.origin);
-            if (tableEvent.type.mouse == Widgets::MOUSE_EVENT_TYPE::CLICK) {
-                switch (tableEvent.type.action) {
-                    case Widgets::ACTION_TYPE::REMOVE:
-                        changeTracker.removeChanges(change.getKey());
-                        break;
-                    case Widgets::ACTION_TYPE::EDIT:
-                        changeTracker.addChange(change);
-                        break;
-                    case Widgets::ACTION_TYPE::REQUEST_EDIT: {
-                        const std::size_t pKeyId = change.getRowId();
-                        if (edit.whichIds.contains(pKeyId)) {
-                            edit.whichIds.erase(pKeyId);
-                        } else {
-                            edit.whichIds.insert(pKeyId);
-                        }
-                        break;
+            switch (tableEvent.type.action) {
+                case Widgets::ACTION_TYPE::REMOVE:
+                    changeTracker.removeChanges(change.getKey());
+                    break;
+                case Widgets::ACTION_TYPE::EDIT:
+                    changeTracker.addChange(change);
+                    break;
+                case Widgets::ACTION_TYPE::REQUEST_EDIT: {
+                    const std::size_t pKeyId = change.getRowId();
+                    if (edit.whichId == pKeyId) {
+                        edit.whichId = INVALID_ID;
+                    } else {
+                        edit.whichId = pKeyId;
                     }
-                    default:
-                        break;
+                    break;
                 }
+                case Widgets::ACTION_TYPE::SELECT:
+                    changeTracker.toggleChangeSelect(change.getKey());
+                    break;
+                default:
+                    break;
             }
         }
         dbTable.popEvent();
