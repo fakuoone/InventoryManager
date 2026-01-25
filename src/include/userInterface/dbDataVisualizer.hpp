@@ -398,6 +398,9 @@ class DbVisualizer {
                     }
                     break;
                 }
+                case Widgets::ACTION_TYPE::INSERT:
+                    changeTracker.addChange(Change(tableEvent.cells, changeType::INSERT_ROW, dbService.getTable(event.tableName)));
+                    break;
                 default:
                     break;
             }
