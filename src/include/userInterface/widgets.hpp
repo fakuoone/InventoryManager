@@ -179,7 +179,7 @@ class DbTable {
 
     void drawUserInputRowFields(const std::string& tableName, const tHeaderVector& headers, const std::vector<float>& splitterPoss, ImVec2& cursor) {
         ImGui::PushID("USERINPUT");
-        if (edit.editBuffer.size() < headers.size() - 1) { edit.insertBuffer.resize(headers.size()); }
+        if (edit.insertBuffer.size() < headers.size()) { edit.insertBuffer.resize(headers.size()); }
         Change::colValMap newChangeColVal{};
 
         for (std::size_t i = 0; i < headers.size(); ++i) {
@@ -200,6 +200,9 @@ class DbTable {
                     lastEvent.cells = insertCells;
                     lastEvent.type = lastColEnter;
                     insertCells.clear();
+                    for (auto& buffer : edit.insertBuffer) {
+                        std::memset(buffer.data(), 0, std::strlen(buffer.data()));
+                    }
                 }
             }
             ImGui::PopID();
@@ -482,7 +485,7 @@ class DbTable {
             if (!cell.isInsert) { std::snprintf(dataSource, BUFFER_SIZE, "%s", value.c_str()); }
 
             bool enterPressed = ImGui::InputText("##edit", dataSource, BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
-            if (enterPressed) {
+            if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
                 if (cell.isInsert) {
                     insertCells.emplace(cell.headerName, std::string(dataSource));
                 } else {
@@ -745,29 +748,4 @@ class ChangeOverviewer {
     }
 };
 
-bool drawSelectableCircle(bool selected, bool enabled) {
-    const float radius = 6.0f;
-    ImGui::PushID(&selected);
-
-    if (!enabled) { ImGui::BeginDisabled(); }
-
-    ImVec2 pos = ImGui::GetCursorScreenPos();
-    ImVec2 center(pos.x + radius, pos.y + radius);
-    ImGui::InvisibleButton("##circle", ImVec2(radius * 2.0f, radius * 2.0f));
-
-    bool clicked = ImGui::IsItemClicked();
-
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImU32 borderCol = IM_COL32(160, 160, 160, 255);
-    ImU32 fillCol = IM_COL32(80, 200, 120, 255);
-
-    dl->AddCircle(center, radius, borderCol, 16, 1.5f);
-    if (selected) { dl->AddCircleFilled(center, radius - 2.0f, fillCol, 16); }
-
-    if (!enabled) { ImGui::EndDisabled(); }
-
-    ImGui::PopID();
-    return clicked;
 }
-
-}  // namespace Widgets

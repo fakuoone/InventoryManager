@@ -142,11 +142,12 @@ class App {
                 appState = AppState::ENDING;
                 break;
             }
-
             if (!imguiCtx.beginFrame()) { continue; }
+            ImGui::ShowMetricsWindow();
 
             running = handleAppState();
             drawFpsOverlay();
+
             imguiCtx.endFrame();
         }
     }
