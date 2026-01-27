@@ -14,6 +14,7 @@ class Config {
    private:
     std::string dbString;
     std::string fontPath;
+    std::string quantityColumn;
     Logger& logger;
 
     std::string databaseJsonToDbString(const nlohmann::json& j) {
@@ -22,6 +23,7 @@ class Config {
             const std::string user = j.at("user").get<std::string>();
             const std::string password = j.at("password").get<std::string>();
             std::string connectionString = std::format("dbname={} user={} password={}", dbname, user, password);
+            quantityColumn = j.at("quantity-column").get<std::string>();
             if (j.contains("font")) { fontPath = j.at("font").get<std::string>(); }
             return connectionString;
         } catch (const nlohmann::json::exception& e) {
@@ -67,5 +69,7 @@ class Config {
         return std::filesystem::path(buffer).parent_path();
     }
 
-    std::string getFont() { return fontPath; }
+    const std::string& getFont() const { return fontPath; }
+
+    const std::string& getQuantityColumn() const { return quantityColumn; }
 };

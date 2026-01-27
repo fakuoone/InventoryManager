@@ -55,6 +55,30 @@ class DbService {
         return dataAvailable;
     }
 
+    bool doesDataExist(Change& change) {
+        const std::string& uKeyName = dbData->headers.at(change.getTable()).uKeyName;
+        const tStringVector& pKeyColumn = dbData->tableRows.at(change.getTable()).at(uKeyName);
+        auto itExisting = std::find(pKeyColumn.begin(), pKeyColumn.end(), change.getCell(uKeyName));
+        if (itExisting != pKeyColumn.end()) {
+            std::size_t foundIndex = itExisting - pKeyColumn.begin();
+            logger.pushLog(Log{std::format("ERROR: Table {} with unique key {}: {} already exists.", change.getTable(), uKeyName, change.getCell(uKeyName))});
+            updateChangeQuantity(change, foundIndex);
+            return true;
+        }
+        return false;
+    }
+
+    void updateChangeQuantity(Change& change, const std::size_t index) {  // inactive
+        const tHeadersInfo& headers = dbData->headers.at(change.getTable());
+        auto itHasQuantityHeader = std::find_if(headers.data.begin(), headers.data.end(), [&](const tHeaderInfo& h) {
+            return h.name == config.getQuantityColumn();
+        });
+        if (itHasQuantityHeader != headers.data.end()) {
+            std::size_t quantityDb = static_cast<std::size_t>(std::stoi(dbData->tableRows.at(change.getTable()).at(config.getQuantityColumn())[index]));
+            logger.pushLog(Log{std::format("EXISTING QUANTITY IS: {}. Doing nothing, feature disabled.", quantityDb)});
+        }
+    }
+
    public:
     DbService(DbInterface& cDbData, ThreadPool& cPool, Config& cConfig, Logger& cLogger) : dbInterface(cDbData), pool(cPool), config(cConfig), logger(cLogger) {}
 
@@ -111,9 +135,9 @@ class DbService {
     }
 
     bool validateChange(Change& change, bool fromGeneration) {
-        // TODO: test with stock
         const tStringVector& tables = dbData->tables;
-        if (std::find(tables.begin(), tables.end(), change.getTable()) == tables.end()) { return false; }
+        auto it = std::find(tables.begin(), tables.end(), change.getTable());
+        if (it == tables.end()) { return false; }
         bool setValidity = true;
         bool allowInvalidChange = change.hasParent() && fromGeneration;
 
@@ -121,6 +145,8 @@ class DbService {
             case changeType::DELETE_ROW:
                 break;
             case changeType::INSERT_ROW:
+                if (doesDataExist(change)) { return false; }
+                [[fallthrough]];
             case changeType::UPDATE_CELLS: {
                 const Change::colValMap& cells = change.getCells();
                 const tHeadersInfo& headers = dbData->headers.at(change.getTable());
@@ -187,9 +213,14 @@ class DbService {
                 return h.name == col && h.type == headerType::FOREIGN_KEY;
             });
             if (it1 != headers.data.end()) {  // && it1->referencedTable != table) {
-                if (!checkReferencedUKeyValue(it1->referencedTable, it1->nullable, val)) {
+                bool alreadyExists = it1->referencedTable == table ? checkReferencedPKeyValue(it1->referencedTable, val) : checkReferencedUKeyValue(it1->referencedTable, it1->nullable, val);
+                if (!alreadyExists) {
                     Change::colValMap requiredCells;
-                    requiredCells.emplace(dbData->headers.at(it1->referencedTable).uKeyName, val);
+                    if (it1->referencedTable == table) {
+                        requiredCells.emplace(dbData->headers.at(it1->referencedTable).pkey, val);
+                    } else {
+                        requiredCells.emplace(dbData->headers.at(it1->referencedTable).uKeyName, val);
+                    }
                     Change reqChange{requiredCells, changeType::INSERT_ROW, getTable(it1->referencedTable)};
                     reqChange.addParent(change.getKey());
                     changes.emplace_back(reqChange);
@@ -197,6 +228,17 @@ class DbService {
             }
         }
         return changes;
+    }
+
+    bool checkReferencedPKeyValue(const std::string& ref, const std::string& val) {
+        // does pkey-value already exist
+        if (val.empty()) { return true; }
+        std::string pKey = dbData->headers.at(ref).pkey;
+        auto it1 = std::ranges::find_if(dbData->tableRows.at(ref).at(pKey), [&](const std::string& h) {
+            return h == val;
+        });
+        if (it1 != dbData->tableRows.at(ref).at(pKey).end()) { return true; }
+        return false;
     }
 
     bool checkReferencedUKeyValue(const std::string& ref, bool nullable, const std::string& val) {

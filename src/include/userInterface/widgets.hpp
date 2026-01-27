@@ -272,14 +272,16 @@ class DbTable {
     eventTypes handleFirstColumnIfNeeded(const std::string& tableName, const std::string& headerName, const std::string& pKey, ImVec2& cursor, const Change* change) {
         eventTypes fromFirst;
         ImVec2 firstColumnStart = ImVec2(-LEFT_RESERVE, cursor.y);
-        ImGui::PushID("FIRST");
         bool selected = false;
-        if (change) { selected = change->isSelected(); }
-        const cellBoilerPlate cellBoiler = cellBoilerPlate(headerName, firstColumnStart, LEFT_RESERVE, true, false, selected, false, INVALID_ID);
-        fromFirst = drawCellSC(cellBoiler, [this](const cellBoilerPlate& cell, const rect& r) -> ACTION_TYPE {
-            return drawFirstColumnSC(cell, r);
-        });
-        ImGui::PopID();
+        if (change) {
+            selected = change->isSelected();
+            ImGui::PushID("FIRST");
+            const cellBoilerPlate cellBoiler = cellBoilerPlate(headerName, firstColumnStart, LEFT_RESERVE, true, false, selected, false, INVALID_ID);
+            fromFirst = drawCellSC(cellBoiler, [this](const cellBoilerPlate& cell, const rect& r) -> ACTION_TYPE {
+                return drawFirstColumnSC(cell, r);
+            });
+            ImGui::PopID();
+        }
         if (fromFirst.mouse != MOUSE_EVENT_TYPE::NONE) {
             lastEvent.type = fromFirst;
             if (change) {
@@ -457,11 +459,7 @@ class DbTable {
             }
         }
 
-        if (ImGui::IsItemClicked()) {
-            result.mouse = MOUSE_EVENT_TYPE::CLICK;
-            logger.pushLog(Log{"hello"});
-        }
-
+        if (ImGui::IsItemClicked()) { result.mouse = MOUSE_EVENT_TYPE::CLICK; }
         return result;
     }
 
@@ -748,4 +746,4 @@ class ChangeOverviewer {
     }
 };
 
-}
+}  // namespace Widgets

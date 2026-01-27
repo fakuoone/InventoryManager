@@ -20,7 +20,9 @@ void ChangeTracker::unfreeze() {
 
 void ChangeTracker::waitIfFrozen() {
     std::unique_lock lock(freezeMtx);
-    freezeCv.wait(lock, [this] { return !frozen.load(std::memory_order_acquire); });
+    freezeCv.wait(lock, [this] {
+        return !frozen.load(std::memory_order_acquire);
+    });
 }
 
 const Change ChangeTracker::getChange(const std::size_t key) {
