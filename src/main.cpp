@@ -22,7 +22,7 @@ int main() {
 
     BomReader bomReader{pool, changeTracker, config, logger};
 
-    App app{dbService, changeTracker, config, logger};
+    App app{dbService, changeTracker, config, bomReader, logger};
 
     app.run();
     return 0;

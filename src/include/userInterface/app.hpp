@@ -7,6 +7,7 @@
 #include "dbService.hpp"
 #include "logger.hpp"
 #include "changeExeService.hpp"
+#include "bom/bomReader.hpp"
 
 #include "userInterface/dbDataVisualizer.hpp"
 #include "userInterface/imGuiDX11Context.hpp"
@@ -20,6 +21,7 @@ class App {
     DbService& dbService;
     ChangeTracker& changeTracker;
     Config& config;
+    BomReader& bomReader;
     Logger& logger;
 
     ChangeExeService changeExe{dbService, changeTracker, logger};
@@ -30,6 +32,8 @@ class App {
     bool dataAvailable{false};
 
     std::shared_ptr<uiChangeInfo> uiChanges;
+
+    std::array<char, 256> csvBuffer;
 
     bool waitForData() {
         if (dataAvailable) { return false; }
@@ -120,8 +124,13 @@ class App {
         }
     }
 
+    void showBom() {
+        bool enterPressed = ImGui::InputText("##edit", csvBuffer.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
+        if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) { bomReader.readBom(std::filesystem::path(std::string(csvBuffer.data()))); }
+    }
+
    public:
-    App(DbService& cDbService, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger) : dbService(cDbService), changeTracker(cChangeTracker), config(cConfig), logger(cLogger) {}
+    App(DbService& cDbService, ChangeTracker& cChangeTracker, Config& cConfig, BomReader& cBomReader, Logger& cLogger) : dbService(cDbService), changeTracker(cChangeTracker), config(cConfig), bomReader(cBomReader), logger(cLogger) {}
 
     App(const App&) = delete;
     App& operator=(const App&) = delete;
@@ -143,11 +152,23 @@ class App {
                 break;
             }
             if (!imguiCtx.beginFrame()) { continue; }
+
+            if (ImGui::BeginTabBar("Main")) {
+
+                if (ImGui::BeginTabItem("Database")) {
+                    running = handleAppState();
+                    ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("BOM")) {
+                    showBom();
+                    ImGui::EndTabItem();
+                }
+
+                ImGui::EndTabBar();
+            }
+
             ImGui::ShowMetricsWindow();
-
-            running = handleAppState();
             drawFpsOverlay();
-
             imguiCtx.endFrame();
         }
     }

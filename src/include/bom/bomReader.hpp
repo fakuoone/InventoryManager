@@ -32,7 +32,94 @@ class BomReader {
     Config& config;
     Logger& logger;
 
+    std::unordered_map<std::string, std::string> bomDbMapping;
+    std::vector<std::vector<std::string>> data;
+
+    std::vector<std::string> parseLine(const std::string& line) {
+        // https://stackoverflow.com/users/25450/sastanin
+        enum class CSVState { UNQUOTED_FIELD, QUOTED_FIELD, QUOTED_QUOTE };
+
+        CSVState state = CSVState::UNQUOTED_FIELD;
+        std::vector<std::string> fields{""};
+        size_t i = 0;  // index of the current field
+        for (char c : line) {
+            switch (state) {
+                case CSVState::UNQUOTED_FIELD:
+                    switch (c) {
+                        case ',':  // end of field
+                            fields.push_back("");
+                            i++;
+                            break;
+                        case '"':
+                            state = CSVState::QUOTED_FIELD;
+                            break;
+                        default:
+                            fields[i].push_back(c);
+                            break;
+                    }
+                    break;
+                case CSVState::QUOTED_FIELD:
+                    switch (c) {
+                        case '"':
+                            state = CSVState::QUOTED_QUOTE;
+                            break;
+                        default:
+                            fields[i].push_back(c);
+                            break;
+                    }
+                    break;
+                case CSVState::QUOTED_QUOTE:
+                    switch (c) {
+                        case ',':  // , after closing quote
+                            fields.push_back("");
+                            i++;
+                            state = CSVState::UNQUOTED_FIELD;
+                            break;
+                        case '"':  // "" -> "
+                            fields[i].push_back('"');
+                            state = CSVState::QUOTED_FIELD;
+                            break;
+                        default:  // end of quote
+                            state = CSVState::UNQUOTED_FIELD;
+                            break;
+                    }
+                    break;
+            }
+        }
+        return fields;
+    }
+
+    void readData(std::filesystem::path csv) {
+        std::ifstream file(csv);
+        std::string line;
+        std::pair<std::size_t, std::size_t> colCounts = {0, 0};
+        std::size_t i = 0;
+
+        while (std::getline(file, line)) {
+            std::vector<std::string> row = parseLine(line);
+            colCounts.first = row.size();
+            data.push_back(row);
+            if (i > 0) {
+                if (colCounts.first != colCounts.second) {
+                    logger.pushLog(Log{"ERROR: BOM has rows with different lengths."});
+                    return;
+                }
+            }
+            colCounts.second = colCounts.first;
+            colCounts.first = 0;
+            i++;
+        }
+    }
+
+    void createMappings() {}
+
+    void run(std::filesystem::path csv) {
+        readData(csv);
+        createMappings();
+    }
+
    public:
     BomReader(ThreadPool& cThreadPool, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger) : threadPool(cThreadPool), changeTracker(cChangeTracker), config(cConfig), logger(cLogger) {}
-    void readBom() {}
+
+    void readBom(std::filesystem::path bomCsv) { threadPool.submit(&BomReader::run, this, bomCsv); }
 };
