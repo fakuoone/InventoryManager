@@ -1,7 +1,8 @@
 #include "changeTracker.hpp"
 
 void ChangeTracker::mergeCellChanges(Change& existingChange, const Change& newChange) {
-    logger.pushLog(Log{std::format("        Merging cell changes {} and {}", existingChange.getKey(), newChange.getKey())});
+    logger.pushLog(Log{std::format(
+        "        Merging cell changes {} and {}", existingChange.getKey(), newChange.getKey())});
     existingChange ^ newChange;
 }
 
@@ -20,43 +21,52 @@ void ChangeTracker::unfreeze() {
 
 void ChangeTracker::waitIfFrozen() {
     std::unique_lock lock(freezeMtx);
-    freezeCv.wait(lock, [this] {
-        return !frozen.load(std::memory_order_acquire);
-    });
+    freezeCv.wait(lock, [this] { return !frozen.load(std::memory_order_acquire); });
 }
 
 const Change ChangeTracker::getChange(const std::size_t key) {
     std::lock_guard<std::mutex> lg(changes.mtx);
     assert(changes.flatData.contains(key));
-    if (changes.flatData.contains(key)) { return changes.flatData.at(key); }
-    return changes.flatData.at(key);  // TODO: fix
+    if (changes.flatData.contains(key)) {
+        return changes.flatData.at(key);
+    }
+    return changes.flatData.at(key); // TODO: fix
 }
 
 bool ChangeTracker::isConflicting(const Change& newChange) {
-    if (!newChange.hasRowId() || newChange.getType() == changeType::INSERT_ROW) { return false; }
+    if (!newChange.hasRowId() || newChange.getType() == changeType::INSERT_ROW) {
+        return false;
+    }
     const std::string& table = newChange.getTable();
     const uint32_t rowId = newChange.getRowId();
-    if (!changes.pKeyMappedData.contains(table)) { return false; }
-    if (!changes.pKeyMappedData.at(table).contains(rowId)) { return false; }
+    if (!changes.pKeyMappedData.contains(table)) {
+        return false;
+    }
+    if (!changes.pKeyMappedData.at(table).contains(rowId)) {
+        return false;
+    }
     return true;
 }
 
 Change& ChangeTracker::manageConflictL(Change& newChange) {
-    // TODO: only allow changes with the same UKEY, if it is updatecells (dont allow insertrow, if its the same content)
-    if (!isConflicting(newChange)) { return newChange; }
+    // TODO: only allow changes with the same UKEY, if it is updatecells (dont allow insertrow, if
+    // its the same content)
+    if (!isConflicting(newChange)) {
+        return newChange;
+    }
     const std::string& table = newChange.getTable();
     const uint32_t rowId = newChange.getRowId();
     Change& existingChange = changes.flatData.at(changes.pKeyMappedData.at(table).at(rowId));
     switch (existingChange.getType()) {
-        case changeType::DELETE_ROW:
-            return existingChange;
-        case changeType::INSERT_ROW:
-        case changeType::UPDATE_CELLS:
-            mergeCellChanges(existingChange, newChange);
-            dbService.validateChange(existingChange, false);
-            return existingChange;
-        default:
-            break;
+    case changeType::DELETE_ROW:
+        return existingChange;
+    case changeType::INSERT_ROW:
+    case changeType::UPDATE_CELLS:
+        mergeCellChanges(existingChange, newChange);
+        dbService.validateChange(existingChange, false);
+        return existingChange;
+    default:
+        break;
     }
     return existingChange;
 }
@@ -66,14 +76,18 @@ void ChangeTracker::propagateValidity(Change& change) {
     if (change.hasChildren()) {
         bool childSum = true;
         for (const std::size_t& childKey : change.getChildren()) {
-            if (!changes.flatData.contains(childKey)) { continue; }
+            if (!changes.flatData.contains(childKey)) {
+                continue;
+            }
             childSum &= changes.flatData.at(childKey).isValid();
         }
         change.setValidity(childSum);
     }
     if (change.hasParent()) {
         for (const std::size_t& parentKey : change.getParents()) {
-            if (changes.flatData.contains(parentKey)) { propagateValidity(changes.flatData.at(parentKey)); }
+            if (changes.flatData.contains(parentKey)) {
+                propagateValidity(changes.flatData.at(parentKey));
+            }
         }
     }
 }
@@ -82,16 +96,20 @@ bool ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRow
     {
         std::lock_guard<std::mutex> lg(changes.mtx);
         if (changes.uKeyMappedData.contains(change.getTable())) {
-            // checks is there already exists a change, that has the same value in the ukey (name) column
+            // checks is there already exists a change, that has the same value in the ukey (name)
+            // column
             const std::string ukey = dbService.getTableUKey(change.getTable());
             if (changes.uKeyMappedData.at(change.getTable()).contains(change.getCell(ukey))) {
-                logger.pushLog(Log{std::format("ERROR: change with the same ukey (name): {} already exists", ukey)});
+                logger.pushLog(Log{std::format(
+                    "ERROR: change with the same ukey (name): {} already exists", ukey)});
                 return false;
             }
         }
     }
 
-    if (!dbService.validateChange(change, false)) { return false; }
+    if (!dbService.validateChange(change, false)) {
+        return false;
+    }
 
     std::vector<Change> allChanges;
     if (change.getType() == changeType::UPDATE_CELLS) {
@@ -111,7 +129,9 @@ bool ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRow
     for (Change& c : allChanges) {
         c = manageConflictL(c);
         propagateValidity(c);
-        if (!addChangeInternalL(c)) { return false; }
+        if (!addChangeInternalL(c)) {
+            return false;
+        }
     }
 
     return true;
@@ -119,9 +139,13 @@ bool ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRow
 
 void ChangeTracker::collectRequiredChangesL(Change& change, std::vector<Change>& out) {
     std::vector<Change> required = dbService.getRequiredChanges(change, changes.maxPKeys);
-    if (required.size() == 0) { releaseAllDependancies(change); }
+    if (required.size() == 0) {
+        releaseAllDependancies(change);
+    }
     for (Change& r : required) {
-        if (!dbService.validateChange(r, true)) { return; }
+        if (!dbService.validateChange(r, true)) {
+            return;
+        }
         std::size_t existingRequiredKey = findExistingRequired(r);
         bool released = releaseDependancy(change, r);
         if (existingRequiredKey != 0) {
@@ -129,23 +153,32 @@ void ChangeTracker::collectRequiredChangesL(Change& change, std::vector<Change>&
             if (released) {
                 existingChange.addParent(change.getKey());
                 existingChange.setSelected(change.isSelected());
-                change.pushChild(existingChange);  // has to be set here, instead of getRequiredChanges, because this will not get added to flatData
+                change.pushChild(
+                    existingChange); // has to be set here, instead of getRequiredChanges, because
+                                     // this will not get added to flatData
             }
         } else {
             change.pushChild(r);
         }
-        if (existingRequiredKey != 0) { continue; }
+        if (existingRequiredKey != 0) {
+            continue;
+        }
         collectRequiredChangesL(r, out);
     }
     out.push_back(change);
 }
 
 std::size_t ChangeTracker::findExistingRequired(const Change& rChange) {
-    // finds, if a change with the same resulting table ukey-value exists (by looping over all changes of a table, which i didnt want)
+    // finds, if a change with the same resulting table ukey-value exists (by looping over all
+    // changes of a table, which i didnt want)
     const std::string& table = rChange.getTable();
-    if (!changes.uKeyMappedData.contains(table)) { return 0; }
+    if (!changes.uKeyMappedData.contains(table)) {
+        return 0;
+    }
     const std::string& rChangeCellValue = rChange.getCell(dbService.getTableUKey(table));
-    if (changes.uKeyMappedData.at(table).contains(rChangeCellValue)) { return changes.uKeyMappedData.at(table).at(rChangeCellValue); }
+    if (changes.uKeyMappedData.at(table).contains(rChangeCellValue)) {
+        return changes.uKeyMappedData.at(table).at(rChangeCellValue);
+    }
     return 0;
 }
 
@@ -174,16 +207,22 @@ bool ChangeTracker::releaseDependancy(Change& change, const Change& rC) {
     }
 
     // change is not
-    if (newRValue.empty()) { return false; }
+    if (newRValue.empty()) {
+        return false;
+    }
 
     // find the previous requiredChange that needs to be released
     bool hadRelevantChildren = false;
     for (const std::size_t& childKey : change.getChildren()) {
-        if (!changes.flatData.contains(childKey)) { continue; }  // not created yet
+        if (!changes.flatData.contains(childKey)) {
+            continue;
+        } // not created yet
         Change& child = changes.flatData.at(childKey);
-        if (child.getTable() != rCTableName) { continue; }  // wrong child
+        if (child.getTable() != rCTableName) {
+            continue;
+        } // wrong child
         hadRelevantChildren = true;
-        if (child.getCell(rCUKeyHeader) != newRValue) {  // previous requiredChange found
+        if (child.getCell(rCUKeyHeader) != newRValue) { // previous requiredChange found
             change.removeChild(childKey);
             child.removeParent(change.getKey());
             return true;
@@ -194,7 +233,9 @@ bool ChangeTracker::releaseDependancy(Change& change, const Change& rC) {
 
 void ChangeTracker::allocateIds(std::vector<Change>& allChanges) {
     for (Change& c : allChanges) {
-        if (!c.hasRowId()) { c.setRowId(++changes.maxPKeys[c.getTable()]); }
+        if (!c.hasRowId()) {
+            c.setRowId(++changes.maxPKeys[c.getTable()]);
+        }
     }
 }
 
@@ -204,15 +245,25 @@ bool ChangeTracker::addChangeInternalL(const Change& change) {
     changes.pKeyMappedData[tableName].insert_or_assign(change.getRowId(), change.getKey());
     // store ukey value to prevent duplicates
     const std::string changeUKeyValue = change.getCell(dbService.getTableUKey(tableName));
-    if (!changeUKeyValue.empty()) { changes.uKeyMappedData[tableName].insert_or_assign(changeUKeyValue, change.getKey()); }
-    logger.pushLog(Log{std::format("    Adding change {} to table {} at id {}", change.getKey(), change.getTable(), change.getRowId())});
+    if (!changeUKeyValue.empty()) {
+        changes.uKeyMappedData[tableName].insert_or_assign(changeUKeyValue, change.getKey());
+    }
+    logger.pushLog(Log{std::format("    Adding change {} to table {} at id {}",
+                                   change.getKey(),
+                                   change.getTable(),
+                                   change.getRowId())});
     return true;
 }
 
-void ChangeTracker::collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected) {
-    if (collected.contains(key)) { return; }
+void ChangeTracker::collectAllDescendants(std::size_t key,
+                                          std::unordered_set<std::size_t>& collected) {
+    if (collected.contains(key)) {
+        return;
+    }
     const Change& change = changes.flatData.at(key);
-    if (change.getParentCount() > 1) { return; }  // dont delete, when multiple parents exist
+    if (change.getParentCount() > 1) {
+        return;
+    } // dont delete, when multiple parents exist
     collected.insert(key);
     for (std::size_t childKey : change.getChildren()) {
         collectAllDescendants(childKey, collected);
@@ -248,7 +299,9 @@ uiChangeInfo ChangeTracker::getSnapShot() {
 }
 
 void ChangeTracker::removeChangeL(std::size_t key) {
-    if (!changes.flatData.contains(key)) { return; };
+    if (!changes.flatData.contains(key)) {
+        return;
+    };
     const Change& change = changes.flatData.at(key);
     const std::string& tableName = change.getTable();
     auto& pkeyMap = changes.pKeyMappedData.at(tableName);
@@ -279,20 +332,28 @@ void ChangeTracker::setMaxPKeys(std::map<std::string, std::size_t> pk) {
 std::size_t ChangeTracker::getMaxPKey(const std::string table) {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
 
-    if (!changes.maxPKeys.contains(table)) { return 0; }
+    if (!changes.maxPKeys.contains(table)) {
+        return 0;
+    }
     return changes.maxPKeys[table];
 }
 
 bool ChangeTracker::isChangeSelected(const std::size_t key) {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    if (!changes.flatData.contains(key)) { return false; }
+    if (!changes.flatData.contains(key)) {
+        return false;
+    }
     return changes.flatData.at(key).isSelected();
 }
 
 void ChangeTracker::toggleChangeSelect(const std::size_t key) {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    if (!changes.flatData.contains(key)) { return; }
-    if (changes.flatData.at(key).hasParent()) { return; }
+    if (!changes.flatData.contains(key)) {
+        return;
+    }
+    if (changes.flatData.at(key).hasParent()) {
+        return;
+    }
     setChangeRecL(changes.flatData.at(key), !changes.flatData.at(key).isSelected());
     return;
 }
@@ -308,7 +369,9 @@ void ChangeTracker::setChangeRecL(Change& change, bool value) {
 
 bool ChangeTracker::hasChild(const std::size_t key) {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    if (!changes.flatData.contains(key)) { return false; }
+    if (!changes.flatData.contains(key)) {
+        return false;
+    }
     return changes.flatData.at(key).hasChildren();
 }
 
@@ -327,7 +390,9 @@ std::vector<std::size_t> ChangeTracker::getRoots() {
     all.reserve(count);
 
     for (auto it = changes.flatData.begin(); it != changes.flatData.end(); ++it) {
-        if (!it->second.hasParent()) { all.push_back(it->first); }
+        if (!it->second.hasParent()) {
+            all.push_back(it->first);
+        }
     }
 
     return all;

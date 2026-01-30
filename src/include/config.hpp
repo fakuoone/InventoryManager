@@ -11,7 +11,7 @@
 #include <windows.h>
 
 class Config {
-   private:
+  private:
     std::string dbString;
     std::string fontPath;
     std::string quantityColumn;
@@ -22,9 +22,12 @@ class Config {
             const std::string dbname = j.at("dbname").get<std::string>();
             const std::string user = j.at("user").get<std::string>();
             const std::string password = j.at("password").get<std::string>();
-            std::string connectionString = std::format("dbname={} user={} password={}", dbname, user, password);
+            std::string connectionString =
+                std::format("dbname={} user={} password={}", dbname, user, password);
             quantityColumn = j.at("quantity-column").get<std::string>();
-            if (j.contains("font")) { fontPath = j.at("font").get<std::string>(); }
+            if (j.contains("font")) {
+                fontPath = j.at("font").get<std::string>();
+            }
             return connectionString;
         } catch (const nlohmann::json::exception& e) {
             logger.pushLog(Log{std::format("ERROR PARSING CONFIG: ", e.what())});
@@ -51,7 +54,7 @@ class Config {
         return databaseJsonToDbString(config);
     }
 
-   public:
+  public:
     Config(Logger& cLogger) : logger(cLogger) {}
 
     std::string setConfigString(const std::filesystem::path& configPath) {

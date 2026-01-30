@@ -16,7 +16,9 @@ ThreadPool::~ThreadPool() {
     cv.notify_all();
 
     for (auto& t : workers) {
-        if (t.joinable()) { t.join(); }
+        if (t.joinable()) {
+            t.join();
+        }
     }
     logger.pushLog(Log(std::format("deleted threads")));
 }
@@ -28,11 +30,13 @@ void ThreadPool::workerLoop() {
             std::unique_lock<std::mutex> lock(mtx);
             cv.wait(lock, [this] { return stopping || !tasks.empty(); });
 
-            if (stopping && tasks.empty()) { return; }
+            if (stopping && tasks.empty()) {
+                return;
+            }
 
             task = std::move(tasks.front());
             tasks.pop();
         }
-        task();  // execute outside the lock
+        task(); // execute outside the lock
     }
 }

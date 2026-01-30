@@ -1,21 +1,25 @@
 #pragma once
 
 #include "change.hpp"
-#include "logger.hpp"
 #include "changeTracker.hpp"
-#include "dbService.hpp"
 #include "dbInterface.hpp"
+#include "dbService.hpp"
+#include "logger.hpp"
 
 class ChangeExeService {
-   private:
+  private:
     DbService& dbService;
     ChangeTracker& changeTracker;
     Logger& logger;
 
     std::future<Change::chHashV> fApplyChanges;
 
-    void collectChanges(std::size_t key, std::unordered_set<std::size_t>& visited, std::vector<Change>& order) {
-        if (visited.contains(key)) { return; }
+    void collectChanges(std::size_t key,
+                        std::unordered_set<std::size_t>& visited,
+                        std::vector<Change>& order) {
+        if (visited.contains(key)) {
+            return;
+        }
         visited.insert(key);
         if (changeTracker.hasChild(key)) {
             for (std::size_t child : changeTracker.getChildren(key)) {
@@ -36,9 +40,12 @@ class ChangeExeService {
         return order;
     }
 
-   public:
+  public:
     bool isChangeApplicationDone() {
-        if (fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) { return true; }
+        if (fApplyChanges.valid() &&
+            fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+            return true;
+        }
         return false;
     }
 
@@ -73,5 +80,6 @@ class ChangeExeService {
         changeTracker.unfreeze();
     }
 
-    ChangeExeService(DbService& cDbService, ChangeTracker& cChangeTracker, Logger& cLogger) : dbService(cDbService), changeTracker(cChangeTracker), logger(cLogger) {}
+    ChangeExeService(DbService& cDbService, ChangeTracker& cChangeTracker, Logger& cLogger)
+        : dbService(cDbService), changeTracker(cChangeTracker), logger(cLogger) {}
 };

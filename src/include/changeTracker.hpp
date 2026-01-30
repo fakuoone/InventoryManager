@@ -10,13 +10,13 @@ struct protectedChanges {
     std::mutex mtx;
     Change::chHashM flatData;
     Change::chHashV orderedTree;
-    Change::ctPKMD pKeyMappedData;  // table -> primaryKey -> changeKey
-    Change::ctUKMD uKeyMappedData;  // table -> uKey value -> changeKey
+    Change::ctPKMD pKeyMappedData; // table -> primaryKey -> changeKey
+    Change::ctUKMD uKeyMappedData; // table -> uKey value -> changeKey
     std::map<std::string, std::size_t> maxPKeys;
 };
 
 class ChangeTracker {
-   private:
+  private:
     protectedChanges changes;
     std::atomic<bool> frozen{false};
     std::mutex freezeMtx;
@@ -40,8 +40,9 @@ class ChangeTracker {
     void collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected);
     void removeChangeL(std::size_t key);
 
-   public:
-    ChangeTracker(DbService& cDbService, Logger& cLogger) : dbService(cDbService), logger(cLogger) {}
+  public:
+    ChangeTracker(DbService& cDbService, Logger& cLogger)
+        : dbService(cDbService), logger(cLogger) {}
 
     void freeze();
     void unfreeze();

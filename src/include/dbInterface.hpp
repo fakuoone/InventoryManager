@@ -11,8 +11,7 @@
 
 #include <pqxx/pqxx>
 
-template <typename T>
-struct protectedData {
+template <typename T> struct protectedData {
     T data;
     std::mutex mtx;
     std::condition_variable cv;
@@ -41,8 +40,8 @@ struct tHeaderInfo {
 using tHeaderVector = std::vector<tHeaderInfo>;
 struct tHeadersInfo {
     tHeaderVector data;
-    std::string pkey;      // ID
-    std::string uKeyName;  // NAME
+    std::string pkey;     // ID
+    std::string uKeyName; // NAME
 };
 
 using tStringVector = std::vector<std::string>;
@@ -65,7 +64,7 @@ struct protectedConnData {
 };
 
 class DbInterface {
-   private:
+  private:
     protectedData<tStringVector> tables;
     protectedData<tHeaderMap> tableHeaders;
     protectedData<tRowMap> tableRows;
@@ -79,7 +78,7 @@ class DbInterface {
         return transactionData(connData.connString);
     }
 
-   public:
+  public:
     DbInterface(Logger& cLogger) : logger(cLogger) {}
 
     void initializeWithConfigString(const std::string& confString) {
@@ -88,23 +87,27 @@ class DbInterface {
             connData.connString = confString;
             connData.connStringValid = !confString.empty();
         }
-        connData.cv.notify_all();  // wake all waiting DB threads
+        connData.cv.notify_all(); // wake all waiting DB threads
     }
 
     void acquireTables() {
         try {
             // TODO: There is a UB somewhere related to getTransaction
             /*
-            ~~18064~~ Error #33: UNINITIALIZED READ: reading 0x000000672effe29a-0x000000672effe2a0 6 byte(s) within 0x000000672effe290-0x000000672effe2b8
+            ~~18064~~ Error #33: UNINITIALIZED READ: reading 0x000000672effe29a-0x000000672effe2a0 6
+            byte(s) within 0x000000672effe290-0x000000672effe2b8
             ~~18064~~ # 0 ntdll.dll!RcContinueExit
             ~~18064~~ # 1 ntdll.dll!RtlUnwindEx
-            ~~18064~~ # 2 libgcc_s_seh-1.dll!?                                                      +0x0      (0x00007ffc4bcac44f <libgcc_s_seh-1.dll+0x1c44f>)
-            ~~18064~~ # 3 _ZNSt17_Function_handlerIFSt10unique_ptrINSt13__future_base12_Result_baseENS2_8_DeleterEEvENS1_12_Task_setterIS0_INS1_7_ResultIvEES3_EZNS1_11_Task_stateIZN10ThreadPool6submitIM11DbInterfaceFvvEJPSD_EEEDaOT_DpOT0_EUlvE_SaIiEFvvEE6_M_runEvEUlvE_vEEE9_M_invo
+            ~~18064~~ # 2 libgcc_s_seh-1.dll!? +0x0 (0x00007ffc4bcac44f
+            <libgcc_s_seh-1.dll+0x1c44f>)
+            ~~18064~~ # 3
+            _ZNSt17_Function_handlerIFSt10unique_ptrINSt13__future_base12_Result_baseENS2_8_DeleterEEvENS1_12_Task_setterIS0_INS1_7_ResultIvEES3_EZNS1_11_Task_stateIZN10ThreadPool6submitIM11DbInterfaceFvvEJPSD_EEEDaOT_DpOT0_EUlvE_SaIiEFvvEE6_M_runEvEUlvE_vEEE9_M_invo
             ~~18064~~ # 4 KERNELBASE.dll!RaiseException
             ~~18064~~ # 5 DbInterface::getTransaction
             */
             transactionData transaction = getTransaction();
-            const std::string tableQuery = "SELECT table_name FROM information_schema.tables WHERE table_schema='public'";
+            const std::string tableQuery =
+                "SELECT table_name FROM information_schema.tables WHERE table_schema='public'";
             auto result = transaction.tx.query<std::string>(tableQuery);
             logger.pushLog(Log{tableQuery});
             {
@@ -150,30 +153,32 @@ class DbInterface {
             tHeaderInfo info{header, headerType::DATA, "", true};
 
             // Nullable
-            const std::string nullQuery = std::format(
-                "SELECT NOT a.attnotnull AS is_nullable "
-                "FROM pg_attribute a "
-                "JOIN pg_class c ON c.oid = a.attrelid "
-                "WHERE c.relname = '{}' "
-                "  AND a.attname = '{}' "
-                "  AND a.attnum > 0 "
-                "  AND NOT a.attisdropped",
-                table, header);
+            const std::string nullQuery = std::format("SELECT NOT a.attnotnull AS is_nullable "
+                                                      "FROM pg_attribute a "
+                                                      "JOIN pg_class c ON c.oid = a.attrelid "
+                                                      "WHERE c.relname = '{}' "
+                                                      "  AND a.attname = '{}' "
+                                                      "  AND a.attnum > 0 "
+                                                      "  AND NOT a.attisdropped",
+                                                      table,
+                                                      header);
 
             pqxx::result nullResult = transaction.tx.exec(nullQuery);
-            if (!nullResult.empty()) { info.nullable = nullResult[0]["is_nullable"].as<bool>(); }
+            if (!nullResult.empty()) {
+                info.nullable = nullResult[0]["is_nullable"].as<bool>();
+            }
 
             // Primary key
-            const std::string pkQuery = std::format(
-                "SELECT 1 "
-                "FROM pg_constraint c "
-                "JOIN pg_attribute a "
-                "  ON a.attrelid = c.conrelid "
-                " AND a.attnum = ANY (c.conkey) "
-                "WHERE c.contype = 'p' "
-                "  AND c.conrelid = '{}'::regclass "
-                "  AND a.attname = '{}'",
-                table, header);
+            const std::string pkQuery = std::format("SELECT 1 "
+                                                    "FROM pg_constraint c "
+                                                    "JOIN pg_attribute a "
+                                                    "  ON a.attrelid = c.conrelid "
+                                                    " AND a.attnum = ANY (c.conkey) "
+                                                    "WHERE c.contype = 'p' "
+                                                    "  AND c.conrelid = '{}'::regclass "
+                                                    "  AND a.attname = '{}'",
+                                                    table,
+                                                    header);
 
             pqxx::result pkResult = transaction.tx.exec(pkQuery);
 
@@ -185,16 +190,16 @@ class DbInterface {
             }
 
             // UNIQUE (single-column only)
-            const std::string uqQuery = std::format(
-                "SELECT array_length(c.conkey, 1) AS key_len "
-                "FROM pg_constraint c "
-                "JOIN pg_attribute a "
-                "  ON a.attrelid = c.conrelid "
-                " AND a.attnum = ANY (c.conkey) "
-                "WHERE c.contype = 'u' "
-                "  AND c.conrelid = '{}'::regclass "
-                "  AND a.attname = '{}'",
-                table, header);
+            const std::string uqQuery = std::format("SELECT array_length(c.conkey, 1) AS key_len "
+                                                    "FROM pg_constraint c "
+                                                    "JOIN pg_attribute a "
+                                                    "  ON a.attrelid = c.conrelid "
+                                                    " AND a.attnum = ANY (c.conkey) "
+                                                    "WHERE c.contype = 'u' "
+                                                    "  AND c.conrelid = '{}'::regclass "
+                                                    "  AND a.attname = '{}'",
+                                                    table,
+                                                    header);
 
             pqxx::result uqResult = transaction.tx.exec(uqQuery);
             if (!uqResult.empty()) {
@@ -203,7 +208,10 @@ class DbInterface {
                     info.type = headerType::UNIQUE_KEY;
                     headers.uKeyName = header;
                 } else {
-                    logger.pushLog(Log{std::format("WARNING: composite UNIQUE key on table '{}', column '{}' ignored", table, header)});
+                    logger.pushLog(Log{std::format(
+                        "WARNING: composite UNIQUE key on table '{}', column '{}' ignored",
+                        table,
+                        header)});
                 }
 
                 headers.data.push_back(info);
@@ -211,21 +219,21 @@ class DbInterface {
             }
 
             // Foreign key
-            const std::string fkQuery = std::format(
-                "SELECT "
-                "  c.confrelid::regclass AS referenced_table, "
-                "  af.attname           AS referenced_column "
-                "FROM pg_constraint c "
-                "JOIN pg_attribute a "
-                "  ON a.attrelid = c.conrelid "
-                " AND a.attnum = ANY (c.conkey) "
-                "JOIN pg_attribute af "
-                "  ON af.attrelid = c.confrelid "
-                " AND af.attnum = ANY (c.confkey) "
-                "WHERE c.contype = 'f' "
-                "  AND c.conrelid = '{}'::regclass "
-                "  AND a.attname = '{}'",
-                table, header);
+            const std::string fkQuery = std::format("SELECT "
+                                                    "  c.confrelid::regclass AS referenced_table, "
+                                                    "  af.attname           AS referenced_column "
+                                                    "FROM pg_constraint c "
+                                                    "JOIN pg_attribute a "
+                                                    "  ON a.attrelid = c.conrelid "
+                                                    " AND a.attnum = ANY (c.conkey) "
+                                                    "JOIN pg_attribute af "
+                                                    "  ON af.attrelid = c.confrelid "
+                                                    " AND af.attnum = ANY (c.confkey) "
+                                                    "WHERE c.contype = 'f' "
+                                                    "  AND c.conrelid = '{}'::regclass "
+                                                    "  AND a.attname = '{}'",
+                                                    table,
+                                                    header);
 
             pqxx::result fkResult = transaction.tx.exec(fkQuery);
             if (!fkResult.empty()) {
@@ -283,7 +291,8 @@ class DbInterface {
         {
             std::lock_guard<std::mutex> lgTables{tables.mtx};
             if (std::find(tables.data.begin(), tables.data.end(), table) == tables.data.end()) {
-                logger.pushLog(Log{std::format("ERROR: Acquiring rows: Table {} is unknown.", table)});
+                logger.pushLog(
+                    Log{std::format("ERROR: Acquiring rows: Table {} is unknown.", table)});
                 return;
             }
         }
@@ -293,12 +302,16 @@ class DbInterface {
         std::lock_guard<std::mutex> lgTableHeaders(tableHeaders.mtx);
         for (const auto& col : cols.data) {
             const tHeaderVector& localHeaders = tableHeaders.data.at(table).data;
-            if (std::ranges::find_if(localHeaders, [&](const tHeaderInfo& h) { return h.name == col.name; }) == localHeaders.end()) {
-                logger.pushLog(Log{std::format("ERROR: Acquiring rows: Header {} for table {} is unknown.", col.name, table)});
+            if (std::ranges::find_if(localHeaders, [&](const tHeaderInfo& h) {
+                    return h.name == col.name;
+                }) == localHeaders.end()) {
+                logger.pushLog(Log{std::format(
+                    "ERROR: Acquiring rows: Header {} for table {} is unknown.", col.name, table)});
                 return;
             }
             try {
-                const std::string headerQuery = std::format("    SELECT {} FROM {}", col.name, table);
+                const std::string headerQuery =
+                    std::format("    SELECT {} FROM {}", col.name, table);
                 logger.pushLog(Log{headerQuery});
 
                 transactionData transaction = getTransaction();
@@ -310,7 +323,8 @@ class DbInterface {
 
                 for (const pqxx::row& row : r) {
                     cells.emplace_back(row[col.name].c_str());
-                    logger.pushLog(Log{std::format("        {}: {}", col.name, row[col.name].c_str())});
+                    logger.pushLog(
+                        Log{std::format("        {}: {}", col.name, row[col.name].c_str())});
                 }
                 colCellMap.emplace(col.name, cells);
 
@@ -345,13 +359,16 @@ class DbInterface {
         for (const auto& [table, headers] : work) {
             acquireTableRows(table, headers);
         }
-        return completeDbData{tables.data, tableHeaders.data, tableRows.data, std::map<std::string, std::size_t>{}};
+        return completeDbData{
+            tables.data, tableHeaders.data, tableRows.data, std::map<std::string, std::size_t>{}};
     }
 
     Change::chHashV applyChanges(std::vector<Change> changes, sqlAction action) {
         Change::chHashV successfulChanges;
         for (const auto& change : changes) {
-            if (applySingleChange(change, action)) { successfulChanges.push_back(change.getKey()); }
+            if (applySingleChange(change, action)) {
+                successfulChanges.push_back(change.getKey());
+            }
         }
         return successfulChanges;
     }

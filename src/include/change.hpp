@@ -4,8 +4,8 @@
 
 #include "logger.hpp"
 
-#include <mutex>
 #include <atomic>
+#include <mutex>
 
 #include <cstdint>
 
@@ -20,24 +20,23 @@ struct imTable {
 };
 
 class Change {
-    /* 
-    1. create table (not supported) 
-    2. delete table (not supported) 
-    3. add row to any table (how to say, which columns need to be specified?) 
-    4. remove row from any table 
-    5. change n cells in a row 
+    /*
+    1. create table (not supported)
+    2. delete table (not supported)
+    3. add row to any table (how to say, which columns need to be specified?)
+    4. remove row from any table
+    5. change n cells in a row
     */
-   public:
+  public:
     using colValMap = std::map<std::string, std::string>;
-    template <class T>
-    using chSimpleMap = std::map<T, std::size_t>;
+    template <class T> using chSimpleMap = std::map<T, std::size_t>;
     using chHHMap = chSimpleMap<std::size_t>;
     using chHashV = std::vector<std::size_t>;
     using chHashM = std::map<std::size_t, Change>;
     using ctPKMD = std::map<std::string, chHHMap>;
     using ctUKMD = std::map<std::string, chSimpleMap<std::string>>;
 
-   private:
+  private:
     static inline std::atomic<std::size_t> nextId{1};
     inline static Logger* logger = nullptr;
 
@@ -56,8 +55,13 @@ class Change {
     bool locallyValid{false};
     bool valid{false};
 
-   public:
-    Change(colValMap cCells, changeType cType, imTable cTable, std::optional<std::size_t> cRowId = std::nullopt) : changeKey(nextId++), changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) {}
+  public:
+    Change(colValMap cCells,
+           changeType cType,
+           imTable cTable,
+           std::optional<std::size_t> cRowId = std::nullopt)
+        : changeKey(nextId++), changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) {
+    }
 
     static void setLogger(Logger& l) { logger = &l; }
 
@@ -74,7 +78,9 @@ class Change {
     colValMap getCells() const { return changedCells; }
 
     std::string getCell(const std::string& header) const {
-        if (!changedCells.contains(header)) { return std::string(); }
+        if (!changedCells.contains(header)) {
+            return std::string();
+        }
         return changedCells.at(header);
     }
 
@@ -87,12 +93,15 @@ class Change {
         if (this != &other) {
             for (auto const& [col, val] : other.changedCells) {
                 this->changedCells[col] = val;
-                logger->pushLog(Log{std::format("            change now has column: {} with cell value: {}", col, val)});
+                logger->pushLog(Log{std::format(
+                    "            change now has column: {} with cell value: {}", col, val)});
             }
             // this->parentKey = other.getParent();
             // this->selected = other.isSelected();
         }
-        if (logger) { logger->pushLog(Log{std::format("^^ operator")}); }
+        if (logger) {
+            logger->pushLog(Log{std::format("^^ operator")});
+        }
 
         return *this;
     }
@@ -102,39 +111,46 @@ class Change {
         std::string sqlString;
 
         switch (type) {
-            case changeType::DELETE_ROW:
-                sqlString = std::format("DELETE FROM {} WHERE {} = {}", tableData.name, "id", rowId.value());
-                break;
-            case changeType::INSERT_ROW: {
-                std::string columnNames;
-                std::string cellValues;
-                bool first = true;
-                for (const auto& [col, val] : changedCells) {
-                    if (col.empty() || val.empty()) { continue; }
-                    if (!first) {
-                        columnNames += ", ";
-                        cellValues += ", ";
-                    }
-                    first = false;
-                    columnNames += col;
-                    cellValues += std::format("'{}'", val);
+        case changeType::DELETE_ROW:
+            sqlString =
+                std::format("DELETE FROM {} WHERE {} = {}", tableData.name, "id", rowId.value());
+            break;
+        case changeType::INSERT_ROW: {
+            std::string columnNames;
+            std::string cellValues;
+            bool first = true;
+            for (const auto& [col, val] : changedCells) {
+                if (col.empty() || val.empty()) {
+                    continue;
                 }
-                sqlString = std::format("INSERT INTO {} ({}) VALUES ({});", tableData.name, columnNames, cellValues);
-                break;
-            }
-            case changeType::UPDATE_CELLS: {
-                std::string columnValuePairs;
-                bool first = true;
-                for (const auto& [col, val] : changedCells) {
-                    if (!first) { columnValuePairs += ", "; }
-                    first = false;
-                    columnValuePairs += std::format("{} = '{}'", col, val);
+                if (!first) {
+                    columnNames += ", ";
+                    cellValues += ", ";
                 }
-                sqlString = std::format("UPDATE {} SET {} WHERE id = {};", tableData.name, columnValuePairs, rowId.value());
-                break;
+                first = false;
+                columnNames += col;
+                cellValues += std::format("'{}'", val);
             }
-            default:
-                break;
+            sqlString = std::format(
+                "INSERT INTO {} ({}) VALUES ({});", tableData.name, columnNames, cellValues);
+            break;
+        }
+        case changeType::UPDATE_CELLS: {
+            std::string columnValuePairs;
+            bool first = true;
+            for (const auto& [col, val] : changedCells) {
+                if (!first) {
+                    columnValuePairs += ", ";
+                }
+                first = false;
+                columnValuePairs += std::format("{} = '{}'", col, val);
+            }
+            sqlString = std::format(
+                "UPDATE {} SET {} WHERE id = {};", tableData.name, columnValuePairs, rowId.value());
+            break;
+        }
+        default:
+            break;
         }
 
         return sqlString;
@@ -156,16 +172,22 @@ class Change {
 
     void removeParent(const std::size_t key) {
         auto it = std::find(parentKeys.begin(), parentKeys.end(), key);
-        if (it != parentKeys.end()) { parentKeys.erase(it); }
+        if (it != parentKeys.end()) {
+            parentKeys.erase(it);
+        }
     }
 
     void setLocalValidity(bool validity) {
         locallyValid = validity;
-        if (!hasChildren()) { setValidity(validity); }
+        if (!hasChildren()) {
+            setValidity(validity);
+        }
     }
 
     void setValidity(bool validity) {
-        if (validity) { locallyValid = validity; }
+        if (validity) {
+            locallyValid = validity;
+        }
         valid = validity;
     }
 
@@ -177,7 +199,9 @@ class Change {
 
     void removeChild(const std::size_t key) {
         auto it = std::find(childrenKeys.begin(), childrenKeys.end(), key);
-        if (it != childrenKeys.end()) { childrenKeys.erase(it); }
+        if (it != childrenKeys.end()) {
+            childrenKeys.erase(it);
+        }
     }
 
     bool hasChildren() const { return childrenKeys.size() != 0; }
@@ -188,7 +212,9 @@ class Change {
         std::string summary;
         std::string concat = selected ? "\n" : ",";
         for (const auto& [col, val] : changedCells) {
-            if (!summary.empty()) { summary += concat; }
+            if (!summary.empty()) {
+                summary += concat;
+            }
             summary += std::format("{}={}", col, val);
             if (summary.size() >= len && !selected) {
                 summary.resize(len - 3);
@@ -205,13 +231,19 @@ struct uiChangeInfo {
 };
 
 namespace ChangeHelpers {
-inline std::unique_ptr<Change> getChangeOfRow(const std::shared_ptr<uiChangeInfo>& uiChanges, const std::string& table, const std::size_t id) {
-    if (!uiChanges->idMappedChanges.contains(table)) { return nullptr; }
-    if (id == INVALID_ID) { return nullptr; }
+inline std::unique_ptr<Change> getChangeOfRow(const std::shared_ptr<uiChangeInfo>& uiChanges,
+                                              const std::string& table,
+                                              const std::size_t id) {
+    if (!uiChanges->idMappedChanges.contains(table)) {
+        return nullptr;
+    }
+    if (id == INVALID_ID) {
+        return nullptr;
+    }
     if (uiChanges->idMappedChanges.at(table).contains(id)) {
         const std::size_t changeKey = uiChanges->idMappedChanges.at(table).at(id);
         return std::make_unique<Change>(uiChanges->changes.at(changeKey));
     }
     return nullptr;
 }
-}  // namespace ChangeHelpers
+} // namespace ChangeHelpers

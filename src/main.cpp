@@ -1,3 +1,4 @@
+#include "autoInv.hpp"
 #include "changeTracker.hpp"
 #include "config.hpp"
 #include "dbInterface.hpp"
@@ -6,7 +7,6 @@
 #include "threadPool.hpp"
 #include "timing.hpp"
 #include "userInterface/app.hpp"
-#include "bom/bomReader.hpp"
 
 int main() {
     Logger logger;
@@ -20,7 +20,7 @@ int main() {
 
     ChangeTracker changeTracker{dbService, logger};
 
-    BomReader bomReader{pool, changeTracker, config, logger};
+    AutoInv::BomReader bomReader{pool, changeTracker, config, logger};
 
     App app{dbService, changeTracker, config, bomReader, logger};
 
