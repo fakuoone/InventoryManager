@@ -192,6 +192,7 @@ class App {
                 continue;
             }
 
+            // TODO: Fix this weird main loop
             if (ImGui::BeginTabBar("Main")) {
                 if (ImGui::BeginTabItem("Database")) {
                     running = handleAppState();

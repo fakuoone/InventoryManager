@@ -113,21 +113,20 @@ class CsvReader {
     std::vector<std::vector<std::string>> data;
     std::future<void> fRead;
 
-    CsvReader(ThreadPool& cThreadPool,
-              ChangeTracker& cChangeTracker,
-              Config& cConfig,
-              Logger& cLogger)
-        : threadPool(cThreadPool), changeTracker(cChangeTracker), config(cConfig), logger(cLogger) {
-    }
+    bool dataRead = false;
+
+    CsvReader(ThreadPool& cThreadPool, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger)
+        : threadPool(cThreadPool), changeTracker(cChangeTracker), config(cConfig), logger(cLogger) {}
 
     virtual ~CsvReader() = default;
 
   public:
     void run(std::filesystem::path csv) { data = readData(csv); }
 
-    bool isDataReady() {
-        if (fRead.valid()) {
+    bool dataValid(bool once) {
+        if (fRead.valid() && (!dataRead || !once)) {
             if (fRead.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+                dataRead = true;
                 return true;
             }
         }
@@ -137,6 +136,8 @@ class CsvReader {
     void read(std::filesystem::path csv) { fRead = threadPool.submit(&CsvReader::run, this, csv); }
 
     const std::vector<std::string>& getHeader() { return data.front(); }
+
+    const std::vector<std::string>& getFirstRow() { return *(data.begin() + 1); }
 };
 
 class BomReader : public CsvReader {
