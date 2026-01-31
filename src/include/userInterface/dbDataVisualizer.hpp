@@ -35,8 +35,7 @@ class DbVisualizer {
     std::unordered_set<std::size_t> changeHighlight;
 
     Widgets::DbTable dbTable{edit, selectedTable, changeHighlight, logger};
-    Widgets::ChangeOverviewer changeOverviewer{
-        changeTracker, changeExe, uiChanges, 60, changeHighlight, selectedTable};
+    Widgets::ChangeOverviewer changeOverviewer{changeTracker, changeExe, uiChanges, 60, changeHighlight, selectedTable};
 
     void drawChangeOverview(bool dataFresh) {
         ImGui::Text("CHANGE OVERVIEW");
@@ -69,21 +68,18 @@ class DbVisualizer {
 
     void handleTableEvent() {
         const Widgets::event tableEvent = dbTable.getEvent();
-        const bool handleEvent = tableEvent.type.mouse == Widgets::MOUSE_EVENT_TYPE::CLICK ||
-                                 tableEvent.type.action == Widgets::ACTION_TYPE::EDIT;
+        const bool handleEvent =
+            tableEvent.type.mouse == Widgets::MOUSE_EVENT_TYPE::CLICK || tableEvent.type.action == Widgets::ACTION_TYPE::EDIT;
         if (!handleEvent) {
             return;
         }
 
-        if (std::holds_alternative<Widgets::dataEvent>(
-                tableEvent.origin)) { // NO CHANGE EXISTS ON THIS ROW
+        if (std::holds_alternative<Widgets::dataEvent>(tableEvent.origin)) { // NO CHANGE EXISTS ON THIS ROW
             const Widgets::dataEvent event = std::get<Widgets::dataEvent>(tableEvent.origin);
             switch (tableEvent.type.action) {
             case Widgets::ACTION_TYPE::HEADER: {
                 const tHeaderVector& header = dbData->headers.at(event.tableName).data;
-                auto it = std::find_if(header.begin(), header.end(), [&](const tHeaderInfo& h) {
-                    return h.name == event.headerName;
-                });
+                auto it = std::find_if(header.begin(), header.end(), [&](const tHeaderInfo& h) { return h.name == event.headerName; });
                 if (it != header.end()) {
                     selectedTable = it->referencedTable;
                 }
@@ -96,9 +92,7 @@ class DbVisualizer {
                                                static_cast<std::size_t>(std::stoi(event.pKey))));
                 break;
             case Widgets::ACTION_TYPE::EDIT:
-                changeTracker.addChange(Change(tableEvent.cells,
-                                               changeType::UPDATE_CELLS,
-                                               dbService.getTable(event.tableName)),
+                changeTracker.addChange(Change(tableEvent.cells, changeType::UPDATE_CELLS, dbService.getTable(event.tableName)),
                                         static_cast<std::size_t>(std::stoi(event.pKey)));
                 break;
             case Widgets::ACTION_TYPE::REQUEST_EDIT: {
@@ -111,8 +105,7 @@ class DbVisualizer {
                 break;
             }
             case Widgets::ACTION_TYPE::INSERT:
-                changeTracker.addChange(Change(
-                    tableEvent.cells, changeType::INSERT_ROW, dbService.getTable(event.tableName)));
+                changeTracker.addChange(Change(tableEvent.cells, changeType::INSERT_ROW, dbService.getTable(event.tableName)));
                 break;
             default:
                 break;
@@ -146,12 +139,8 @@ class DbVisualizer {
     }
 
   public:
-    DbVisualizer(DbService& cDbService,
-                 ChangeTracker& cChangeTracker,
-                 ChangeExeService& cChangeExe,
-                 Logger& cLogger)
-        : dbService(cDbService), changeTracker(cChangeTracker), changeExe(cChangeExe),
-          logger(cLogger) {}
+    DbVisualizer(DbService& cDbService, ChangeTracker& cChangeTracker, ChangeExeService& cChangeExe, Logger& cLogger)
+        : dbService(cDbService), changeTracker(cChangeTracker), changeExe(cChangeExe), logger(cLogger) {}
 
     void setData(std::shared_ptr<const completeDbData> newData) {
         dbData = newData;

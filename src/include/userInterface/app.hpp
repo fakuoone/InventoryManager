@@ -23,11 +23,13 @@ class App {
     ChangeTracker& changeTracker;
     Config& config;
     AutoInv::BomReader& bomReader;
+    AutoInv::OrderReader& orderReader;
     Logger& logger;
 
     ChangeExeService changeExe{dbService, changeTracker, logger};
     DbVisualizer dbVisualizer{dbService, changeTracker, changeExe, logger};
     AutoInv::BomVisualizer bomVisualizer{dbService, bomReader, logger};
+    AutoInv::OrderVisualizer orderVisualizer{dbService, orderReader, logger};
 
     AppState appState{AppState::INIT};
     std::shared_ptr<const completeDbData> dbData;
@@ -49,6 +51,9 @@ class App {
 
         dbData = *result;
         dbVisualizer.setData(dbData);
+        bomVisualizer.setData(dbData);
+        orderVisualizer.setData(dbData);
+
         changeTracker.setMaxPKeys(dbData->maxPKeys);
         if (!uiChanges) {
             uiChanges = std::make_shared<uiChangeInfo>();
@@ -61,15 +66,13 @@ class App {
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
         const float PAD = 10.0f;
 
-        ImVec2 pos(viewport->WorkPos.x + viewport->WorkSize.x - PAD,
-                   viewport->WorkPos.y + viewport->WorkSize.y - PAD);
+        ImVec2 pos(viewport->WorkPos.x + viewport->WorkSize.x - PAD, viewport->WorkPos.y + viewport->WorkSize.y - PAD);
 
         ImGui::SetNextWindowPos(pos, ImGuiCond_Always, ImVec2(1.0f, 1.0f));
         ImGui::SetNextWindowBgAlpha(0.35f);
 
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
-                                 ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
-                                 ImGuiWindowFlags_NoMove;
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing |
+                                 ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove;
 
         if (ImGui::Begin("FPSOverlay", nullptr, flags)) {
             ImGuiIO& io = ImGui::GetIO();
@@ -101,8 +104,7 @@ class App {
             ImVec2 padding = ImGui::GetStyle().WindowPadding;
 
             // Top-right corner of the content region
-            ImGui::SetCursorPos(
-                ImVec2(ImGui::GetWindowContentRegionMax().x - buttonSize.x - padding.x, padding.y));
+            ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - buttonSize.x - padding.x, padding.y));
             if (ImGui::Button("REFETCH")) {
                 dbService.refetch();
                 appState = AppState::WAITING_FOR_DATA;
@@ -111,6 +113,7 @@ class App {
         }
         case AppState::WAITING_FOR_DATA:
             if (waitForData()) {
+                dataAvailable = true;
                 appState = AppState::DATA_READY;
             }
             break;
@@ -140,12 +143,19 @@ class App {
     }
 
     void showBom() {
-        bool enterPressed = ImGui::InputText(
-            "##edit", csvBuffer.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
+        bool enterPressed = ImGui::InputText("##edit", csvBuffer.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
         if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
-            bomReader.readBom(std::filesystem::path(std::string(csvBuffer.data())));
+            bomReader.read(std::filesystem::path(std::string(csvBuffer.data())));
         }
-        bomVisualizer.run();
+        bomVisualizer.run(dataAvailable);
+    }
+
+    void showOrder() {
+        bool enterPressed = ImGui::InputText("##edit", csvBuffer.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
+        if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
+            orderReader.read(std::filesystem::path(std::string(csvBuffer.data())));
+        }
+        orderVisualizer.run(dataAvailable);
     }
 
   public:
@@ -153,9 +163,11 @@ class App {
         ChangeTracker& cChangeTracker,
         Config& cConfig,
         AutoInv::BomReader& cBomReader,
+        AutoInv::OrderReader& cOrderReader,
+
         Logger& cLogger)
-        : dbService(cDbService), changeTracker(cChangeTracker), config(cConfig),
-          bomReader(cBomReader), logger(cLogger) {}
+        : dbService(cDbService), changeTracker(cChangeTracker), config(cConfig), bomReader(cBomReader), orderReader(cOrderReader),
+          logger(cLogger) {}
 
     App(const App&) = delete;
     App& operator=(const App&) = delete;
@@ -163,8 +175,7 @@ class App {
     App& operator=(App&&) = delete;
 
     void supplyConfigString() {
-        std::string dbString =
-            config.setConfigString(std::filesystem::path{}); // OPTIONAL USER SUPPLIED CONFIG PATH
+        std::string dbString = config.setConfigString(std::filesystem::path{}); // OPTIONAL USER SUPPLIED CONFIG PATH
         initFont(config.getFont());
         dbService.initializeDbInterface(dbString);
     }
@@ -190,7 +201,10 @@ class App {
                     showBom();
                     ImGui::EndTabItem();
                 }
-
+                if (ImGui::BeginTabItem("Order")) {
+                    showOrder();
+                    ImGui::EndTabItem();
+                }
                 ImGui::EndTabBar();
             }
 

@@ -10,11 +10,18 @@
 
 #include <windows.h>
 
+struct partApi {
+    std::string key;
+    std::string address;
+};
+
 class Config {
   private:
     std::string dbString;
     std::string fontPath;
     std::string quantityColumn;
+    partApi api;
+
     Logger& logger;
 
     std::string databaseJsonToDbString(const nlohmann::json& j) {
@@ -24,14 +31,23 @@ class Config {
             const std::string password = j.at("password").get<std::string>();
             std::string connectionString =
                 std::format("dbname={} user={} password={}", dbname, user, password);
+            return connectionString;
+        } catch (const nlohmann::json::parse_error& e) {
+            logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
+            return std::string{};
+        }
+    }
+
+    void getAdditionalConfig(const nlohmann::json& j) {
+        try {
             quantityColumn = j.at("quantity-column").get<std::string>();
             if (j.contains("font")) {
                 fontPath = j.at("font").get<std::string>();
             }
-            return connectionString;
-        } catch (const nlohmann::json::exception& e) {
-            logger.pushLog(Log{std::format("ERROR PARSING CONFIG: ", e.what())});
-            return std::string{};
+            api.address = j["api"]["address"].get<std::string>();
+            api.key = j["api"]["address"].get<std::string>();
+        } catch (const nlohmann::json::parse_error& e) {
+            logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
         }
     }
 
@@ -51,6 +67,8 @@ class Config {
             logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
             return std::string{};
         }
+
+        getAdditionalConfig(config);
         return databaseJsonToDbString(config);
     }
 

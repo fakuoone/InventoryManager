@@ -21,8 +21,9 @@ int main() {
     ChangeTracker changeTracker{dbService, logger};
 
     AutoInv::BomReader bomReader{pool, changeTracker, config, logger};
+    AutoInv::OrderReader orderReader{pool, changeTracker, config, logger};
 
-    App app{dbService, changeTracker, config, bomReader, logger};
+    App app{dbService, changeTracker, config, bomReader, orderReader, logger};
 
     app.run();
     return 0;

@@ -103,46 +103,54 @@ std::vector<std::vector<std::string>> readData(std::filesystem::path csv) {
     return rows;
 }
 
-class BomReader {
-  private:
+class CsvReader {
+  protected:
     ThreadPool& threadPool;
     ChangeTracker& changeTracker;
     Config& config;
     Logger& logger;
 
-    std::unordered_map<std::string, std::string> bomDbMapping;
     std::vector<std::vector<std::string>> data;
+    std::future<void> fRead;
 
-    std::future<void> fBomRead;
-
-    void createMappings() {}
-
-    void run(std::filesystem::path csv) {
-        data = readData(csv);
-        createMappings();
-    }
-
-  public:
-    BomReader(ThreadPool& cThreadPool,
+    CsvReader(ThreadPool& cThreadPool,
               ChangeTracker& cChangeTracker,
               Config& cConfig,
               Logger& cLogger)
         : threadPool(cThreadPool), changeTracker(cChangeTracker), config(cConfig), logger(cLogger) {
     }
 
+    virtual ~CsvReader() = default;
+
+  public:
+    void run(std::filesystem::path csv) { data = readData(csv); }
+
     bool isDataReady() {
-        if (fBomRead.valid()) {
-            if (fBomRead.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        if (fRead.valid()) {
+            if (fRead.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
                 return true;
             }
         }
         return false;
     }
 
-    void readBom(std::filesystem::path bomCsv) {
-        fBomRead = threadPool.submit(&BomReader::run, this, bomCsv);
-    }
+    void read(std::filesystem::path csv) { fRead = threadPool.submit(&CsvReader::run, this, csv); }
 
-    const std::vector<std::string>& getHeader() { return *data.begin(); }
+    const std::vector<std::string>& getHeader() { return data.front(); }
 };
+
+class BomReader : public CsvReader {
+  private:
+  public:
+    BomReader(ThreadPool& cPool, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger)
+        : CsvReader(cPool, cChangeTracker, cConfig, cLogger) {}
+};
+
+class OrderReader : public CsvReader {
+  private:
+  public:
+    OrderReader(ThreadPool& cPool, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger)
+        : CsvReader(cPool, cChangeTracker, cConfig, cLogger) {}
+};
+
 }; // namespace AutoInv
