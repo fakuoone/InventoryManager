@@ -2,6 +2,7 @@
 
 #include "autoInv.hpp"
 #include "dbService.hpp"
+#include "userInterface/widgets.hpp"
 
 #include <filesystem>
 
@@ -15,7 +16,7 @@ class MappingSource {
   public:
     MappingSource(const std::string& cHeader, const std::string& cExample) : header(cHeader), example(cExample) {}
 
-    void draw() {
+    void draw(const float width) {
         ImGui::PushID(header.c_str());
         ImGui::TextUnformatted(header.c_str());
         ImGui::TextUnformatted(example.c_str());
@@ -29,30 +30,59 @@ class MappingDestination {
   private:
     const std::string table;
     const std::vector<tHeaderInfo> headers;
+    static constexpr const float INNER_PADDING = 3.0f;
+    static constexpr const float OUTER_PADDING = 3.0f;
 
   public:
     MappingDestination(const std::string cTable, const std::vector<tHeaderInfo> cHeaders) : table(cTable), headers(cHeaders) {}
-
-    void draw() {
+    void draw(const float width) {
+        if (headers.size() == 0) {
+            return;
+        }
         ImGui::PushID(this);
 
-        float startY = ImGui::GetCursorPosY();
+        ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-        ImGui::BeginGroup();
+        const float widthPadded = width - 2 * OUTER_PADDING;
+
+        // Headerwidth
+        float maxHeaderWidth = 0.0f;
         for (const auto& header : headers) {
-            ImGui::TextUnformatted(header.name.c_str());
+            maxHeaderWidth = std::max(maxHeaderWidth, ImGui::CalcTextSize(header.name.c_str()).x);
         }
-        ImGui::EndGroup();
+        maxHeaderWidth = std::min(maxHeaderWidth, static_cast<float>(0.5 * widthPadded));
 
-        ImGui::SameLine();
-        ImVec2 textSize = ImGui::CalcTextSize(table.c_str());
-        float contentHeight = headers.size() * ImGui::GetFrameHeightWithSpacing();
-        float centeredY = startY + (contentHeight - textSize.y) * 0.5f;
+        // Calc Height
+        const float headerHeight = ImGui::CalcTextSize(headers.at(0).name.c_str()).y;
+        const float height = headers.size() * (headerHeight) + 2 * INNER_PADDING;
+        ImVec2 cursor = ImGui::GetCursorScreenPos();
+        ImVec2 bgRectBegin = cursor;
+        ImVec2 bgRectEnd = ImVec2(cursor.x + widthPadded, cursor.y + height);
+        drawList->AddRectFilled(bgRectBegin, bgRectEnd, Widgets::colGreyBg, 0.0f);
+        drawList->AddRect(bgRectBegin, bgRectEnd, IM_COL32(120, 120, 120, 200), 0.0f);
 
-        ImGui::SetCursorPosY(centeredY);
-        ImGui::TextUnformatted(table.c_str());
+        // Headers column
+        cursor.x += INNER_PADDING;
+        cursor.y += INNER_PADDING;
+        for (const auto& header : headers) {
+            const float cellWidth = widthPadded / 2 - INNER_PADDING;
+            ImGui::SetCursorScreenPos(cursor);
+            ImGui::InvisibleButton(header.name.c_str(), ImVec2(cellWidth, headerHeight));
+            bool hovered = ImGui::IsItemHovered();
+
+            drawList->AddText(cursor, hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255), header.name.c_str());
+            drawList->AddRectFilled(
+                cursor, ImVec2(cursor.x + widthPadded / 2 - INNER_PADDING, cursor.y + headerHeight), Widgets::colGreyBg, 0.0f);
+            if (hovered) {
+                drawList->AddRect(
+                    cursor, ImVec2(cursor.x + widthPadded / 2 - INNER_PADDING, cursor.y + headerHeight), Widgets::colHoveredGrey, 0.0f);
+            }
+            cursor.y += headerHeight;
+        }
 
         ImGui::PopID();
+
+        ImGui::Dummy(ImVec2(0, OUTER_PADDING));
     }
 };
 
@@ -96,18 +126,22 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
 
         if (reader.dataValid(false)) {
             ImVec2 avail = ImGui::GetContentRegionAvail();
-            float leftWidth = avail.x * 0.33f;
+            const float rightWidth = 420.0f; // fixed DB panel width
+            const float spacing = ImGui::GetStyle().ItemSpacing.x;
+            const float leftWidth = avail.x - rightWidth - spacing;
 
+            // LEFT (flexible)
             ImGui::BeginChild("CSV", ImVec2(leftWidth, 0), false);
             for (auto& csvHeaderWidget : csvHeaderWidgets) {
-                csvHeaderWidget.draw();
+                csvHeaderWidget.draw(ImGui::GetContentRegionAvail().x);
             }
             ImGui::EndChild();
             ImGui::SameLine();
 
-            ImGui::BeginChild("DB", ImVec2(0, 0), false);
+            // RIGHT (fixed)
+            ImGui::BeginChild("DB", ImVec2(rightWidth, 0), false);
             for (auto& headerWidget : dbHeaderWidgets) {
-                headerWidget.draw();
+                headerWidget.draw(ImGui::GetContentRegionAvail().x);
             }
             ImGui::EndChild();
         }

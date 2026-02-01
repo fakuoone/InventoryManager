@@ -111,7 +111,7 @@ class CsvReader {
     Logger& logger;
 
     std::vector<std::vector<std::string>> data;
-    std::future<void> fRead;
+    std::future<bool> fRead;
 
     bool dataRead = false;
 
@@ -121,12 +121,18 @@ class CsvReader {
     virtual ~CsvReader() = default;
 
   public:
-    void run(std::filesystem::path csv) { data = readData(csv); }
+    bool run(std::filesystem::path csv) {
+        data = readData(csv);
+        return !data.empty();
+    }
 
     bool dataValid(bool once) {
-        if (fRead.valid() && (!dataRead || !once)) {
+        if (!once) {
+            return dataRead;
+        }
+        if (fRead.valid()) {
             if (fRead.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-                dataRead = true;
+                dataRead = fRead.get();
                 return true;
             }
         }

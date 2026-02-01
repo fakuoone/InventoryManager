@@ -137,7 +137,7 @@ class App {
     void initFont(const std::string& font) {
         if (!font.empty()) {
             ImGuiIO& io = ImGui::GetIO();
-            ImFont* fontPtr = io.Fonts->AddFontFromFileTTF(font.c_str(), 20.0f);
+            ImFont* fontPtr = io.Fonts->AddFontFromFileTTF(font.c_str(), 16.0f);
             IM_ASSERT(fontPtr != nullptr);
         }
     }
@@ -145,7 +145,11 @@ class App {
     void showBom() {
         bool enterPressed = ImGui::InputText("##edit", csvBuffer.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
         if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
-            bomReader.read(std::filesystem::path(std::string(csvBuffer.data())));
+            try {
+                bomReader.read(std::filesystem::path(std::string(csvBuffer.data())));
+            } catch (const std::exception& e) {
+                logger.pushLog(Log{std::format("ERROR reading bom: {}", e.what())});
+            }
         }
         bomVisualizer.run(dataAvailable);
     }
@@ -153,7 +157,11 @@ class App {
     void showOrder() {
         bool enterPressed = ImGui::InputText("##edit", csvBuffer.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
         if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
-            orderReader.read(std::filesystem::path(std::string(csvBuffer.data())));
+            try {
+                orderReader.read(std::filesystem::path(std::string(csvBuffer.data())));
+            } catch (const std::exception& e) {
+                logger.pushLog(Log{std::format("ERROR reading order: {}", e.what())});
+            }
         }
         orderVisualizer.run(dataAvailable);
     }

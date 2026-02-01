@@ -23,6 +23,7 @@ static constexpr const std::pair<ImU32, ImU32> colInvalid = std::pair<ImU32, ImU
 static constexpr const std::pair<ImU32, ImU32> colSelected =
     std::pair<ImU32, ImU32>{IM_COL32(217, 159, 0, 255), IM_COL32(179, 123, 0, 255)};
 static constexpr const ImU32 colGreyBg = IM_COL32(71, 71, 71, 100);
+static constexpr const ImU32 colHoveredGrey = IM_COL32(255, 255, 255, 100);
 
 struct rect {
     ImVec2 start;
@@ -519,7 +520,7 @@ class DbTable {
             ImGui::EndDisabled();
 
         if (ImGui::IsItemHovered()) {
-            drawList->AddRect(min, max, IM_COL32(255, 255, 255, 100));
+            drawList->AddRect(min, max, colHoveredGrey);
             result.mouse = MOUSE_EVENT_TYPE::HOVER;
 
             if constexpr (sizeof...(Args) > 0) {
