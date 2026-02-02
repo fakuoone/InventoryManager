@@ -20,6 +20,8 @@ set(SOURCES
     src/threadPool.cpp
     src/changeTracker.cpp
     src/imGuiDX11Context.cpp
+    src/autoInvVisualizer.cpp
+    src/mappingWidgets.cpp
 )
 
 # --- Executable ---

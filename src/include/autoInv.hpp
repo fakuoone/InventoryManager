@@ -26,7 +26,7 @@
 #include "threadPool.hpp"
 
 namespace AutoInv {
-std::vector<std::string> parseLine(const std::string& line) {
+inline std::vector<std::string> parseLine(const std::string& line) {
     // https://stackoverflow.com/users/25450/sastanin
     enum class csvState { UNQUOTED_FIELD, QUOTED_FIELD, QUOTED_QUOTE };
 
@@ -80,7 +80,7 @@ std::vector<std::string> parseLine(const std::string& line) {
     return fields;
 }
 
-std::vector<std::vector<std::string>> readData(std::filesystem::path csv) {
+inline std::vector<std::vector<std::string>> readData(std::filesystem::path csv) {
     std::ifstream file(csv);
     std::string line;
     std::pair<std::size_t, std::size_t> colCounts = {0, 0};

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "change.hpp"
+#include "changeExeService.hpp"
+#include "changeTracker.hpp"
 #include "logger.hpp"
 
 #include <optional>
