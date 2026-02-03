@@ -5,15 +5,24 @@ namespace AutoInv {
 
 void CsvVisualizer::setData(std::shared_ptr<const completeDbData> newData) {
     dbData = newData;
+    // TODO: Reset old mappings etc
+
+    destId id = 0;
     for (const std::string& s : dbData->tables) {
-        dbHeaderWidgets.push_back(std::move(MappingDestination(s, dbData->headers.at(s).data, true)));
+        std::vector<DestinationDetail> headers;
+        for (const tHeaderInfo& header : dbData->headers.at(s).data) {
+            headers.push_back(DestinationDetail(header, id));
+        }
+        dbHeaderWidgets.push_back(std::move(MappingDestination(s, std::move(headers), true)));
+        id++;
     }
 }
 
-bool CsvVisualizer::handleDrag(const ImGuiPayload* payload) {
+bool CsvVisualizer::handleDrag(destId destination, const ImGuiPayload* payload) {
     if (payload) {
         if (payload->IsDelivery()) {
-            // TODO: Handle data
+            sourceId id = *static_cast<const sourceId*>(payload->Data);
+            createMapping(id, destination);
         }
         return true;
     }

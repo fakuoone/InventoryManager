@@ -4,7 +4,7 @@
 namespace AutoInv {
 
 void MappingSource::setDragHandler(CsvVisualizer* handler) {
-    dragHandler = handler;
+    parentVisualizer = handler;
 }
 
 const std::string& MappingSource::getHeader() {
@@ -47,6 +47,9 @@ void MappingSource::draw(const float width) {
         drawList->AddRect(cursor, ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING, cursor.y + headerHeight), colBorder, 0.0f);
     }
 
+    // store anchor in parent
+    parentVisualizer->storeAnchorSource(id, ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING, cursor.y + headerHeight / 2));
+
     // header
     drawList->AddText(ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING),
                       hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
@@ -70,7 +73,7 @@ void MappingSource::draw(const float width) {
 
 bool MappingSource::beginDrag() {
     if (ImGui::BeginDragDropSource()) {
-        ImGui::SetDragDropPayload(mappingStrings.at(mappingTypes::HEADER_HEADER).c_str(), &header, sizeof(header));
+        ImGui::SetDragDropPayload(mappingStrings.at(mappingTypes::HEADER_HEADER).c_str(), &id, sizeof(id));
         ImGui::EndDragDropSource();
         return true;
     }
@@ -78,7 +81,7 @@ bool MappingSource::beginDrag() {
 }
 
 void MappingDestination::setDragHandler(CsvVisualizer* handler) {
-    dragHandler = handler;
+    parentVisualizer = handler;
 }
 
 void MappingDestination::draw(const float width) {
@@ -94,12 +97,12 @@ void MappingDestination::draw(const float width) {
     // Headerwidth
     float maxHeaderWidth = 0.0f;
     for (const auto& header : headers) {
-        maxHeaderWidth = std::max(maxHeaderWidth, ImGui::CalcTextSize(header.name.c_str()).x);
+        maxHeaderWidth = std::max(maxHeaderWidth, ImGui::CalcTextSize(header.header.name.c_str()).x);
     }
     maxHeaderWidth = std::min(maxHeaderWidth, static_cast<float>(0.5 * widthPadded));
 
     // Calc Height
-    const float headerHeight = ImGui::CalcTextSize(headers.at(0).name.c_str()).y + 2 * INNER_TEXT_PADDING;
+    const float headerHeight = ImGui::CalcTextSize(headers.at(0).header.name.c_str()).y + 2 * INNER_TEXT_PADDING;
     const float height = headers.size() * (headerHeight) + 2 * INNER_PADDING;
     ImVec2 begin = ImGui::GetCursorScreenPos();
     begin.x += OUTER_PADDING;
@@ -117,7 +120,7 @@ void MappingDestination::draw(const float width) {
     for (const auto& header : headers) {
         const float cellWidth = widthPadded / 2 - INNER_PADDING;
         ImGui::SetCursorScreenPos(cursor);
-        ImGui::InvisibleButton(header.name.c_str(), ImVec2(cellWidth, headerHeight));
+        ImGui::InvisibleButton(header.header.name.c_str(), ImVec2(cellWidth, headerHeight));
         bool hovered = ImGui::IsItemHovered();
         bool draggedTo = handleDrag(header);
         if (hovered || draggedTo) {
@@ -130,7 +133,11 @@ void MappingDestination::draw(const float width) {
 
         drawList->AddText(ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING),
                           hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
-                          header.name.c_str());
+                          header.header.name.c_str());
+
+        // store anchor in parent
+        parentVisualizer->storeAnchorDest(header.id, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + headerHeight / 2));
+
         cursor.y += headerHeight;
     }
 
@@ -150,12 +157,12 @@ void MappingDestination::draw(const float width) {
     ImGui::PopID();
 }
 
-bool MappingDestination::handleDrag(const tHeaderInfo& headerInfo) {
+bool MappingDestination::handleDrag(const DestinationDetail& header) {
     // TODO do not allow all types of data (types need to match, no pkeys)
-    if (!dragHandler) {
+    if (!parentVisualizer) {
         return false;
     }
-    if (headerInfo.type == headerType::PRIMARY_KEY) {
+    if (header.header.type == headerType::PRIMARY_KEY) {
         return false;
     }
     bool success = false;
@@ -163,7 +170,7 @@ bool MappingDestination::handleDrag(const tHeaderInfo& headerInfo) {
         const ImGuiPayload* payload =
             ImGui::AcceptDragDropPayload(mappingStrings.at(mappingTypes::HEADER_HEADER).c_str(),
                                          ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
-        success = dragHandler->handleDrag(payload);
+        success = parentVisualizer->handleDrag(header.id, payload);
         ImGui::EndDragDropTarget();
     }
     return success;

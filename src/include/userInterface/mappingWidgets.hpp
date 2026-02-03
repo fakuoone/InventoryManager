@@ -16,14 +16,27 @@ enum class mappingTypes { HEADER_HEADER };
 
 static std::map<mappingTypes, std::string> mappingStrings = {{mappingTypes::HEADER_HEADER, "HEADER_HEADER"}};
 
+using sourceId = uint32_t;
+using destId = uint32_t;
+struct Mapping {
+    sourceId source;
+    destId destination;
+};
+
+struct DestinationDetail {
+    tHeaderInfo header;
+    destId id;
+};
+
 class MappingSource {
   private:
     const std::string header;
     const std::string example;
-    static inline CsvVisualizer* dragHandler;
+    static inline CsvVisualizer* parentVisualizer;
+    sourceId id;
 
   public:
-    MappingSource(const std::string& cHeader, const std::string& cExample) : header(cHeader), example(cExample) {}
+    MappingSource(const std::string& cHeader, const std::string& cExample, sourceId cId) : header(cHeader), example(cExample), id(cId) {}
     static void setDragHandler(CsvVisualizer* handler);
     const std::string& getHeader();
     void draw(const float width);
@@ -33,16 +46,16 @@ class MappingSource {
 class MappingDestination {
   private:
     const std::string table;
-    const std::vector<tHeaderInfo> headers;
-    static inline CsvVisualizer* dragHandler;
+    const std::vector<DestinationDetail> headers;
+    static inline CsvVisualizer* parentVisualizer;
     bool mappable = true;
 
   public:
-    MappingDestination(const std::string cTable, const std::vector<tHeaderInfo> cHeaders, bool cMappable)
+    MappingDestination(const std::string cTable, const std::vector<DestinationDetail> cHeaders, bool cMappable)
         : table(cTable), headers(cHeaders), mappable(cMappable) {}
 
     static void setDragHandler(CsvVisualizer* handler);
     void draw(const float width);
-    bool handleDrag(const tHeaderInfo& headerInfo);
+    bool handleDrag(const DestinationDetail& headerInfo);
 };
 } // namespace AutoInv
