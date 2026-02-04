@@ -88,22 +88,24 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
             ImVec2 clipMin(std::min(leftMin.x, rightMin.x), std::min(leftMin.y, rightMin.y));
             ImVec2 clipMax(std::max(leftMax.x, rightMax.x), std::max(leftMax.y, rightMax.y));
             ImDrawList* drawlist = ImGui::GetWindowDrawList();
-            drawlist->PushClipRect(clipMin, clipMax, true);
 
             // mappings
-            std::vector<Mapping> toRemove;
+            const Mapping* toRemove = nullptr;
 
+            drawlist->PushClipRect(clipMin, clipMax, true);
             for (const Mapping& mapping : mappings) {
                 if (drawMapping(mapping, drawlist, mappingsDrawingInfo.at(mapping))) {
-                    toRemove.push_back(mapping);
+                    toRemove = &mapping;
                 }
             }
-            for (const Mapping& mapping : toRemove) {
-                removeMapping(mapping);
-            }
             drawlist->PopClipRect();
+
+            if (toRemove) {
+                removeMapping(*toRemove);
+            }
         }
     }
+
     void checkNewData() {
         if (reader.dataValid(true)) {
             // TODO clear old data
@@ -129,10 +131,10 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
     }
 
     void removeMapping(const Mapping& mapping) override {
-        auto it = std::remove_if(mappings.begin(), mappings.end(), [&](const auto& m) { return m == mapping; });
+        auto it = std::find(mappings.begin(), mappings.end(), mapping);
         if (it != mappings.end()) {
             mappingsDrawingInfo.erase(*it);
-            mappings.erase(it, mappings.end());
+            mappings.erase(it);
         }
     }
 
@@ -147,13 +149,15 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
         ImVec2 start = sourceAnchors.at(mapping.source);
         ImVec2 end = destAnchors.at(mapping.destination);
 
-        Widgets::MOUSE_EVENT_TYPE event = isMouseOnLine(start, end, mappingDrawingInfo.width);
+        Widgets::MOUSE_EVENT_TYPE event = isMouseOnLine(start, end, mappingDrawingInfo.width * 2);
         const float thickness = event != Widgets::MOUSE_EVENT_TYPE::NONE ? 6.0f : 2.0f;
         const ImU32 color = event != Widgets::MOUSE_EVENT_TYPE::NONE ? Widgets::colSelected.first : Widgets::colWhiteSemiOpaque;
         drawlist->AddLine(start, end, color, thickness);
         mappingDrawingInfo.width = thickness;
         return event == Widgets::MOUSE_EVENT_TYPE::CLICK;
     }
+
+    void commitMappings() { reader.setMappings(mappings); }
 };
 
 class BomVisualizer : public CsvVisualizerImpl<BomReader> {

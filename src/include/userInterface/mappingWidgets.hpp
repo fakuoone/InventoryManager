@@ -1,5 +1,6 @@
 #pragma once
 
+#include "autoInv.hpp"
 #include "dbService.hpp"
 #include "userInterface/widgets.hpp"
 
@@ -16,25 +17,8 @@ enum class mappingTypes { HEADER_HEADER };
 
 static std::map<mappingTypes, std::string> mappingStrings = {{mappingTypes::HEADER_HEADER, "HEADER_HEADER"}};
 
-using sourceId = uint32_t;
-using destId = uint32_t;
-
 struct MappingDrawing {
     float width;
-};
-
-struct Mapping {
-    sourceId source;
-    destId destination;
-    bool operator==(const Mapping& other) const { return other.source == source && other.destination == destination; }
-};
-
-struct MappingHash {
-    size_t operator()(const Mapping& m) const noexcept {
-        size_t h1 = std::hash<sourceId>{}(m.source);
-        size_t h2 = std::hash<destId>{}(m.destination);
-        return h1 ^ (h2 << 1);
-    }
 };
 
 struct DestinationDetail {

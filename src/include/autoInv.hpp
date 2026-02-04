@@ -26,6 +26,23 @@
 #include "threadPool.hpp"
 
 namespace AutoInv {
+using sourceId = uint32_t;
+using destId = uint32_t;
+
+struct Mapping {
+    sourceId source;
+    destId destination;
+    bool operator==(const Mapping& other) const { return other.source == source && other.destination == destination; }
+};
+
+struct MappingHash {
+    size_t operator()(const Mapping& m) const noexcept {
+        size_t h1 = std::hash<sourceId>{}(m.source);
+        size_t h2 = std::hash<destId>{}(m.destination);
+        return h1 ^ (h2 << 1);
+    }
+};
+
 inline std::vector<std::string> parseLine(const std::string& line) {
     // https://stackoverflow.com/users/25450/sastanin
     enum class csvState { UNQUOTED_FIELD, QUOTED_FIELD, QUOTED_QUOTE };
@@ -115,6 +132,8 @@ class CsvReader {
 
     bool dataRead = false;
 
+    std::vector<Mapping> committedMappings;
+
     CsvReader(ThreadPool& cThreadPool, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger)
         : threadPool(cThreadPool), changeTracker(cChangeTracker), config(cConfig), logger(cLogger) {}
 
@@ -144,6 +163,14 @@ class CsvReader {
     const std::vector<std::string>& getHeader() { return data.front(); }
 
     const std::vector<std::string>& getFirstRow() { return *(data.begin() + 1); }
+
+    void setMappings(const std::vector<Mapping> mappings) {
+        // TODO: Get actual names instead of ids
+        committedMappings = mappings;
+        for (const Mapping& mapping : mappings) {
+            logger.pushLog(Log{std::format("MAPPINGS: ADDED {}", mapping.source, mapping.destination)});
+        }
+    }
 };
 
 class BomReader : public CsvReader {

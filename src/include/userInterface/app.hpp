@@ -163,6 +163,20 @@ class App {
                 logger.pushLog(Log{std::format("ERROR reading order: {}", e.what())});
             }
         }
+
+        // TODO: Validate mappings
+        if (true) {
+            float buttonWidth = ImGui::CalcTextSize("Commit Mapping").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+            float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+
+            ImGui::SameLine();
+            ImGui::SetCursorPosX(rightEdge - buttonWidth);
+
+            if (ImGui::Button("Commit Mapping")) {
+                orderVisualizer.commitMappings();
+            }
+        }
+
         orderVisualizer.run(dataAvailable);
     }
 
