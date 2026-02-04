@@ -26,6 +26,7 @@ static constexpr const std::pair<ImU32, ImU32> colSelected =
     std::pair<ImU32, ImU32>{IM_COL32(217, 159, 0, 255), IM_COL32(179, 123, 0, 255)};
 static constexpr const ImU32 colGreyBg = IM_COL32(71, 71, 71, 100);
 static constexpr const ImU32 colHoveredGrey = IM_COL32(255, 255, 255, 100);
+static constexpr const ImU32 colWhiteSemiOpaque = IM_COL32(255, 255, 255, 255);
 
 struct rect {
     ImVec2 start;
@@ -149,7 +150,7 @@ class DbTable {
                 lastEvent.origin = dataEvent(tableName, "", headers[i].name);
             }
             ImGui::PopID();
-            // ...existing code...
+
             cursor.x = splitterPoss[i] + 0.5 * SPLITTER_WIDTH;
             if (i + 1 < headers.size()) {
                 drawSplitterSC(tableName, i, cursor.x);
@@ -184,7 +185,6 @@ class DbTable {
         cursor.x = 0;
 
         for (std::size_t i = 0; i < headers.size(); ++i) {
-            // call helper that iterates cells for this column and invokes the provided drawer
             drawColumn(tableName,
                        i,
                        splitterPoss,

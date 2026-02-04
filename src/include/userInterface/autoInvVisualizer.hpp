@@ -2,8 +2,10 @@
 
 #include "autoInv.hpp"
 #include "userInterface/mappingWidgets.hpp"
+#include "userInterface/widgets.hpp"
 
 namespace AutoInv {
+Widgets::MOUSE_EVENT_TYPE isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness);
 
 class CsvVisualizer {
   protected:
@@ -18,6 +20,7 @@ class CsvVisualizer {
     virtual ~CsvVisualizer() = default;
     virtual void run(const bool dbDataFresh) = 0;
     virtual void createMapping(sourceId source, destId dest) = 0;
+    virtual void removeMapping(const Mapping& mapping) = 0;
     virtual void storeAnchorSource(sourceId source, ImVec2 pos) = 0; // TODO: needs to be virtual ?
     virtual void storeAnchorDest(destId dest, ImVec2 pos) = 0;       // TODO: needs to be virtual ?
 
@@ -37,6 +40,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
     std::vector<Mapping> mappings;
     std::unordered_map<sourceId, ImVec2> sourceAnchors;
     std::unordered_map<destId, ImVec2> destAnchors;
+    std::unordered_map<Mapping, MappingDrawing, MappingHash> mappingsDrawingInfo;
 
     CsvVisualizerImpl(DbService& cDbService, Reader& cReader, Logger& cLogger) : CsvVisualizer(cDbService, cLogger), reader(cReader) {}
 
@@ -49,13 +53,12 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
         checkNewData();
 
         if (reader.dataValid(false)) {
-            ImVec2 avail = ImGui::GetContentRegionAvail();
             const float rightWidth = RIGHT_WIDTH;
             const float spacing = ImGui::GetStyle().ItemSpacing.x;
-            const float leftWidth = avail.x - rightWidth - spacing;
+            const float leftWidth = ImGui::GetContentRegionAvail().x - rightWidth - spacing;
 
             // LEFT (maxWidth)
-            ImGui::BeginChild("CSV", ImVec2(leftWidth, 0), false);
+            ImGui::BeginChild("CSV", ImVec2(leftWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
             float maxWidth = 0;
             for (auto& csvHeaderWidget : csvHeaderWidgets) {
                 float width = ImGui::CalcTextSize(csvHeaderWidget.getHeader().c_str()).x;
@@ -63,6 +66,8 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
                     maxWidth = width;
                 }
             }
+            ImVec2 leftMin = ImGui::GetItemRectMin();
+            ImVec2 leftMax = ImGui::GetItemRectMax();
 
             for (auto& csvHeaderWidget : csvHeaderWidgets) {
                 csvHeaderWidget.draw(maxWidth);
@@ -71,22 +76,32 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
             ImGui::SameLine();
 
             // RIGHT (fixed)
-            ImGui::BeginChild("DB", ImVec2(rightWidth, 0), false);
+            ImGui::BeginChild("DB", ImVec2(rightWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
             for (auto& headerWidget : dbHeaderWidgets) {
                 headerWidget.draw(ImGui::GetContentRegionAvail().x);
             }
             ImGui::EndChild();
 
-            // TODO: Draw arrows
-            for (size_t i = 0; i < mappings.size(); ++i) {
-                const auto& mapping = mappings[i];
-                if (!sourceAnchors.count(mapping.source) || !destAnchors.count(mapping.destination)) {
-                    continue;
+            // clipping rect
+            ImVec2 rightMin = ImGui::GetItemRectMin();
+            ImVec2 rightMax = ImGui::GetItemRectMax();
+            ImVec2 clipMin(std::min(leftMin.x, rightMin.x), std::min(leftMin.y, rightMin.y));
+            ImVec2 clipMax(std::max(leftMax.x, rightMax.x), std::max(leftMax.y, rightMax.y));
+            ImDrawList* drawlist = ImGui::GetWindowDrawList();
+            drawlist->PushClipRect(clipMin, clipMax, true);
+
+            // mappings
+            std::vector<Mapping> toRemove;
+
+            for (const Mapping& mapping : mappings) {
+                if (drawMapping(mapping, drawlist, mappingsDrawingInfo.at(mapping))) {
+                    toRemove.push_back(mapping);
                 }
-                ImVec2 start = sourceAnchors.at(mapping.source);
-                ImVec2 end = destAnchors.at(mapping.destination);
-                ImGui::GetWindowDrawList()->AddLine(start, end, Widgets::colSelected.second, 1.0f);
             }
+            for (const Mapping& mapping : toRemove) {
+                removeMapping(mapping);
+            }
+            drawlist->PopClipRect();
         }
     }
     void checkNewData() {
@@ -103,11 +118,42 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
         }
     }
 
-    void createMapping(sourceId source, destId dest) override { mappings.push_back({source, dest}); }
+    void createMapping(sourceId source, destId dest) override {
+        if (std::find_if(mappings.begin(), mappings.end(), [&](const Mapping& m) { return m == Mapping(source, dest); }) !=
+            mappings.end()) {
+            return;
+        }
+        Mapping newMapping = Mapping(source, dest);
+        mappingsDrawingInfo.insert_or_assign(newMapping, MappingDrawing());
+        mappings.emplace_back(std::move(newMapping));
+    }
+
+    void removeMapping(const Mapping& mapping) override {
+        auto it = std::remove_if(mappings.begin(), mappings.end(), [&](const auto& m) { return m == mapping; });
+        if (it != mappings.end()) {
+            mappingsDrawingInfo.erase(*it);
+            mappings.erase(it, mappings.end());
+        }
+    }
 
     void storeAnchorSource(sourceId source, ImVec2 pos) override { sourceAnchors[source] = pos; }
 
     void storeAnchorDest(destId dest, ImVec2 pos) override { destAnchors[dest] = pos; }
+
+    bool drawMapping(const Mapping& mapping, ImDrawList* drawlist, MappingDrawing& mappingDrawingInfo) {
+        if (!sourceAnchors.count(mapping.source) || !destAnchors.count(mapping.destination)) {
+            return false;
+        }
+        ImVec2 start = sourceAnchors.at(mapping.source);
+        ImVec2 end = destAnchors.at(mapping.destination);
+
+        Widgets::MOUSE_EVENT_TYPE event = isMouseOnLine(start, end, mappingDrawingInfo.width);
+        const float thickness = event != Widgets::MOUSE_EVENT_TYPE::NONE ? 6.0f : 2.0f;
+        const ImU32 color = event != Widgets::MOUSE_EVENT_TYPE::NONE ? Widgets::colSelected.first : Widgets::colWhiteSemiOpaque;
+        drawlist->AddLine(start, end, color, thickness);
+        mappingDrawingInfo.width = thickness;
+        return event == Widgets::MOUSE_EVENT_TYPE::CLICK;
+    }
 };
 
 class BomVisualizer : public CsvVisualizerImpl<BomReader> {
@@ -119,4 +165,5 @@ class OrderVisualizer : public CsvVisualizerImpl<OrderReader> {
   public:
     OrderVisualizer(DbService& cDbService, OrderReader& cReader, Logger& cLogger) : CsvVisualizerImpl(cDbService, cReader, cLogger) {}
 };
+
 } // namespace AutoInv

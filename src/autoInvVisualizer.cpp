@@ -11,10 +11,10 @@ void CsvVisualizer::setData(std::shared_ptr<const completeDbData> newData) {
     for (const std::string& s : dbData->tables) {
         std::vector<DestinationDetail> headers;
         for (const tHeaderInfo& header : dbData->headers.at(s).data) {
-            headers.push_back(DestinationDetail(header, id));
+            headers.push_back(DestinationDetail(header, id, header.type != headerType::PRIMARY_KEY));
+            id++;
         }
         dbHeaderWidgets.push_back(std::move(MappingDestination(s, std::move(headers), true)));
-        id++;
     }
 }
 

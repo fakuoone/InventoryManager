@@ -12,14 +12,17 @@ const std::string& MappingSource::getHeader() {
 }
 
 void MappingSource::draw(const float width) {
-    const float actualWidth = width + 2 * OUTER_PADDING + INNER_PADDING;
+    // Calc Height
+    const float headerHeight = ImGui::CalcTextSize(header.c_str()).y + 2 * INNER_TEXT_PADDING;
+    const float height = 2 * (headerHeight) + 2 * INNER_PADDING;
+
+    const float anchorRadius = headerHeight / 2 - INNER_PADDING * 2;
+    const float actualWidth = width + 2 * OUTER_PADDING + INNER_PADDING + 2 * anchorRadius;
+
     ImGui::PushID(this);
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-    // Calc Height
-    const float headerHeight = ImGui::CalcTextSize(header.c_str()).y + 2 * INNER_TEXT_PADDING;
-    const float height = 2 * (headerHeight) + 2 * INNER_PADDING;
     ImVec2 begin = ImGui::GetCursorScreenPos();
     begin.x += OUTER_PADDING;
     begin.y += OUTER_PADDING;
@@ -47,8 +50,13 @@ void MappingSource::draw(const float width) {
         drawList->AddRect(cursor, ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING, cursor.y + headerHeight), colBorder, 0.0f);
     }
 
+    // draw anchor
+
+    const ImVec2 anchorCenter = ImVec2(cursor.x + actualWidth - INNER_PADDING - 2 * anchorRadius, cursor.y + headerHeight / 2);
+    drawList->AddCircleFilled(anchorCenter, anchorRadius, Widgets::colHoveredGrey);
+
     // store anchor in parent
-    parentVisualizer->storeAnchorSource(id, ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING, cursor.y + headerHeight / 2));
+    parentVisualizer->storeAnchorSource(id, anchorCenter);
 
     // header
     drawList->AddText(ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING),
@@ -114,16 +122,26 @@ void MappingDestination::draw(const float width) {
     drawList->AddRectFilled(bgRectBegin, bgRectEnd, Widgets::colGreyBg, 0.0f);
     drawList->AddRect(bgRectBegin, bgRectEnd, IM_COL32(120, 120, 120, 200), 0.0f);
 
-    // Headers column
+    const float anchorRadius = headerHeight / 2 - INNER_PADDING * 2;
+
     cursor.x += INNER_PADDING;
     cursor.y += INNER_PADDING;
+
+    // Headers column
     for (const auto& header : headers) {
+        // draw anchor
+        const ImVec2 anchorCenter = ImVec2(cursor.x + INNER_PADDING + anchorRadius, cursor.y + headerHeight / 2);
+        if (header.mappable) {
+            drawList->AddCircleFilled(anchorCenter, anchorRadius, Widgets::colHoveredGrey);
+        }
+
+        // draw headers
         const float cellWidth = widthPadded / 2 - INNER_PADDING;
         ImGui::SetCursorScreenPos(cursor);
         ImGui::InvisibleButton(header.header.name.c_str(), ImVec2(cellWidth, headerHeight));
         bool hovered = ImGui::IsItemHovered();
         bool draggedTo = handleDrag(header);
-        if (hovered || draggedTo) {
+        if ((hovered || draggedTo) && header.mappable) {
             ImU32 colBg = draggedTo ? Widgets::colSelected.first : Widgets::colGreyBg;
             ImU32 colBorder = draggedTo ? Widgets::colSelected.second : Widgets::colHoveredGrey;
 
@@ -131,12 +149,12 @@ void MappingDestination::draw(const float width) {
             drawList->AddRect(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + headerHeight), colBorder, 0.0f);
         }
 
-        drawList->AddText(ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING),
+        drawList->AddText(ImVec2(cursor.x + INNER_PADDING + INNER_TEXT_PADDING + 2 * anchorRadius, cursor.y + INNER_TEXT_PADDING),
                           hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
                           header.header.name.c_str());
 
         // store anchor in parent
-        parentVisualizer->storeAnchorDest(header.id, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + headerHeight / 2));
+        parentVisualizer->storeAnchorDest(header.id, anchorCenter);
 
         cursor.y += headerHeight;
     }
@@ -176,4 +194,24 @@ bool MappingDestination::handleDrag(const DestinationDetail& header) {
     return success;
 }
 
+Widgets::MOUSE_EVENT_TYPE isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness) {
+    ImGuiIO& io = ImGui::GetIO();
+    const bool equalPoints = p1.x == p2.x && p1.y == p2.y;
+    const bool xOutOfRange = (io.MousePos.x >= p1.x && io.MousePos.x >= p2.x) || (io.MousePos.x <= p1.x && io.MousePos.x <= p2.x);
+    const bool yOutOfRange = (io.MousePos.y >= p1.y && io.MousePos.y >= p2.y) || (io.MousePos.y <= p1.y && io.MousePos.y <= p2.y);
+    if (thickness == 0 || equalPoints || xOutOfRange || yOutOfRange) {
+        return Widgets::MOUSE_EVENT_TYPE::NONE;
+    }
+
+    float l21 = std::sqrt(std::pow((p2.y - p1.y), 2) + std::pow((p2.x - p1.x), 2));
+    float area = std::abs((p2.y - p1.y) * io.MousePos.x - (p2.x - p1.x) * io.MousePos.y + p2.x * p1.y - p2.y * p1.x);
+
+    if (area / l21 < thickness) {
+        if (io.MouseClicked[ImGuiMouseButton_Left]) {
+            return Widgets::MOUSE_EVENT_TYPE::CLICK;
+        }
+        return Widgets::MOUSE_EVENT_TYPE::HOVER;
+    }
+    return Widgets::MOUSE_EVENT_TYPE::NONE;
+}
 } // namespace AutoInv
