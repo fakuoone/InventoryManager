@@ -8,12 +8,12 @@ void MappingSource::setDragHandler(CsvVisualizer* handler) {
 }
 
 const std::string& MappingSource::getHeader() {
-    return header;
+    return data.header;
 }
 
 void MappingSource::draw(const float width) {
     // Calc Height
-    const float headerHeight = ImGui::CalcTextSize(header.c_str()).y + 2 * INNER_TEXT_PADDING;
+    const float headerHeight = ImGui::CalcTextSize(data.header.c_str()).y + 2 * INNER_TEXT_PADDING;
     const float height = 2 * (headerHeight) + 2 * INNER_PADDING;
 
     const float anchorRadius = headerHeight / 2 - INNER_PADDING * 2;
@@ -34,7 +34,7 @@ void MappingSource::draw(const float width) {
     drawList->AddRect(bgRectBegin, bgRectEnd, IM_COL32(120, 120, 120, 200), 0.0f);
 
     ImGui::SetCursorScreenPos(cursor);
-    ImGui::InvisibleButton(header.c_str(), ImVec2(width, headerHeight));
+    ImGui::InvisibleButton(data.header.c_str(), ImVec2(width, headerHeight));
 
     // hover effect on header
     cursor.x += INNER_PADDING;
@@ -56,12 +56,12 @@ void MappingSource::draw(const float width) {
     drawList->AddCircleFilled(anchorCenter, anchorRadius, Widgets::colHoveredGrey);
 
     // store anchor in parent
-    parentVisualizer->storeAnchorSource(id, anchorCenter);
+    parentVisualizer->storeAnchorSource(data.id, anchorCenter);
 
     // header
     drawList->AddText(ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING),
                       hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
-                      header.c_str());
+                      data.header.c_str());
     cursor.y += headerHeight;
 
     // example
@@ -69,7 +69,8 @@ void MappingSource::draw(const float width) {
                            ImVec2(cursor.x + actualWidth - 2 * INNER_TEXT_PADDING, cursor.y + headerHeight),
                            true);
 
-    drawList->AddText(ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING), IM_COL32(220, 220, 220, 255), example.c_str());
+    drawList->AddText(
+        ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING), IM_COL32(220, 220, 220, 255), data.example.c_str());
 
     drawList->PopClipRect();
     cursor.y += headerHeight;
@@ -81,7 +82,7 @@ void MappingSource::draw(const float width) {
 
 bool MappingSource::beginDrag() {
     if (ImGui::BeginDragDropSource()) {
-        ImGui::SetDragDropPayload(mappingStrings.at(mappingTypes::HEADER_HEADER).c_str(), &id, sizeof(id));
+        ImGui::SetDragDropPayload(mappingStrings.at(mappingTypes::HEADER_HEADER).c_str(), &data, sizeof(data));
         ImGui::EndDragDropSource();
         return true;
     }
@@ -176,7 +177,7 @@ void MappingDestination::draw(const float width) {
 }
 
 bool MappingDestination::handleDrag(const DestinationDetail& header) {
-    // TODO do not allow all types of data (types need to match, no pkeys)
+    // TODO types need to match
     if (!parentVisualizer) {
         return false;
     }
@@ -188,7 +189,7 @@ bool MappingDestination::handleDrag(const DestinationDetail& header) {
         const ImGuiPayload* payload =
             ImGui::AcceptDragDropPayload(mappingStrings.at(mappingTypes::HEADER_HEADER).c_str(),
                                          ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
-        success = parentVisualizer->handleDrag(header.id, payload);
+        success = parentVisualizer->handleDrag(header, payload);
         ImGui::EndDragDropTarget();
     }
     return success;

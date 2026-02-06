@@ -19,13 +19,14 @@ class CsvVisualizer {
   public:
     virtual ~CsvVisualizer() = default;
     virtual void run(const bool dbDataFresh) = 0;
-    virtual void createMapping(sourceId source, destId dest) = 0;
-    virtual void removeMapping(const Mapping& mapping) = 0;
-    virtual void storeAnchorSource(sourceId source, ImVec2 pos) = 0; // TODO: needs to be virtual ?
-    virtual void storeAnchorDest(destId dest, ImVec2 pos) = 0;       // TODO: needs to be virtual ?
+    virtual void createMapping(const SourceDetail& source, const DestinationDetail& dest) = 0;
+    virtual bool hasMapping(const SourceDetail& source, const DestinationDetail& dest) = 0;
+    virtual void removeMapping(const MappingNumber& mapping) = 0;
+    virtual void storeAnchorSource(mappingIdType source, ImVec2 pos) = 0; // TODO: needs to be virtual ?
+    virtual void storeAnchorDest(mappingIdType dest, ImVec2 pos) = 0;     // TODO: needs to be virtual ?
 
     void setData(std::shared_ptr<const completeDbData> newData);
-    bool handleDrag(destId dest, const ImGuiPayload* payload);
+    bool handleDrag(const DestinationDetail&, const ImGuiPayload* payload);
 };
 
 template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
@@ -37,10 +38,11 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
     std::vector<std::string> headers;
     std::vector<std::string> firstRow;
     std::vector<MappingSource> csvHeaderWidgets;
-    std::vector<Mapping> mappings;
-    std::unordered_map<sourceId, ImVec2> sourceAnchors;
-    std::unordered_map<destId, ImVec2> destAnchors;
-    std::unordered_map<Mapping, MappingDrawing, MappingHash> mappingsDrawingInfo;
+    std::vector<MappingNumber> mappingsN;
+    std::vector<MappingStr> mappingsS;
+    std::unordered_map<mappingIdType, ImVec2> sourceAnchors;
+    std::unordered_map<mappingIdType, ImVec2> destAnchors;
+    std::unordered_map<MappingNumber, MappingDrawing, MappingHash> mappingsDrawingInfo;
 
     CsvVisualizerImpl(DbService& cDbService, Reader& cReader, Logger& cLogger) : CsvVisualizer(cDbService, cLogger), reader(cReader) {}
 
@@ -90,10 +92,10 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
             ImDrawList* drawlist = ImGui::GetWindowDrawList();
 
             // mappings
-            const Mapping* toRemove = nullptr;
+            const MappingNumber* toRemove = nullptr;
 
             drawlist->PushClipRect(clipMin, clipMax, true);
-            for (const Mapping& mapping : mappings) {
+            for (const MappingNumber& mapping : mappingsN) {
                 if (drawMapping(mapping, drawlist, mappingsDrawingInfo.at(mapping))) {
                     toRemove = &mapping;
                 }
@@ -113,36 +115,47 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
             firstRow = reader.getFirstRow();
             MappingSource::setDragHandler(static_cast<CsvVisualizer*>(this));
             MappingDestination::setDragHandler(static_cast<CsvVisualizer*>(this));
-            sourceId id = 0;
+            mappingIdType id = 0;
             for (std::size_t i = 0; i < headers.size(); ++i) {
                 csvHeaderWidgets.push_back(std::move(MappingSource(headers[i], firstRow[i], id++)));
             }
         }
     }
 
-    void createMapping(sourceId source, destId dest) override {
-        if (std::find_if(mappings.begin(), mappings.end(), [&](const Mapping& m) { return m == Mapping(source, dest); }) !=
-            mappings.end()) {
+    void createMapping(const SourceDetail& source, const DestinationDetail& dest) override {
+        if (hasMapping(source, dest)) {
             return;
         }
-        Mapping newMapping = Mapping(source, dest);
-        mappingsDrawingInfo.insert_or_assign(newMapping, MappingDrawing());
-        mappings.emplace_back(std::move(newMapping));
+        MappingNumber newMappingN = MappingNumber(source.id, dest.id);
+        MappingStr newMappingS = MappingStr(source.header, PreciseHeader(dest.table, dest.header.name));
+        mappingsDrawingInfo.insert_or_assign(newMappingN, MappingDrawing());
+        mappingsN.emplace_back(std::move(newMappingN));
+        mappingsS.emplace_back(std::move(newMappingS));
     }
 
-    void removeMapping(const Mapping& mapping) override {
-        auto it = std::find(mappings.begin(), mappings.end(), mapping);
-        if (it != mappings.end()) {
+    bool hasMapping(const SourceDetail& source, const DestinationDetail& dest) override {
+        if (std::find_if(mappingsN.begin(), mappingsN.end(), [&](const MappingNumber& m) {
+                return m == MappingNumber(source.id, dest.id);
+            }) != mappingsN.end()) {
+            return true;
+        }
+        return false;
+    }
+
+    void removeMapping(const MappingNumber& mapping) override {
+        auto it = std::find(mappingsN.begin(), mappingsN.end(), mapping);
+        if (it != mappingsN.end()) {
             mappingsDrawingInfo.erase(*it);
-            mappings.erase(it);
+            mappingsN.erase(it);
+            mappingsS.erase(std::distance(mappingsN.begin(), it) + mappingsS.begin()); // assumes both are added simul
         }
     }
 
-    void storeAnchorSource(sourceId source, ImVec2 pos) override { sourceAnchors[source] = pos; }
+    void storeAnchorSource(mappingIdType source, ImVec2 pos) override { sourceAnchors[source] = pos; }
 
-    void storeAnchorDest(destId dest, ImVec2 pos) override { destAnchors[dest] = pos; }
+    void storeAnchorDest(mappingIdType dest, ImVec2 pos) override { destAnchors[dest] = pos; }
 
-    bool drawMapping(const Mapping& mapping, ImDrawList* drawlist, MappingDrawing& mappingDrawingInfo) {
+    bool drawMapping(const MappingNumber& mapping, ImDrawList* drawlist, MappingDrawing& mappingDrawingInfo) {
         if (!sourceAnchors.count(mapping.source) || !destAnchors.count(mapping.destination)) {
             return false;
         }
@@ -157,17 +170,19 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
         return event == Widgets::MOUSE_EVENT_TYPE::CLICK;
     }
 
-    void commitMappings() { reader.setMappings(mappings); }
+    void commitMappings() { reader.setMappings(mappingsS); }
 };
 
-class BomVisualizer : public CsvVisualizerImpl<BomReader> {
+class BomVisualizer : public CsvVisualizerImpl<ChangeGeneratorFromBom> {
   public:
-    BomVisualizer(DbService& cDbService, BomReader& cReader, Logger& cLogger) : CsvVisualizerImpl(cDbService, cReader, cLogger) {}
+    BomVisualizer(DbService& cDbService, ChangeGeneratorFromBom& cReader, Logger& cLogger)
+        : CsvVisualizerImpl(cDbService, cReader, cLogger) {}
 };
 
-class OrderVisualizer : public CsvVisualizerImpl<OrderReader> {
+class OrderVisualizer : public CsvVisualizerImpl<ChangeGeneratorFromOrder> {
   public:
-    OrderVisualizer(DbService& cDbService, OrderReader& cReader, Logger& cLogger) : CsvVisualizerImpl(cDbService, cReader, cLogger) {}
+    OrderVisualizer(DbService& cDbService, ChangeGeneratorFromOrder& cReader, Logger& cLogger)
+        : CsvVisualizerImpl(cDbService, cReader, cLogger) {}
 };
 
 } // namespace AutoInv

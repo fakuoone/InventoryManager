@@ -1,44 +1,30 @@
-/*
-"Reference","Qty","Value","DNP","Exclude from BOM","Exclude from Board","Footprint","Datasheet"
-"C1,C9,C42,C43,C51","5","10u","","","","Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder","~"
-"C2,C5,C11,C13,C14,C16,C19,C20,C21,C24,C30","11","1u","","","","Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder","~"
-"C3,C6,C7,C8,C22,C23,C25,C26,C27,C28,C31,C36,C37,C48,C49,C52,C53","17","100n","","","","Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder","~"
-"C4","1","2.5n","","","","Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder","~"
-"C10,C17,C29","3","1n","","","","Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder","~"
-"C12","1","10u","","","","Capacitor_SMD:C_1206_3216Metric_Pad1.33x1.80mm_HandSolder","~"
-"C15,C18","2","4.7u","","","","Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder","~"
-"C32,C33,C44","3","10p","","","","Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder","~"
-"C34,C35,C40,C41,C45,C46,C47","7","100p","","","","Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder","~"
-"C38,C39,C50","3","47p","","","","Capacitor_SMD:C_0805_2012Metric_Pad1.18x1.45mm_HandSolder","~"
-"D1,D2,D3","3","1PS79SB30Z","","","","Diode_SMD:D_SOD-523","~"
-"D4,D7","2","RFC02MM2STFTR","","","","Diode_SMD:D_SOD-123F","http://www.vishay.com/docs/88503/1n4001.pdf"
-"D5,D6","2","1N4148WS","","","","Diode_SMD:D_SOD-323_HandSoldering","https://www.vishay.com/docs/85751/1n4148ws.pdf"
-"D8,D9,D10,D14,D15,D16","6","Yellow","","","","LED_SMD:JE2835APAN0001A0000N0000001","http://www.osram-os.com/Graphics/XPic6/00029609_0.pdf/SFh%20460.pdf"
-"D11,D12,D13","3","Red","","","","LED_SMD:JE2835APAN0001A0000N0000001","http://www.osram-os.com/Graphics/XPic6/00029609_0.pdf/SFh%20460.pdf"
-"D17","1","BZT52B2V4","","","","Diode_SMD:D_SOD-123F","https://diotec.com/tl_files/diotec/files/pdf/datasheets/bzt52b2v4.pdf"
-"D18","1","GR","","","","Diode_SMD:D_0805_2012Metric_Pad1.15x1.40mm_HandSolder","~"
-*/
-
 #pragma once
 
 #include "changeTracker.hpp"
+#include "dbService.hpp"
 #include "logger.hpp"
 #include "threadPool.hpp"
 
 namespace AutoInv {
-using sourceId = uint32_t;
-using destId = uint32_t;
+using mappingIdType = uint32_t;
 
-struct Mapping {
-    sourceId source;
-    destId destination;
+template <typename S, typename D> struct Mapping {
+    S source;
+    D destination;
     bool operator==(const Mapping& other) const { return other.source == source && other.destination == destination; }
 };
+struct PreciseHeader {
+    std::string table;
+    std::string header;
+};
+
+using MappingStr = Mapping<std::string, PreciseHeader>;
+using MappingNumber = Mapping<mappingIdType, mappingIdType>;
 
 struct MappingHash {
-    size_t operator()(const Mapping& m) const noexcept {
-        size_t h1 = std::hash<sourceId>{}(m.source);
-        size_t h2 = std::hash<destId>{}(m.destination);
+    size_t operator()(const MappingNumber& m) const noexcept {
+        size_t h1 = std::hash<mappingIdType>{}(m.source);
+        size_t h2 = std::hash<mappingIdType>{}(m.destination);
         return h1 ^ (h2 << 1);
     }
 };
@@ -120,31 +106,72 @@ inline std::vector<std::vector<std::string>> readData(std::filesystem::path csv)
     return rows;
 }
 
-class CsvReader {
+class CsvChangeGenerator {
   protected:
     ThreadPool& threadPool;
     ChangeTracker& changeTracker;
+    DbService& dbService;
     Config& config;
     Logger& logger;
 
     std::vector<std::vector<std::string>> data;
     std::future<bool> fRead;
+    std::future<void> fExecMappings;
 
     bool dataRead = false;
 
-    std::vector<Mapping> committedMappings;
+    std::vector<MappingStr> committedMappings;
 
-    CsvReader(ThreadPool& cThreadPool, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger)
-        : threadPool(cThreadPool), changeTracker(cChangeTracker), config(cConfig), logger(cLogger) {}
+    CsvChangeGenerator(ThreadPool& cThreadPool, ChangeTracker& cChangeTracker, DbService& cDbService, Config& cConfig, Logger& cLogger)
+        : threadPool(cThreadPool), changeTracker(cChangeTracker), dbService(cDbService), config(cConfig), logger(cLogger) {}
 
-    virtual ~CsvReader() = default;
+    virtual ~CsvChangeGenerator() = default;
 
-  public:
     bool run(std::filesystem::path csv) {
         data = readData(csv);
         return !data.empty();
     }
 
+    PreciseHeader getHeaderOfMapping(const std::string& csvCol) {
+        // TODO: implement logic
+        return PreciseHeader("", "");
+    }
+
+    void executeCsv() {
+        // TODO: Implement logic
+        // 0. convert mapping into usable data
+        // 1. validate mapping and data?
+        // 2. For every data-entry: decide wether insert or update or delete
+        // 3. freeze? -> create and push changes
+        std::size_t i = 0;
+        std::unordered_set<std::size_t> mappedColumns;
+        for (std::size_t j = 0; j < data[0].size(); j++) {
+            if (std::find_if(committedMappings.begin(), committedMappings.end(), [&](const MappingStr& mapping) {
+                    return mapping.source == data[0][j];
+                }) != committedMappings.end()) {
+                mappedColumns.insert(j);
+            }
+        }
+
+        for (const auto& row : data) {
+            if (i == 0) {
+                continue;
+            }
+            // TODO: a single row can have multiple changes depending on the mapping
+            Change::colValMap cells;
+            for (std::size_t j = 0; j < row.size(); j++) {
+                if (!mappedColumns.contains(j)) {
+                    continue;
+                }
+                PreciseHeader header = getHeaderOfMapping(data[0][j]);
+                cells.emplace(header.header, row[j]);
+            }
+
+            changeTracker.addChange(Change{cells, changeType::INSERT_ROW, dbService.getTable("TODO")});
+        }
+    }
+
+  public:
     bool dataValid(bool once) {
         if (!once) {
             return dataRead;
@@ -158,33 +185,36 @@ class CsvReader {
         return false;
     }
 
-    void read(std::filesystem::path csv) { fRead = threadPool.submit(&CsvReader::run, this, csv); }
+    void read(std::filesystem::path csv) { fRead = threadPool.submit(&CsvChangeGenerator::run, this, csv); }
 
     const std::vector<std::string>& getHeader() { return data.front(); }
 
     const std::vector<std::string>& getFirstRow() { return *(data.begin() + 1); }
 
-    void setMappings(const std::vector<Mapping> mappings) {
+    void setMappings(const std::vector<MappingStr> mappings) {
         // TODO: Get actual names instead of ids
         committedMappings = mappings;
-        for (const Mapping& mapping : mappings) {
-            logger.pushLog(Log{std::format("MAPPINGS: ADDED {}", mapping.source, mapping.destination)});
+        for (const MappingStr& mapping : mappings) {
+            logger.pushLog(
+                Log{std::format("MAPPINGS: MAPPED {} TO {} OF {}", mapping.source, mapping.destination.header, mapping.destination.table)});
         }
     }
+
+    void reqExecuteCsv() { fExecMappings = threadPool.submit(&CsvChangeGenerator::executeCsv, this); }
 };
 
-class BomReader : public CsvReader {
+class ChangeGeneratorFromBom : public CsvChangeGenerator {
   private:
   public:
-    BomReader(ThreadPool& cPool, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger)
-        : CsvReader(cPool, cChangeTracker, cConfig, cLogger) {}
+    ChangeGeneratorFromBom(ThreadPool& cPool, ChangeTracker& cChangeTracker, DbService& cDbService, Config& cConfig, Logger& cLogger)
+        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cConfig, cLogger) {}
 };
 
-class OrderReader : public CsvReader {
+class ChangeGeneratorFromOrder : public CsvChangeGenerator {
   private:
   public:
-    OrderReader(ThreadPool& cPool, ChangeTracker& cChangeTracker, Config& cConfig, Logger& cLogger)
-        : CsvReader(cPool, cChangeTracker, cConfig, cLogger) {}
+    ChangeGeneratorFromOrder(ThreadPool& cPool, ChangeTracker& cChangeTracker, DbService& cDbService, Config& cConfig, Logger& cLogger)
+        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cConfig, cLogger) {}
 };
 
 }; // namespace AutoInv

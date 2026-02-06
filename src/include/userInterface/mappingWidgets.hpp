@@ -22,20 +22,25 @@ struct MappingDrawing {
 };
 
 struct DestinationDetail {
+    std::string table;
     tHeaderInfo header;
-    destId id;
+    mappingIdType id;
     bool mappable;
+};
+
+struct SourceDetail {
+    const std::string header;
+    const std::string example;
+    mappingIdType id;
 };
 
 class MappingSource {
   private:
-    const std::string header;
-    const std::string example;
     static inline CsvVisualizer* parentVisualizer;
-    sourceId id;
+    SourceDetail data;
 
   public:
-    MappingSource(const std::string& cHeader, const std::string& cExample, sourceId cId) : header(cHeader), example(cExample), id(cId) {}
+    MappingSource(const std::string& cHeader, const std::string& cExample, mappingIdType cId) : data(cHeader, cExample, cId) {}
     static void setDragHandler(CsvVisualizer* handler);
     const std::string& getHeader();
     void draw(const float width);

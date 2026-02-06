@@ -20,8 +20,8 @@ int main() {
 
     ChangeTracker changeTracker{dbService, logger};
 
-    AutoInv::BomReader bomReader{pool, changeTracker, config, logger};
-    AutoInv::OrderReader orderReader{pool, changeTracker, config, logger};
+    AutoInv::ChangeGeneratorFromBom bomReader{pool, changeTracker, dbService, config, logger};
+    AutoInv::ChangeGeneratorFromOrder orderReader{pool, changeTracker, dbService, config, logger};
 
     App app{dbService, changeTracker, config, bomReader, orderReader, logger};
 

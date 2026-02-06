@@ -7,22 +7,25 @@ void CsvVisualizer::setData(std::shared_ptr<const completeDbData> newData) {
     dbData = newData;
     // TODO: Reset old mappings etc
 
-    destId id = 0;
+    mappingIdType id = 0;
     for (const std::string& s : dbData->tables) {
         std::vector<DestinationDetail> headers;
         for (const tHeaderInfo& header : dbData->headers.at(s).data) {
-            headers.push_back(DestinationDetail(header, id, header.type != headerType::PRIMARY_KEY));
+            headers.push_back(DestinationDetail(s, header, id, header.type != headerType::PRIMARY_KEY));
             id++;
         }
         dbHeaderWidgets.push_back(std::move(MappingDestination(s, std::move(headers), true)));
     }
 }
 
-bool CsvVisualizer::handleDrag(destId destination, const ImGuiPayload* payload) {
+bool CsvVisualizer::handleDrag(const DestinationDetail& destination, const ImGuiPayload* payload) {
     if (payload) {
+        const SourceDetail source = *static_cast<const SourceDetail*>(payload->Data);
+        if (hasMapping(source, destination)) {
+            return false;
+        }
         if (payload->IsDelivery()) {
-            sourceId id = *static_cast<const sourceId*>(payload->Data);
-            createMapping(id, destination);
+            createMapping(source, destination);
         }
         return true;
     }

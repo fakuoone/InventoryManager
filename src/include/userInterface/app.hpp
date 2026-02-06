@@ -22,8 +22,8 @@ class App {
     DbService& dbService;
     ChangeTracker& changeTracker;
     Config& config;
-    AutoInv::BomReader& bomReader;
-    AutoInv::OrderReader& orderReader;
+    AutoInv::ChangeGeneratorFromBom& bomReader;
+    AutoInv::ChangeGeneratorFromOrder& orderReader;
     Logger& logger;
 
     ChangeExeService changeExe{dbService, changeTracker, logger};
@@ -184,8 +184,8 @@ class App {
     App(DbService& cDbService,
         ChangeTracker& cChangeTracker,
         Config& cConfig,
-        AutoInv::BomReader& cBomReader,
-        AutoInv::OrderReader& cOrderReader,
+        AutoInv::ChangeGeneratorFromBom& cBomReader,
+        AutoInv::ChangeGeneratorFromOrder& cOrderReader,
 
         Logger& cLogger)
         : dbService(cDbService), changeTracker(cChangeTracker), config(cConfig), bomReader(cBomReader), orderReader(cOrderReader),
