@@ -53,6 +53,8 @@ class App {
         dbVisualizer.setData(dbData);
         bomVisualizer.setData(dbData);
         orderVisualizer.setData(dbData);
+        bomReader.setData(dbData);
+        orderReader.setData(dbData);
 
         changeTracker.setMaxPKeys(dbData->maxPKeys);
         if (!uiChanges) {
