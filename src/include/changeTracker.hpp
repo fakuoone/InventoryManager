@@ -33,16 +33,17 @@ class ChangeTracker {
     Change& manageConflictL(Change& newChange);
     void collectRequiredChangesL(Change& change, std::vector<Change>& out);
     std::size_t findExistingRequired(const Change& change);
+    void handleRequiredChildrenMismatch(Change& change, std::vector<Change>& rChanges);
     bool releaseDependancy(Change& change, const Change& rC);
     void releaseAllDependancies(Change& change);
     void allocateIds(std::vector<Change>& changes);
     bool addChangeInternalL(const Change& change);
     void collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected);
     void removeChangeL(std::size_t key);
+    void logDetail(std::string content);
 
   public:
-    ChangeTracker(DbService& cDbService, Logger& cLogger)
-        : dbService(cDbService), logger(cLogger) {}
+    ChangeTracker(DbService& cDbService, Logger& cLogger) : dbService(cDbService), logger(cLogger) {}
 
     void freeze();
     void unfreeze();

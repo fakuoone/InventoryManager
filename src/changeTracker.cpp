@@ -1,5 +1,7 @@
 #include "changeTracker.hpp"
 
+#define WITH_DETAILED_LOG
+
 void ChangeTracker::mergeCellChanges(Change& existingChange, const Change& newChange) {
     logger.pushLog(Log{std::format("        Merging cell changes {} and {}", existingChange.getKey(), newChange.getKey())});
     existingChange ^ newChange;
@@ -50,6 +52,7 @@ bool ChangeTracker::isConflicting(const Change& newChange) {
 Change& ChangeTracker::manageConflictL(Change& newChange) {
     // TODO: only allow changes with the same UKEY, if it is updatecells (dont allow insertrow, if
     // its the same content)
+    logDetail(std::format("Managing conflict for change {}.", newChange.getKey()));
     if (!isConflicting(newChange)) {
         return newChange;
     }
@@ -71,6 +74,7 @@ Change& ChangeTracker::manageConflictL(Change& newChange) {
 }
 
 void ChangeTracker::propagateValidity(Change& change) {
+    logDetail(std::format("Propagating validity for change {}.", change.getKey()));
     if (change.hasChildren()) {
         bool childSum = true;
         for (const std::size_t& childKey : change.getChildren()) {
@@ -91,6 +95,7 @@ void ChangeTracker::propagateValidity(Change& change) {
 }
 
 bool ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRowId) {
+    logDetail(std::format("Attempting to add change to table {}.", change.getTable()));
     {
         std::lock_guard<std::mutex> lg(changes.mtx);
         if (changes.uKeyMappedData.contains(change.getTable())) {
@@ -135,10 +140,9 @@ bool ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRow
 }
 
 void ChangeTracker::collectRequiredChangesL(Change& change, std::vector<Change>& out) {
+    logDetail(std::format("Collecting required changes for change {}.", change.getKey()));
     std::vector<Change> required = dbService.getRequiredChanges(change, changes.maxPKeys);
-    if (required.size() == 0) {
-        releaseAllDependancies(change);
-    }
+    handleRequiredChildrenMismatch(change, required);
     for (Change& r : required) {
         if (!dbService.validateChange(r, true)) {
             return;
@@ -148,10 +152,11 @@ void ChangeTracker::collectRequiredChangesL(Change& change, std::vector<Change>&
         if (existingRequiredKey != 0) {
             Change& existingChange = changes.flatData.at(existingRequiredKey);
             if (released) {
+                logDetail(std::format("Connecting change {} to existing change {}.", change.getKey(), existingChange.getKey()));
                 existingChange.addParent(change.getKey());
                 existingChange.setSelected(change.isSelected());
                 change.pushChild(existingChange); // has to be set here, instead of getRequiredChanges, because
-                                                  // this will not get added to flatData
+                // this will not get added to flatData
             }
         } else {
             change.pushChild(r);
@@ -164,9 +169,36 @@ void ChangeTracker::collectRequiredChangesL(Change& change, std::vector<Change>&
     out.push_back(change);
 }
 
+void ChangeTracker::handleRequiredChildrenMismatch(Change& change, std::vector<Change>& rChanges) {
+    if (rChanges.size() == 0) {
+        releaseAllDependancies(change);
+        return;
+    }
+
+    const std::vector<std::size_t>& children = change.getChildren();
+    const std::size_t sizeDiff = children.size() - rChanges.size();
+
+    // release Dependency when change now refers to existing data
+    std::size_t diffsHandled = 0;
+    for (const std::size_t childKey : change.getChildren()) {
+        if (sizeDiff == diffsHandled) {
+            return;
+        }
+        Change& child = changes.flatData.at(childKey);
+        auto it = std::find_if(rChanges.begin(), rChanges.end(), [&](const Change& r) { return child.getTable() == r.getTable(); });
+
+        // remove the child that is no longer in the required changes
+        if (it == rChanges.end()) {
+            change.removeChild(childKey);
+            child.removeParent(change.getKey());
+            diffsHandled++;
+        }
+    }
+}
+
 std::size_t ChangeTracker::findExistingRequired(const Change& rChange) {
-    // finds, if a change with the same resulting table ukey-value exists (by looping over all
-    // changes of a table, which i didnt want)
+    // finds, if a change with the same resulting table ukey-value exists
+    logDetail(std::format("Finding existing change  for required change {}.", rChange.getKey()));
     const std::string& table = rChange.getTable();
     if (!changes.uKeyMappedData.contains(table)) {
         return 0;
@@ -187,7 +219,8 @@ void ChangeTracker::releaseAllDependancies(Change& change) {
 }
 
 bool ChangeTracker::releaseDependancy(Change& change, const Change& rC) {
-    // TODO: 07.02.26: Changes created by orderShort.csv are not released when parent change changs its child to an existing db entry
+    logDetail(std::format("Attempting to release dependency between change {} and {}.", change.getKey(), rC.getKey()));
+
     const std::string& rCTableName = rC.getTable();
     const std::string rCUKeyHeader = dbService.getTableUKey(rCTableName);
     const std::string& rCUKeyValue = "";
@@ -388,4 +421,10 @@ std::vector<std::size_t> ChangeTracker::getRoots() {
     }
 
     return all;
+}
+
+void ChangeTracker::logDetail(std::string content) {
+#ifdef WITH_DETAILED_LOG
+    logger.pushLog(Log{std::format("      INTERNAL: {}", std::move(content))});
+#endif
 }
