@@ -7,9 +7,10 @@
 #include "dbInterface.hpp"
 #include "dbService.hpp"
 
-#include "userInterface/widgets.hpp"
-
 #include "logger.hpp"
+
+#include "userInterface/uiTypes.hpp"
+#include "userInterface/widgets.hpp"
 
 #include <array>
 #include <limits>
@@ -28,7 +29,10 @@ class DbVisualizer {
     ChangeExeService& changeExe;
     Logger& logger;
 
+    DataStates& dataStates;
+
     std::shared_ptr<const completeDbData> dbData;
+
     std::shared_ptr<uiChangeInfo> uiChanges;
     editingData edit;
     std::string selectedTable;
@@ -37,9 +41,9 @@ class DbVisualizer {
     Widgets::DbTable dbTable{edit, selectedTable, changeHighlight, logger};
     Widgets::ChangeOverviewer changeOverviewer{changeTracker, changeExe, uiChanges, 60, changeHighlight, selectedTable};
 
-    void drawChangeOverview(bool dataFresh) {
+    void drawChangeOverview() {
         ImGui::Text("CHANGE OVERVIEW");
-        ImGui::BeginDisabled(!dataFresh);
+        ImGui::BeginDisabled(dataStates.dbData != DataState::DATA_READY);
         if (ImGui::Button("Execute all")) {
             changeExe.requestChangeApplication(sqlAction::EXECUTE);
         }
@@ -67,15 +71,15 @@ class DbVisualizer {
     }
 
     void handleTableEvent() {
-        const Widgets::event tableEvent = dbTable.getEvent();
+        const Widgets::Event tableEvent = dbTable.getEvent();
         const bool handleEvent =
             tableEvent.type.mouse == Widgets::MOUSE_EVENT_TYPE::CLICK || tableEvent.type.action == Widgets::ACTION_TYPE::EDIT;
         if (!handleEvent) {
             return;
         }
 
-        if (std::holds_alternative<Widgets::dataEvent>(tableEvent.origin)) { // NO CHANGE EXISTS ON THIS ROW
-            const Widgets::dataEvent event = std::get<Widgets::dataEvent>(tableEvent.origin);
+        if (std::holds_alternative<Widgets::DataEvent>(tableEvent.origin)) { // NO CHANGE EXISTS ON THIS ROW
+            const Widgets::DataEvent event = std::get<Widgets::DataEvent>(tableEvent.origin);
             switch (tableEvent.type.action) {
             case Widgets::ACTION_TYPE::HEADER: {
                 const tHeaderVector& header = dbData->headers.at(event.tableName).data;
@@ -139,8 +143,9 @@ class DbVisualizer {
     }
 
   public:
-    DbVisualizer(DbService& cDbService, ChangeTracker& cChangeTracker, ChangeExeService& cChangeExe, Logger& cLogger)
-        : dbService(cDbService), changeTracker(cChangeTracker), changeExe(cChangeExe), logger(cLogger) {}
+    DbVisualizer(
+        DbService& cDbService, ChangeTracker& cChangeTracker, ChangeExeService& cChangeExe, Logger& cLogger, DataStates& cDataStates)
+        : dbService(cDbService), changeTracker(cChangeTracker), changeExe(cChangeExe), logger(cLogger), dataStates(cDataStates) {}
 
     void setData(std::shared_ptr<const completeDbData> newData) {
         dbData = newData;
@@ -152,7 +157,7 @@ class DbVisualizer {
         dbTable.setChangeData(changeData);
     }
 
-    void run(bool dataFresh) {
+    void run() {
         if (ImGui::BeginTabBar("Main")) {
             ImGuiTabItemFlags flags = 0;
             if (!selectedTable.empty()) {
@@ -160,13 +165,15 @@ class DbVisualizer {
             };
             if (ImGui::BeginTabItem("Tables", nullptr, flags)) {
                 if (ImGui::BeginTabBar("MainTabs")) {
-                    for (const auto& [table, data] : dbData->headers) {
-                        if (ImGui::BeginTabItem(table.c_str())) {
-                            ImGui::BeginDisabled(!dataFresh);
-                            dbTable.drawTable(table);
-                            handleTableEvent();
-                            ImGui::EndDisabled();
-                            ImGui::EndTabItem();
+                    if (dataStates.dbData == DataState::DATA_OUTDATED || dataStates.dbData == DataState::DATA_READY) {
+                        for (const auto& [table, data] : dbData->headers) {
+                            if (ImGui::BeginTabItem(table.c_str())) {
+                                ImGui::BeginDisabled(dataStates.dbData != DataState::DATA_READY);
+                                dbTable.drawTable(table);
+                                handleTableEvent();
+                                ImGui::EndDisabled();
+                                ImGui::EndTabItem();
+                            }
                         }
                     }
                     ImGui::EndTabBar();
@@ -174,7 +181,7 @@ class DbVisualizer {
                 ImGui::EndTabItem();
             }
             if (ImGui::BeginTabItem("Changes")) {
-                drawChangeOverview(dataFresh);
+                drawChangeOverview();
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();

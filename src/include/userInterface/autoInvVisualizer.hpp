@@ -2,6 +2,7 @@
 
 #include "autoInv.hpp"
 #include "userInterface/mappingWidgets.hpp"
+#include "userInterface/uiTypes.hpp"
 #include "userInterface/widgets.hpp"
 
 namespace AutoInv {
@@ -12,13 +13,15 @@ class CsvVisualizer {
     DbService& dbService;
     Logger& logger;
     std::shared_ptr<const completeDbData> dbData;
+    DataStates& dataStates;
     std::vector<MappingDestination> dbHeaderWidgets;
 
-    CsvVisualizer(DbService& cDbService, Logger& cLogger) : dbService(cDbService), logger(cLogger) {}
+    CsvVisualizer(DbService& cDbService, Logger& cLogger, DataStates& cDataStates)
+        : dbService(cDbService), logger(cLogger), dataStates(cDataStates) {}
 
   public:
     virtual ~CsvVisualizer() = default;
-    virtual void run(const bool dbDataFresh) = 0;
+    virtual void run() = 0;
     virtual void createMapping(const SourceDetail& source, const DestinationDetail& dest) = 0;
     virtual bool hasMapping(const SourceDetail& source, const DestinationDetail& dest) = 0;
     virtual void removeMapping(const MappingNumber& mapping) = 0;
@@ -44,11 +47,12 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
     std::unordered_map<mappingIdType, ImVec2> destAnchors;
     std::unordered_map<MappingNumber, MappingDrawing, MappingHash> mappingsDrawingInfo;
 
-    CsvVisualizerImpl(DbService& cDbService, Reader& cReader, Logger& cLogger) : CsvVisualizer(cDbService, cLogger), reader(cReader) {}
+    CsvVisualizerImpl(DbService& cDbService, Reader& cReader, Logger& cLogger, DataStates& cDataStates)
+        : CsvVisualizer(cDbService, cLogger, cDataStates), reader(cReader) {}
 
   public:
-    void run(const bool dbDataFresh) override {
-        if (!dbDataFresh) {
+    void run() override {
+        if (dataStates.dbData != DataState::DATA_READY) {
             return;
         }
 
@@ -170,19 +174,21 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
         return event == Widgets::MOUSE_EVENT_TYPE::CLICK;
     }
 
+    bool hasMappings() { return mappingsS.size() > 2; }
+
     void commitMappings() { reader.setMappings(mappingsS); }
 };
 
 class BomVisualizer : public CsvVisualizerImpl<ChangeGeneratorFromBom> {
   public:
-    BomVisualizer(DbService& cDbService, ChangeGeneratorFromBom& cReader, Logger& cLogger)
-        : CsvVisualizerImpl(cDbService, cReader, cLogger) {}
+    BomVisualizer(DbService& cDbService, ChangeGeneratorFromBom& cReader, Logger& cLogger, DataStates& cDataStates)
+        : CsvVisualizerImpl(cDbService, cReader, cLogger, cDataStates) {}
 };
 
 class OrderVisualizer : public CsvVisualizerImpl<ChangeGeneratorFromOrder> {
   public:
-    OrderVisualizer(DbService& cDbService, ChangeGeneratorFromOrder& cReader, Logger& cLogger)
-        : CsvVisualizerImpl(cDbService, cReader, cLogger) {}
+    OrderVisualizer(DbService& cDbService, ChangeGeneratorFromOrder& cReader, Logger& cLogger, DataStates& cDataStates)
+        : CsvVisualizerImpl(cDbService, cReader, cLogger, cDataStates) {}
 };
 
 } // namespace AutoInv

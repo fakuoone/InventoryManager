@@ -12,8 +12,7 @@
 #include "userInterface/autoInvVisualizer.hpp"
 #include "userInterface/dbDataVisualizer.hpp"
 #include "userInterface/imGuiDX11Context.hpp"
-
-enum class AppState { INIT, DATA_OUTDATED, WAITING_FOR_DATA, DATA_READY, ENDING };
+#include "userInterface/uiTypes.hpp"
 
 class App {
   private:
@@ -26,21 +25,20 @@ class App {
     AutoInv::ChangeGeneratorFromOrder& orderReader;
     Logger& logger;
 
+    DataStates dataStates;
+
     ChangeExeService changeExe{dbService, changeTracker, logger};
-    DbVisualizer dbVisualizer{dbService, changeTracker, changeExe, logger};
-    AutoInv::BomVisualizer bomVisualizer{dbService, bomReader, logger};
-    AutoInv::OrderVisualizer orderVisualizer{dbService, orderReader, logger};
+    DbVisualizer dbVisualizer{dbService, changeTracker, changeExe, logger, dataStates};
+    AutoInv::BomVisualizer bomVisualizer{dbService, bomReader, logger, dataStates};
+    AutoInv::OrderVisualizer orderVisualizer{dbService, orderReader, logger, dataStates};
 
-    AppState appState{AppState::INIT};
     std::shared_ptr<const completeDbData> dbData;
-    bool dataAvailable{false};
-
     std::shared_ptr<uiChangeInfo> uiChanges;
 
     std::array<char, 256> csvBuffer;
 
-    bool waitForData() {
-        if (dataAvailable) {
+    bool waitForDbData() {
+        if (dataStates.dbData == DataState::DATA_READY) {
             return false;
         }
 
@@ -86,54 +84,36 @@ class App {
         }
     }
 
-    bool handleAppState() {
-        switch (appState) {
-        case AppState::INIT:
-            dataAvailable = false;
+    void handleDataState() {
+        switch (dataStates.dbData) {
+        case DataState::INIT:
             dbService.startUp();
-            appState = AppState::WAITING_FOR_DATA;
+            dataStates.dbData = DataState::WAITING_FOR_DATA;
             break;
-        case AppState::DATA_OUTDATED: {
-            // TEST: request data anyways
-            dataAvailable = false;
+        case DataState::DATA_OUTDATED: {
+            // TODO: Better thing than startup
+            dbService.startUp();
             uiChanges = std::make_shared<uiChangeInfo>(changeTracker.getSnapShot());
             dbVisualizer.setChangeData(uiChanges);
-            dbVisualizer.run(false);
-            ImVec2 buttonSize = ImGui::CalcTextSize("REFETCH");
-            buttonSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-            buttonSize.y += ImGui::GetStyle().FramePadding.y * 2.0f;
-
-            ImVec2 padding = ImGui::GetStyle().WindowPadding;
-
-            // Top-right corner of the content region
-            ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - buttonSize.x - padding.x, padding.y));
-            if (ImGui::Button("REFETCH")) {
-                dbService.refetch();
-                appState = AppState::WAITING_FOR_DATA;
-            }
+            dataStates.dbData = DataState::WAITING_FOR_DATA;
             break;
         }
-        case AppState::WAITING_FOR_DATA:
-            if (waitForData()) {
-                dataAvailable = true;
-                appState = AppState::DATA_READY;
+        case DataState::WAITING_FOR_DATA:
+            if (waitForDbData()) {
+                dataStates.dbData = DataState::DATA_READY;
             }
             break;
-        case AppState::DATA_READY:
+        case DataState::DATA_READY:
             uiChanges = std::make_shared<uiChangeInfo>(changeTracker.getSnapShot());
             dbVisualizer.setChangeData(uiChanges);
-            dbVisualizer.run(true);
             if (changeExe.isChangeApplicationDone()) {
                 changeExe.getSuccessfulChanges();
-                appState = AppState::DATA_OUTDATED;
+                dataStates.dbData = DataState::DATA_OUTDATED;
             }
             break;
-        case AppState::ENDING:
-            return false;
         default:
             break;
         }
-        return true;
     }
 
     void initFont(const std::string& font) {
@@ -141,6 +121,22 @@ class App {
             ImGuiIO& io = ImGui::GetIO();
             ImFont* fontPtr = io.Fonts->AddFontFromFileTTF(font.c_str(), 16.0f);
             IM_ASSERT(fontPtr != nullptr);
+        }
+    }
+
+    void drawDb() {
+        dbVisualizer.run(); // TODO: Give dbVisualizer its datastate
+        ImVec2 buttonSize = ImGui::CalcTextSize("REFETCH");
+        buttonSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
+        buttonSize.y += ImGui::GetStyle().FramePadding.y * 2.0f;
+
+        ImVec2 padding = ImGui::GetStyle().WindowPadding;
+
+        // Top-right corner of the content region
+        ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - buttonSize.x - padding.x, padding.y));
+        if (ImGui::Button("REFETCH")) {
+            dbService.refetch();
+            dataStates.dbData = DataState::WAITING_FOR_DATA;
         }
     }
 
@@ -153,7 +149,7 @@ class App {
                 logger.pushLog(Log{std::format("ERROR reading bom: {}", e.what())});
             }
         }
-        bomVisualizer.run(dataAvailable);
+        bomVisualizer.run();
     }
 
     void showOrder() {
@@ -166,20 +162,20 @@ class App {
             }
         }
 
+        float buttonWidth = ImGui::CalcTextSize("Commit Mapping").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(rightEdge - buttonWidth);
+
         // TODO: Validate mappings
-        if (true) {
-            float buttonWidth = ImGui::CalcTextSize("Commit Mapping").x + ImGui::GetStyle().FramePadding.x * 2.0f;
-            float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
-
-            ImGui::SameLine();
-            ImGui::SetCursorPosX(rightEdge - buttonWidth);
-
-            if (ImGui::Button("Commit Mapping")) {
-                orderVisualizer.commitMappings();
-            }
+        ImGui::BeginDisabled(!orderVisualizer.hasMappings());
+        if (ImGui::Button("Commit Mapping")) {
+            orderVisualizer.commitMappings();
         }
+        ImGui::EndDisabled();
 
-        orderVisualizer.run(dataAvailable);
+        orderVisualizer.run();
     }
 
   public:
@@ -209,17 +205,16 @@ class App {
         bool running = true;
         while (running) {
             if (!imguiCtx.pollEvents()) {
-                appState = AppState::ENDING;
                 break;
             }
             if (!imguiCtx.beginFrame()) {
                 continue;
             }
 
-            // TODO: Fix this weird main loop
+            handleDataState();
             if (ImGui::BeginTabBar("Main")) {
                 if (ImGui::BeginTabItem("Database")) {
-                    running = handleAppState();
+                    drawDb();
                     ImGui::EndTabItem();
                 }
                 if (ImGui::BeginTabItem("BOM")) {

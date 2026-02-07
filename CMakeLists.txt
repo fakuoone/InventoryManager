@@ -22,6 +22,7 @@ set(SOURCES
     src/imGuiDX11Context.cpp
     src/autoInvVisualizer.cpp
     src/mappingWidgets.cpp
+    src/widgets.cpp
 )
 
 # --- Executable ---
