@@ -32,9 +32,10 @@ enum class headerType { PRIMARY_KEY, FOREIGN_KEY, UNIQUE_KEY, DATA };
 
 struct tHeaderInfo {
     std::string name;
-    headerType type;
     std::string referencedTable;
-    bool nullable;
+    headerType type;
+    std::size_t depth = 0;
+    bool nullable = true;
 };
 
 using tHeaderVector = std::vector<tHeaderInfo>;
@@ -42,6 +43,7 @@ struct tHeadersInfo {
     tHeaderVector data;
     std::string pkey;     // ID
     std::string uKeyName; // NAME
+    std::size_t maxDepth = 0;
 };
 
 using tStringVector = std::vector<std::string>;
@@ -106,8 +108,7 @@ class DbInterface {
             ~~18064~~ # 5 DbInterface::getTransaction
             */
             transactionData transaction = getTransaction();
-            const std::string tableQuery =
-                "SELECT table_name FROM information_schema.tables WHERE table_schema='public'";
+            const std::string tableQuery = "SELECT table_name FROM information_schema.tables WHERE table_schema='public'";
             auto result = transaction.tx.query<std::string>(tableQuery);
             logger.pushLog(Log{tableQuery});
             {
@@ -150,7 +151,7 @@ class DbInterface {
         transactionData transaction = getTransaction();
 
         for (const std::string& header : rawHeaders) {
-            tHeaderInfo info{header, headerType::DATA, "", true};
+            tHeaderInfo info{header, "", headerType::DATA, 0, true};
 
             // Nullable
             const std::string nullQuery = std::format("SELECT NOT a.attnotnull AS is_nullable "
@@ -208,10 +209,7 @@ class DbInterface {
                     info.type = headerType::UNIQUE_KEY;
                     headers.uKeyName = header;
                 } else {
-                    logger.pushLog(Log{std::format(
-                        "WARNING: composite UNIQUE key on table '{}', column '{}' ignored",
-                        table,
-                        header)});
+                    logger.pushLog(Log{std::format("WARNING: composite UNIQUE key on table '{}', column '{}' ignored", table, header)});
                 }
 
                 headers.data.push_back(info);
@@ -247,6 +245,50 @@ class DbInterface {
         return headers;
     }
 
+    std::size_t computeDepth(tHeaderInfo& header) {
+        // Already computed
+        if (header.depth != 0)
+            return header.depth;
+
+        // Base case
+        if (header.referencedTable.empty()) {
+            header.depth = 1;
+            return 1;
+        }
+
+        // self reference
+        tHeadersInfo& referencedHeaders = tableHeaders.data.at(header.referencedTable);
+        if (std::find_if(referencedHeaders.data.begin(), referencedHeaders.data.end(), [&](tHeaderInfo& tH) {
+                return tH.referencedTable == header.referencedTable;
+            }) != referencedHeaders.data.end()) {
+            return 0;
+        }
+
+        // go to referenced table
+        std::size_t maxReferencedDepth = 0;
+        for (tHeaderInfo& refHeader : referencedHeaders.data) {
+            maxReferencedDepth = std::max(maxReferencedDepth, computeDepth(refHeader));
+        }
+
+        header.depth = 1 + maxReferencedDepth;
+        return header.depth;
+    }
+
+    void assignDependencyIndexes() {
+        for (auto& [tableName, headers] : tableHeaders.data) {
+            for (tHeaderInfo& header : headers.data) {
+                computeDepth(header);
+            }
+        }
+        for (auto& [tableName, headers] : tableHeaders.data) {
+            std::size_t tableDepth = 0;
+            for (const auto& header : headers.data) {
+                tableDepth = std::max(tableDepth, header.depth);
+            }
+            tableHeaders.data[tableName].maxDepth = tableDepth;
+        }
+    }
+
     void acquireTableContent() {
         {
             std::unique_lock<std::mutex> lockTable(tables.mtx);
@@ -276,6 +318,7 @@ class DbInterface {
         {
             std::lock_guard<std::mutex> lgHeaders{tableHeaders.mtx};
             std::lock_guard<std::mutex> lgTables{tables.mtx};
+            assignDependencyIndexes();
             tableHeaders.ready = true;
             tables.ready = false;
         }
@@ -291,8 +334,7 @@ class DbInterface {
         {
             std::lock_guard<std::mutex> lgTables{tables.mtx};
             if (std::find(tables.data.begin(), tables.data.end(), table) == tables.data.end()) {
-                logger.pushLog(
-                    Log{std::format("ERROR: Acquiring rows: Table {} is unknown.", table)});
+                logger.pushLog(Log{std::format("ERROR: Acquiring rows: Table {} is unknown.", table)});
                 return;
             }
         }
@@ -302,16 +344,12 @@ class DbInterface {
         std::lock_guard<std::mutex> lgTableHeaders(tableHeaders.mtx);
         for (const auto& col : cols.data) {
             const tHeaderVector& localHeaders = tableHeaders.data.at(table).data;
-            if (std::ranges::find_if(localHeaders, [&](const tHeaderInfo& h) {
-                    return h.name == col.name;
-                }) == localHeaders.end()) {
-                logger.pushLog(Log{std::format(
-                    "ERROR: Acquiring rows: Header {} for table {} is unknown.", col.name, table)});
+            if (std::ranges::find_if(localHeaders, [&](const tHeaderInfo& h) { return h.name == col.name; }) == localHeaders.end()) {
+                logger.pushLog(Log{std::format("ERROR: Acquiring rows: Header {} for table {} is unknown.", col.name, table)});
                 return;
             }
             try {
-                const std::string headerQuery =
-                    std::format("    SELECT {} FROM {}", col.name, table);
+                const std::string headerQuery = std::format("    SELECT {} FROM {}", col.name, table);
                 logger.pushLog(Log{headerQuery});
 
                 transactionData transaction = getTransaction();
@@ -323,8 +361,7 @@ class DbInterface {
 
                 for (const pqxx::row& row : r) {
                     cells.emplace_back(row[col.name].c_str());
-                    logger.pushLog(
-                        Log{std::format("        {}: {}", col.name, row[col.name].c_str())});
+                    logger.pushLog(Log{std::format("        {}: {}", col.name, row[col.name].c_str())});
                 }
                 colCellMap.emplace(col.name, cells);
 
@@ -359,8 +396,7 @@ class DbInterface {
         for (const auto& [table, headers] : work) {
             acquireTableRows(table, headers);
         }
-        return completeDbData{
-            tables.data, tableHeaders.data, tableRows.data, std::map<std::string, std::size_t>{}};
+        return completeDbData{tables.data, tableHeaders.data, tableRows.data, std::map<std::string, std::size_t>{}};
     }
 
     Change::chHashV applyChanges(std::vector<Change> changes, sqlAction action) {

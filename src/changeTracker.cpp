@@ -1,8 +1,7 @@
 #include "changeTracker.hpp"
 
 void ChangeTracker::mergeCellChanges(Change& existingChange, const Change& newChange) {
-    logger.pushLog(Log{std::format(
-        "        Merging cell changes {} and {}", existingChange.getKey(), newChange.getKey())});
+    logger.pushLog(Log{std::format("        Merging cell changes {} and {}", existingChange.getKey(), newChange.getKey())});
     existingChange ^ newChange;
 }
 
@@ -72,7 +71,6 @@ Change& ChangeTracker::manageConflictL(Change& newChange) {
 }
 
 void ChangeTracker::propagateValidity(Change& change) {
-    // TODO: Doesnt really work, intense testing necessary
     if (change.hasChildren()) {
         bool childSum = true;
         for (const std::size_t& childKey : change.getChildren()) {
@@ -100,8 +98,7 @@ bool ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRow
             // column
             const std::string ukey = dbService.getTableUKey(change.getTable());
             if (changes.uKeyMappedData.at(change.getTable()).contains(change.getCell(ukey))) {
-                logger.pushLog(Log{std::format(
-                    "ERROR: change with the same ukey (name): {} already exists", ukey)});
+                logger.pushLog(Log{std::format("ERROR: change with the same ukey (name): {} already exists", ukey)});
                 return false;
             }
         }
@@ -153,9 +150,8 @@ void ChangeTracker::collectRequiredChangesL(Change& change, std::vector<Change>&
             if (released) {
                 existingChange.addParent(change.getKey());
                 existingChange.setSelected(change.isSelected());
-                change.pushChild(
-                    existingChange); // has to be set here, instead of getRequiredChanges, because
-                                     // this will not get added to flatData
+                change.pushChild(existingChange); // has to be set here, instead of getRequiredChanges, because
+                                                  // this will not get added to flatData
             }
         } else {
             change.pushChild(r);
@@ -191,7 +187,7 @@ void ChangeTracker::releaseAllDependancies(Change& change) {
 }
 
 bool ChangeTracker::releaseDependancy(Change& change, const Change& rC) {
-    // changes.uKeyMappedData.at();
+    // TODO: 07.02.26: Changes created by orderShort.csv are not released when parent change changs its child to an existing db entry
     const std::string& rCTableName = rC.getTable();
     const std::string rCUKeyHeader = dbService.getTableUKey(rCTableName);
     const std::string& rCUKeyValue = "";
@@ -248,15 +244,11 @@ bool ChangeTracker::addChangeInternalL(const Change& change) {
     if (!changeUKeyValue.empty()) {
         changes.uKeyMappedData[tableName].insert_or_assign(changeUKeyValue, change.getKey());
     }
-    logger.pushLog(Log{std::format("    Adding change {} to table {} at id {}",
-                                   change.getKey(),
-                                   change.getTable(),
-                                   change.getRowId())});
+    logger.pushLog(Log{std::format("    Adding change {} to table {} at id {}", change.getKey(), change.getTable(), change.getRowId())});
     return true;
 }
 
-void ChangeTracker::collectAllDescendants(std::size_t key,
-                                          std::unordered_set<std::size_t>& collected) {
+void ChangeTracker::collectAllDescendants(std::size_t key, std::unordered_set<std::size_t>& collected) {
     if (collected.contains(key)) {
         return;
     }

@@ -83,7 +83,7 @@ inline std::vector<std::string> parseLine(const std::string& line) {
     return fields;
 }
 
-inline std::vector<std::vector<std::string>> readData(std::filesystem::path csv) {
+inline std::vector<std::vector<std::string>> readData(std::filesystem::path csv, Logger& logger) {
     std::ifstream file(csv);
     std::string line;
     std::pair<std::size_t, std::size_t> colCounts = {0, 0};
@@ -96,6 +96,7 @@ inline std::vector<std::vector<std::string>> readData(std::filesystem::path csv)
         rows.push_back(row);
         if (i > 0) {
             if (colCounts.first != colCounts.second) {
+                logger.pushLog(Log{std::format("ERROR: Parsing csv failed: Row {} has different length.", i)});
                 return std::vector<std::vector<std::string>>{};
             }
         }
@@ -123,6 +124,7 @@ class CsvChangeGenerator {
     bool dataRead = false;
 
     std::vector<MappingStr> committedMappings;
+    std::size_t missingParam = 0;
 
     CsvChangeGenerator(ThreadPool& cThreadPool, ChangeTracker& cChangeTracker, DbService& cDbService, Config& cConfig, Logger& cLogger)
         : threadPool(cThreadPool), changeTracker(cChangeTracker), dbService(cDbService), config(cConfig), logger(cLogger) {}
@@ -130,14 +132,20 @@ class CsvChangeGenerator {
     virtual ~CsvChangeGenerator() = default;
 
     bool run(std::filesystem::path csv) {
-        csvData = readData(csv);
+        csvData = readData(csv, logger);
         return !csvData.empty();
     }
+
+    struct TableCells {
+        std::string table;
+        Change::colValMap cells;
+    };
 
     struct ChangeConvertedMapping {
         std::vector<std::size_t> columnIndexes;
         std::unordered_map<std::size_t, std::vector<PreciseHeader>> preciseHeaders;
-        std::unordered_map<std::string, Change::colValMap> cells;
+        std::map<std::string, TableCells> cells;
+        std::vector<TableCells*> orderedCells;
     };
 
     ChangeConvertedMapping convertMapping() {
@@ -159,7 +167,7 @@ class CsvChangeGenerator {
                 foundTables.insert(mapping.destination.table);
             }
             if (!convertedMapping.preciseHeaders.contains(j)) {
-                convertedMapping.cells.emplace(mapping.destination.table, Change::colValMap{});
+                convertedMapping.cells.emplace(mapping.destination.table, TableCells{mapping.destination.table, Change::colValMap{}});
                 convertedMapping.preciseHeaders.emplace(j, std::vector<PreciseHeader>{});
             }
 
@@ -173,44 +181,59 @@ class CsvChangeGenerator {
         for (std::size_t j = 0; j < mapped.columnIndexes.size(); j++) {
             const std::size_t mappedColumnIndex = mapped.columnIndexes[j];
             for (const PreciseHeader& preciseHeader : mapped.preciseHeaders[mappedColumnIndex]) {
-                mapped.cells[preciseHeader.table].emplace(preciseHeader.header, row[mappedColumnIndex]);
+                mapped.cells[preciseHeader.table].cells.emplace(preciseHeader.header, row[mappedColumnIndex]);
             }
         }
     }
 
     void fillInAdditional(ChangeConvertedMapping& mapped) {
-        // TODO: get all headers from dbData
-        for (const auto& [_, mappedHeaders] : mapped.preciseHeaders) {
-            for (const PreciseHeader& preciseHeader : mappedHeaders) {
-                const tHeaderInfo& headerInfo = dbService.getTableHeaderInfo(preciseHeader.table, preciseHeader.header);
-                if (headerInfo.nullable) {
+        // Fill in missing
+        for (const auto& [_, preciseHeaders] : mapped.preciseHeaders) {
+            std::unordered_set<std::string> visitedTables;
+            for (const PreciseHeader& preciseHeader : preciseHeaders) {
+                if (visitedTables.contains(preciseHeader.table)) {
                     continue;
                 }
-                mapped.cells[preciseHeader.table].emplace(headerInfo.name, "TODO");
+                visitedTables.insert(preciseHeader.table);
+                for (const auto& header : dbData->headers.at(preciseHeader.table).data) {
+                    if (mapped.cells[preciseHeader.table].cells.contains(header.name) || header.nullable ||
+                        header.type == headerType::PRIMARY_KEY) {
+                        continue;
+                    }
+                    mapped.cells[preciseHeader.table].cells.emplace(header.name, std::format("TODO{}", missingParam++));
+                }
             }
         }
     }
 
+    void sortMappedCells(ChangeConvertedMapping& mapped) {
+        mapped.orderedCells.clear();
+        mapped.orderedCells.reserve(mapped.cells.size());
+
+        for (auto& [tableName, tableCells] : mapped.cells) {
+            mapped.orderedCells.push_back(&tableCells);
+        }
+
+        std::sort(mapped.orderedCells.begin(), mapped.orderedCells.end(), [&](const TableCells* a, const TableCells* b) {
+            return dbData->headers.at(a->table).maxDepth < dbData->headers.at(b->table).maxDepth;
+        });
+    }
+
     void addChangesFromMapping(ChangeConvertedMapping& mapped) {
-        for (const auto& [_, mappedHeaders] : mapped.preciseHeaders) {
-            std::unordered_set<std::string> visitedTables;
-            for (const PreciseHeader& preciseHeader : mappedHeaders) {
-                if (visitedTables.contains(preciseHeader.table)) {
-                    continue;
-                }
-                changeTracker.addChange(
-                    Change{mapped.cells[preciseHeader.table], changeType::INSERT_ROW, dbService.getTable(preciseHeader.table)});
-                mapped.cells[preciseHeader.table] = Change::colValMap{};
+        // TODO: decide wether insert, update, delete, add / subtract instead of set
+        for (TableCells* cells : mapped.orderedCells) {
+            if (!cells) {
+                continue;
             }
+            if (!changeTracker.addChange(Change{cells->cells, changeType::INSERT_ROW, dbService.getTable(cells->table)})) {
+                logger.pushLog(Log{std::format("ERROR: Adding change from mapping failed.")});
+                return;
+            }
+            cells->cells.clear();
         }
     }
 
     void executeCsv() {
-        // TODO: Implement logic
-        // 0. convert mapping into usable data
-        // 1. validate mapping and data?
-        // 2. For every data-entry: decide wether insert or update or delete
-        // 3. freeze? -> create and push changes
         std::size_t i = 0;
         ChangeConvertedMapping mapped = convertMapping();
 
@@ -221,6 +244,7 @@ class CsvChangeGenerator {
             }
             applyMappingToRow(row, mapped);
             fillInAdditional(mapped);
+            sortMappedCells(mapped);
             addChangesFromMapping(mapped);
         }
     }
@@ -238,7 +262,7 @@ class CsvChangeGenerator {
         if (fRead.valid()) {
             if (fRead.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
                 dataRead = fRead.get();
-                return true;
+                return dataRead;
             }
         }
         return false;
