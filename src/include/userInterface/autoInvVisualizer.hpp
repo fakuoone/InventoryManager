@@ -6,21 +6,36 @@
 #include "userInterface/widgets.hpp"
 
 namespace AutoInv {
+enum class MappingStage { CSV, API };
+
 Widgets::MOUSE_EVENT_TYPE isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness);
 
-class CsvVisualizer {
+class CsvMappingVisualizer {
   protected:
     DbService& dbService;
     Logger& logger;
     std::shared_ptr<const completeDbData> dbData;
     DataStates& dataStates;
-    std::vector<MappingDestination> dbHeaderWidgets;
 
-    CsvVisualizer(DbService& cDbService, Logger& cLogger, DataStates& cDataStates)
+    MappingStage stage = MappingStage::CSV;
+
+    std::vector<MappingDestination> dbHeaderWidgets;
+    std::vector<std::string> headers;
+    std::vector<std::string> firstRow;
+    std::vector<MappingSource> csvHeaderWidgets;
+    std::vector<MappingNumber> mappingsN;
+    std::vector<MappingStr> mappingsS;
+    std::unordered_map<mappingIdType, ImVec2> sourceAnchors;
+    std::unordered_map<mappingIdType, ImVec2> destAnchors;
+    std::unordered_map<MappingNumber, MappingDrawing, MappingHash> mappingsDrawingInfo;
+
+    std::array<char, 256> csvBuffer;
+
+    CsvMappingVisualizer(DbService& cDbService, Logger& cLogger, DataStates& cDataStates)
         : dbService(cDbService), logger(cLogger), dataStates(cDataStates) {}
 
   public:
-    virtual ~CsvVisualizer() = default;
+    virtual ~CsvMappingVisualizer() = default;
     virtual void run() = 0;
     virtual void createMapping(const SourceDetail& source, const DestinationDetail& dest) = 0;
     virtual bool hasMapping(const SourceDetail& source, const DestinationDetail& dest) = 0;
@@ -32,26 +47,80 @@ class CsvVisualizer {
     bool handleDrag(const DestinationDetail&, const ImGuiPayload* payload);
 };
 
-template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
+template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer {
   private:
     static constexpr const float RIGHT_WIDTH = 300.0f;
 
   protected:
     Reader& reader;
-    std::vector<std::string> headers;
-    std::vector<std::string> firstRow;
-    std::vector<MappingSource> csvHeaderWidgets;
-    std::vector<MappingNumber> mappingsN;
-    std::vector<MappingStr> mappingsS;
-    std::unordered_map<mappingIdType, ImVec2> sourceAnchors;
-    std::unordered_map<mappingIdType, ImVec2> destAnchors;
-    std::unordered_map<MappingNumber, MappingDrawing, MappingHash> mappingsDrawingInfo;
 
     CsvVisualizerImpl(DbService& cDbService, Reader& cReader, Logger& cLogger, DataStates& cDataStates)
-        : CsvVisualizer(cDbService, cLogger, cDataStates), reader(cReader) {}
+        : CsvMappingVisualizer(cDbService, cLogger, cDataStates), reader(cReader) {}
+
+    void drawHead() {
+        bool enterPressed = ImGui::InputText("##edit", csvBuffer.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
+        if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
+            try {
+                reader.read(std::filesystem::path(std::string(csvBuffer.data())));
+            } catch (const std::exception& e) {
+                logger.pushLog(Log{std::format("ERROR reading order: {}", e.what())});
+            }
+        }
+
+        // Stage selector
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(120.0f);
+        int localStage = static_cast<int>(stage);
+        ImGui::SliderInt("Stage", &localStage, static_cast<int>(MappingStage::CSV), static_cast<int>(MappingStage::API));
+        stage = static_cast<MappingStage>(localStage);
+
+        float buttonWidth = ImGui::CalcTextSize("Commit Mapping").x + ImGui::GetStyle().FramePadding.x * 2.0f;
+        float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
+
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(rightEdge - buttonWidth);
+
+        // TODO: Validate mappings
+        ImGui::BeginDisabled(!hasMappings());
+        if (ImGui::Button("Commit Mapping")) {
+            commitMappings();
+        }
+        ImGui::EndDisabled();
+    }
+
+    std::pair<ImVec2, ImVec2> drawMappingSourceRawCSV() {
+        float maxWidth = 0;
+        for (auto& csvHeaderWidget : csvHeaderWidgets) {
+            float width = ImGui::CalcTextSize(csvHeaderWidget.getHeader().c_str()).x;
+            if (width > maxWidth) {
+                maxWidth = width;
+            }
+        }
+        ImVec2 leftMin = ImGui::GetItemRectMin();
+        ImVec2 leftMax = ImGui::GetItemRectMax();
+
+        for (auto& csvHeaderWidget : csvHeaderWidgets) {
+            csvHeaderWidget.draw(maxWidth);
+        }
+        return std::pair(leftMin, leftMax);
+    }
+
+    std::pair<ImVec2, ImVec2> drawMappingSourceStage() {
+        switch (stage) {
+        case MappingStage::CSV:
+            return drawMappingSourceRawCSV();
+        case MappingStage::API:
+            break;
+        default:
+            break;
+        }
+        return std::pair(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+    }
 
   public:
     void run() override {
+        drawHead();
+
         if (dataStates.dbData != DataState::DATA_READY) {
             return;
         }
@@ -65,19 +134,9 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
 
             // LEFT (maxWidth)
             ImGui::BeginChild("CSV", ImVec2(leftWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
-            float maxWidth = 0;
-            for (auto& csvHeaderWidget : csvHeaderWidgets) {
-                float width = ImGui::CalcTextSize(csvHeaderWidget.getHeader().c_str()).x;
-                if (width > maxWidth) {
-                    maxWidth = width;
-                }
-            }
-            ImVec2 leftMin = ImGui::GetItemRectMin();
-            ImVec2 leftMax = ImGui::GetItemRectMax();
 
-            for (auto& csvHeaderWidget : csvHeaderWidgets) {
-                csvHeaderWidget.draw(maxWidth);
-            }
+            std::pair left = drawMappingSourceStage();
+
             ImGui::EndChild();
             ImGui::SameLine();
 
@@ -91,8 +150,8 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
             // clipping rect
             ImVec2 rightMin = ImGui::GetItemRectMin();
             ImVec2 rightMax = ImGui::GetItemRectMax();
-            ImVec2 clipMin(std::min(leftMin.x, rightMin.x), std::min(leftMin.y, rightMin.y));
-            ImVec2 clipMax(std::max(leftMax.x, rightMax.x), std::max(leftMax.y, rightMax.y));
+            ImVec2 clipMin(std::min(left.first.x, rightMin.x), std::min(left.first.y, rightMin.y));
+            ImVec2 clipMax(std::max(left.second.x, rightMax.x), std::max(left.second.y, rightMax.y));
             ImDrawList* drawlist = ImGui::GetWindowDrawList();
 
             // mappings
@@ -117,8 +176,8 @@ template <typename Reader> class CsvVisualizerImpl : public CsvVisualizer {
             // TODO clear old data
             headers = reader.getHeader();
             firstRow = reader.getFirstRow();
-            MappingSource::setDragHandler(static_cast<CsvVisualizer*>(this));
-            MappingDestination::setDragHandler(static_cast<CsvVisualizer*>(this));
+            MappingSource::setDragHandler(static_cast<CsvMappingVisualizer*>(this));
+            MappingDestination::setDragHandler(static_cast<CsvMappingVisualizer*>(this));
             mappingIdType id = 0;
             for (std::size_t i = 0; i < headers.size(); ++i) {
                 csvHeaderWidgets.push_back(std::move(MappingSource(headers[i], firstRow[i], id++)));

@@ -3,7 +3,7 @@
 
 namespace AutoInv {
 
-void MappingSource::setDragHandler(CsvVisualizer* handler) {
+void MappingSource::setDragHandler(CsvMappingVisualizer* handler) {
     parentVisualizer = handler;
 }
 
@@ -89,7 +89,7 @@ bool MappingSource::beginDrag() {
     return false;
 }
 
-void MappingDestination::setDragHandler(CsvVisualizer* handler) {
+void MappingDestination::setDragHandler(CsvMappingVisualizer* handler) {
     parentVisualizer = handler;
 }
 

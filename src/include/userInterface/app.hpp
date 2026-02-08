@@ -35,8 +35,6 @@ class App {
     std::shared_ptr<const completeDbData> dbData;
     std::shared_ptr<uiChangeInfo> uiChanges;
 
-    std::array<char, 256> csvBuffer;
-
     bool waitForDbData() {
         if (dataStates.dbData == DataState::DATA_READY) {
             return false;
@@ -138,43 +136,9 @@ class App {
         }
     }
 
-    void showBom() {
-        bool enterPressed = ImGui::InputText("##edit", csvBuffer.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
-        if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
-            try {
-                bomReader.read(std::filesystem::path(std::string(csvBuffer.data())));
-            } catch (const std::exception& e) {
-                logger.pushLog(Log{std::format("ERROR reading bom: {}", e.what())});
-            }
-        }
-        bomVisualizer.run();
-    }
+    void showBom() { bomVisualizer.run(); }
 
-    void showOrder() {
-        bool enterPressed = ImGui::InputText("##edit", csvBuffer.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
-        if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
-            try {
-                orderReader.read(std::filesystem::path(std::string(csvBuffer.data())));
-            } catch (const std::exception& e) {
-                logger.pushLog(Log{std::format("ERROR reading order: {}", e.what())});
-            }
-        }
-
-        float buttonWidth = ImGui::CalcTextSize("Commit Mapping").x + ImGui::GetStyle().FramePadding.x * 2.0f;
-        float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
-
-        ImGui::SameLine();
-        ImGui::SetCursorPosX(rightEdge - buttonWidth);
-
-        // TODO: Validate mappings
-        ImGui::BeginDisabled(!orderVisualizer.hasMappings());
-        if (ImGui::Button("Commit Mapping")) {
-            orderVisualizer.commitMappings();
-        }
-        ImGui::EndDisabled();
-
-        orderVisualizer.run();
-    }
+    void showOrder() { orderVisualizer.run(); }
 
   public:
     App(DbService& cDbService,

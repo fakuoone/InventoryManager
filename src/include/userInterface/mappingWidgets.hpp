@@ -8,7 +8,7 @@
 #include <map>
 
 namespace AutoInv {
-class CsvVisualizer;
+class CsvMappingVisualizer;
 static constexpr const float INNER_PADDING = 3.0f;
 static constexpr const float INNER_TEXT_PADDING = 2.0f;
 static constexpr const float OUTER_PADDING = 3.0f;
@@ -36,12 +36,12 @@ struct SourceDetail {
 
 class MappingSource {
   private:
-    static inline CsvVisualizer* parentVisualizer;
+    static inline CsvMappingVisualizer* parentVisualizer;
     SourceDetail data;
 
   public:
     MappingSource(const std::string& cHeader, const std::string& cExample, mappingIdType cId) : data(cHeader, cExample, cId) {}
-    static void setDragHandler(CsvVisualizer* handler);
+    static void setDragHandler(CsvMappingVisualizer* handler);
     const std::string& getHeader();
     void draw(const float width);
     bool beginDrag();
@@ -51,14 +51,14 @@ class MappingDestination {
   private:
     const std::string table;
     const std::vector<DestinationDetail> headers;
-    static inline CsvVisualizer* parentVisualizer;
+    static inline CsvMappingVisualizer* parentVisualizer;
     bool mappable = true;
 
   public:
     MappingDestination(const std::string cTable, const std::vector<DestinationDetail> cHeaders, bool cMappable)
         : table(cTable), headers(cHeaders), mappable(cMappable) {}
 
-    static void setDragHandler(CsvVisualizer* handler);
+    static void setDragHandler(CsvMappingVisualizer* handler);
     void draw(const float width);
     bool handleDrag(const DestinationDetail& headerInfo);
 };
