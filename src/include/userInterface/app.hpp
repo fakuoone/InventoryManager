@@ -91,8 +91,7 @@ class App {
             dataStates.dbData = DataState::WAITING_FOR_DATA;
             break;
         case DataState::DATA_OUTDATED: {
-            // TODO: Better thing than startup
-            dbService.startUp();
+            dbService.refetch();
             uiChanges = std::make_shared<uiChangeInfo>(changeTracker.getSnapShot());
             dbVisualizer.setChangeData(uiChanges);
             dataStates.dbData = DataState::WAITING_FOR_DATA;
@@ -125,7 +124,7 @@ class App {
     }
 
     void drawDb() {
-        dbVisualizer.run(); // TODO: Give dbVisualizer its datastate
+        dbVisualizer.run();
         ImVec2 buttonSize = ImGui::CalcTextSize("REFETCH");
         buttonSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
         buttonSize.y += ImGui::GetStyle().FramePadding.y * 2.0f;
@@ -135,8 +134,7 @@ class App {
         // Top-right corner of the content region
         ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - buttonSize.x - padding.x, padding.y));
         if (ImGui::Button("REFETCH")) {
-            dbService.refetch();
-            dataStates.dbData = DataState::WAITING_FOR_DATA;
+            dataStates.dbData = DataState::DATA_OUTDATED;
         }
     }
 

@@ -226,7 +226,7 @@ void DbTable::drawChangeOverlayIfNeeded(Change* ch, const std::string& headerNam
         yOffset = PAD_INNER_CONTENT;
     }
     ImVec2 textPos(r.start.x + PAD_INNER_CONTENT, r.start.y + yOffset);
-    drawList->AddText(textPos, IM_COL32_WHITE, val.c_str());
+    drawList->AddText(textPos, colSelected.second, val.c_str());
 }
 
 eventTypes DbTable::drawLastColumnEnter(const ImVec2& pos, const std::vector<float>& splitterPoss, const std::size_t columnIndex) {
@@ -284,6 +284,7 @@ DbTable::drawActionColumn(const ImVec2& pos, const std::vector<float>& splitterP
 ACTION_TYPE DbTable::drawDataCell(const CellBoilerPlate& cell, const Rect& r, const std::string& value) {
     ACTION_TYPE action{ACTION_TYPE::DATA};
     ImU32 colBg = cell.selected ? colSelected.first : colGreyBg;
+    drawList->PushClipRect(r.start, r.end, true);
     drawList->AddRectFilled(r.start, r.end, colBg);
 
     ImVec2 textSize = ImGui::CalcTextSize(value.c_str());
@@ -319,6 +320,7 @@ ACTION_TYPE DbTable::drawDataCell(const CellBoilerPlate& cell, const Rect& r, co
         drawList->AddText(textPos, col, value.c_str());
     }
 
+    drawList->PopClipRect();
     return action;
 }
 
@@ -384,6 +386,10 @@ Event DbTable::getEvent() const {
 
 void DbTable::popEvent() {
     lastEvent = Event();
+}
+
+void ChangeOverviewer::setChangeData(std::shared_ptr<uiChangeInfo> changeData) {
+    uiChanges = changeData;
 }
 
 // ChangeOverviewer

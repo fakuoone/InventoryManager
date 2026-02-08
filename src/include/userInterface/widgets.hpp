@@ -26,7 +26,6 @@ constexpr std::pair<ImU32, ImU32> colSelected = std::pair<ImU32, ImU32>{IM_COL32
 constexpr ImU32 colGreyBg = IM_COL32(71, 71, 71, 100);
 constexpr ImU32 colHoveredGrey = IM_COL32(255, 255, 255, 100);
 constexpr ImU32 colWhiteSemiOpaque = IM_COL32(255, 255, 255, 255);
-
 struct Rect {
     ImVec2 start;
     ImVec2 end;
@@ -148,7 +147,9 @@ class DbTable {
                 ImVec2 min = ImVec2(cursor.x + headerPos.start.x + PAD_INNER, cursor.y + headerPos.start.y + PAD_INNER);
                 ImVec2 max = ImVec2(min.x + width - PAD_INNER, min.y + rowHeight - PAD_INNER);
                 Rect cellRect(min, max);
+                drawList->PushClipRect(min, max, true);
                 drawChangeOverlayIfNeeded(rowChange.get(), headerInfo.name, cellRect);
+                drawList->PopClipRect();
             }
 
             // special last/action column
@@ -261,6 +262,7 @@ class DbTable {
         Rect r{min, max};
         ImVec2 size{max.x - min.x, max.y - min.y};
 
+        drawList->PushClipRect(min, max, true);
         result.action = std::forward<F>(function)(cellBoiler, r, std::forward<Args>(args)...);
 
         ImGui::SetCursorScreenPos(min);
@@ -287,6 +289,8 @@ class DbTable {
         if (ImGui::IsItemClicked()) {
             result.mouse = MOUSE_EVENT_TYPE::CLICK;
         }
+
+        drawList->PopClipRect();
         return result;
     }
 
@@ -331,13 +335,13 @@ class ChangeOverviewer {
   public:
     ChangeOverviewer(ChangeTracker& cChangeTracker,
                      ChangeExeService& cChangeExe,
-                     std::shared_ptr<uiChangeInfo> cUiChanges,
                      float cChildWidth,
                      std::unordered_set<std::size_t>& cChangeHighlight,
                      std::string& cSelectedTable)
-        : changeTracker(cChangeTracker), changeExe(cChangeExe), uiChanges(cUiChanges), childWidth(cChildWidth),
-          changeHighlight(cChangeHighlight), selectedTable(cSelectedTable) {}
+        : changeTracker(cChangeTracker), changeExe(cChangeExe), childWidth(cChildWidth), changeHighlight(cChangeHighlight),
+          selectedTable(cSelectedTable) {}
 
+    void setChangeData(std::shared_ptr<uiChangeInfo> changeData);
     bool drawChildren(const std::vector<std::size_t>& children, float allowedWidth);
     void drawSingleChangeOverview(const Change& change);
 };

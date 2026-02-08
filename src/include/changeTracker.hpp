@@ -9,9 +9,9 @@
 struct protectedChanges {
     std::mutex mtx;
     Change::chHashM flatData;
-    Change::chHashV orderedTree;
-    Change::ctPKMD pKeyMappedData; // table -> primaryKey -> changeKey
-    Change::ctUKMD uKeyMappedData; // table -> uKey value -> changeKey
+    Change::ctPKMD pKeyMappedData;         // table -> primaryKey -> changeKey
+    Change::ctUKMD uKeyMappedData;         // table -> uKey value -> changeKey
+    std::unordered_set<std::size_t> roots; // changes without parent
     std::map<std::string, std::size_t> maxPKeys;
 };
 
@@ -60,5 +60,6 @@ class ChangeTracker {
     void setChangeRecL(Change& change, bool value);
     bool hasChild(const std::size_t hash);
     std::vector<std::size_t> getChildren(const std::size_t key);
-    std::vector<std::size_t> getRoots();
+    std::vector<std::size_t> getCalcRoots();
+    std::unordered_set<std::size_t> getRoots();
 };

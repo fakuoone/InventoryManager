@@ -157,6 +157,7 @@ void ChangeTracker::collectRequiredChangesL(Change& change, std::vector<Change>&
                 existingChange.setSelected(change.isSelected());
                 change.pushChild(existingChange); // has to be set here, instead of getRequiredChanges, because
                 // this will not get added to flatData
+                changes.roots.erase(existingChange.getKey());
             }
         } else {
             change.pushChild(r);
@@ -215,6 +216,10 @@ void ChangeTracker::releaseAllDependancies(Change& change) {
         Change& child = changes.flatData.at(childKey);
         change.removeChild(childKey);
         child.removeParent(change.getKey());
+        // add to roots if it now has no parents
+        if (!child.hasParent()) {
+            changes.roots.insert(childKey);
+        }
     }
 }
 
@@ -235,7 +240,6 @@ bool ChangeTracker::releaseDependancy(Change& change, const Change& rC) {
         }
     }
 
-    // change is not
     if (newRValue.empty()) {
         return false;
     }
@@ -254,6 +258,10 @@ bool ChangeTracker::releaseDependancy(Change& change, const Change& rC) {
         if (child.getCell(rCUKeyHeader) != newRValue) { // previous requiredChange found
             change.removeChild(childKey);
             child.removeParent(change.getKey());
+            // add to roots if it now has no parents
+            if (!child.hasParent()) {
+                changes.roots.insert(childKey);
+            }
             return true;
         };
     }
@@ -276,6 +284,10 @@ bool ChangeTracker::addChangeInternalL(const Change& change) {
     const std::string changeUKeyValue = change.getCell(dbService.getTableUKey(tableName));
     if (!changeUKeyValue.empty()) {
         changes.uKeyMappedData[tableName].insert_or_assign(changeUKeyValue, change.getKey());
+    }
+    // store as root if no parent
+    if (!change.hasParent()) {
+        changes.roots.insert(change.getKey());
     }
     logger.pushLog(Log{std::format("    Adding change {} to table {} at id {}", change.getKey(), change.getTable(), change.getRowId())});
     return true;
@@ -320,7 +332,7 @@ void ChangeTracker::removeChanges(const Change::chHashV& changeHashes) {
 
 uiChangeInfo ChangeTracker::getSnapShot() {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
-    return uiChangeInfo{changes.pKeyMappedData, changes.flatData};
+    return uiChangeInfo{changes.pKeyMappedData, changes.flatData, changes.roots};
 }
 
 void ChangeTracker::removeChangeL(std::size_t key) {
@@ -343,6 +355,8 @@ void ChangeTracker::removeChangeL(std::size_t key) {
             changes.maxPKeys[tableName] = initialMaxPKeys.at(tableName);
         }
     }
+
+    changes.roots.erase(key);
 
     logger.pushLog(Log{std::format("    Removing change {}", key)});
     changes.flatData.erase(key);
@@ -408,7 +422,7 @@ std::vector<std::size_t> ChangeTracker::getChildren(const std::size_t key) {
     return std::vector<std::size_t>{};
 }
 
-std::vector<std::size_t> ChangeTracker::getRoots() {
+std::vector<std::size_t> ChangeTracker::getCalcRoots() {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
     std::vector<std::size_t> all;
     std::size_t count = changes.flatData.size();
@@ -421,6 +435,11 @@ std::vector<std::size_t> ChangeTracker::getRoots() {
     }
 
     return all;
+}
+
+std::unordered_set<std::size_t> ChangeTracker::getRoots() {
+    std::lock_guard<std::mutex> lgChanges(changes.mtx);
+    return changes.roots;
 }
 
 void ChangeTracker::logDetail(std::string content) {

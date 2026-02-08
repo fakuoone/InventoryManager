@@ -39,7 +39,7 @@ class DbVisualizer {
     std::unordered_set<std::size_t> changeHighlight;
 
     Widgets::DbTable dbTable{edit, selectedTable, changeHighlight, logger};
-    Widgets::ChangeOverviewer changeOverviewer{changeTracker, changeExe, uiChanges, 60, changeHighlight, selectedTable};
+    Widgets::ChangeOverviewer changeOverviewer{changeTracker, changeExe, 60, changeHighlight, selectedTable};
 
     void drawChangeOverview() {
         ImGui::Text("CHANGE OVERVIEW");
@@ -47,12 +47,24 @@ class DbVisualizer {
         if (ImGui::Button("Execute all")) {
             changeExe.requestChangeApplication(sqlAction::EXECUTE);
         }
+
+        for (const std::size_t rootKey : uiChanges->roots) {
+            drawRootChangeOverview(rootKey);
+        }
+
+        /*
         for (const auto& [table, _] : uiChanges->idMappedChanges) {
             ImGui::Separator();
             ImGui::TextUnformatted(table.c_str());
             drawTableChangeOverview(table);
         }
+        */
         ImGui::EndDisabled();
+    }
+
+    void drawRootChangeOverview(const std::size_t key) {
+        const Change& change = uiChanges->changes.at(key);
+        changeOverviewer.drawSingleChangeOverview(change);
     }
 
     void drawTableChangeOverview(const std::string& table) {
@@ -62,8 +74,8 @@ class DbVisualizer {
 
         ImGui::PushID(table.c_str());
 
-        for (const auto& [_, hash] : uiChanges->idMappedChanges.at(table)) {
-            const Change& change = uiChanges->changes.at(hash);
+        for (const auto& [_, key] : uiChanges->idMappedChanges.at(table)) {
+            const Change& change = uiChanges->changes.at(key);
             changeOverviewer.drawSingleChangeOverview(change);
         }
 
@@ -155,6 +167,7 @@ class DbVisualizer {
     void setChangeData(std::shared_ptr<uiChangeInfo> changeData) {
         uiChanges = changeData;
         dbTable.setChangeData(changeData);
+        changeOverviewer.setChangeData(changeData);
     }
 
     void run() {
@@ -167,7 +180,12 @@ class DbVisualizer {
                 if (ImGui::BeginTabBar("MainTabs")) {
                     if (dataStates.dbData == DataState::DATA_OUTDATED || dataStates.dbData == DataState::DATA_READY) {
                         for (const auto& [table, data] : dbData->headers) {
-                            if (ImGui::BeginTabItem(table.c_str())) {
+                            ImGuiTabItemFlags flagsHeader = ImGuiTabItemFlags_None;
+                            if (selectedTable == table) {
+                                selectedTable.clear();
+                                flagsHeader |= ImGuiTabItemFlags_SetSelected;
+                            }
+                            if (ImGui::BeginTabItem(table.c_str(), nullptr, flagsHeader)) {
                                 ImGui::BeginDisabled(dataStates.dbData != DataState::DATA_READY);
                                 dbTable.drawTable(table);
                                 handleTableEvent();

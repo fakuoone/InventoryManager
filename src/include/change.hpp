@@ -56,12 +56,8 @@ class Change {
     bool valid{false};
 
   public:
-    Change(colValMap cCells,
-           changeType cType,
-           imTable cTable,
-           std::optional<std::size_t> cRowId = std::nullopt)
-        : changeKey(nextId++), changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) {
-    }
+    Change(colValMap cCells, changeType cType, imTable cTable, std::optional<std::size_t> cRowId = std::nullopt)
+        : changeKey(nextId++), changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) {}
 
     static void setLogger(Logger& l) { logger = &l; }
 
@@ -93,8 +89,7 @@ class Change {
         if (this != &other) {
             for (auto const& [col, val] : other.changedCells) {
                 this->changedCells[col] = val;
-                logger->pushLog(Log{std::format(
-                    "            change now has column: {} with cell value: {}", col, val)});
+                logger->pushLog(Log{std::format("            change now has column: {} with cell value: {}", col, val)});
             }
             // this->parentKey = other.getParent();
             // this->selected = other.isSelected();
@@ -112,8 +107,7 @@ class Change {
 
         switch (type) {
         case changeType::DELETE_ROW:
-            sqlString =
-                std::format("DELETE FROM {} WHERE {} = {}", tableData.name, "id", rowId.value());
+            sqlString = std::format("DELETE FROM {} WHERE {} = {}", tableData.name, "id", rowId.value());
             break;
         case changeType::INSERT_ROW: {
             std::string columnNames;
@@ -131,8 +125,7 @@ class Change {
                 columnNames += col;
                 cellValues += std::format("'{}'", val);
             }
-            sqlString = std::format(
-                "INSERT INTO {} ({}) VALUES ({});", tableData.name, columnNames, cellValues);
+            sqlString = std::format("INSERT INTO {} ({}) VALUES ({});", tableData.name, columnNames, cellValues);
             break;
         }
         case changeType::UPDATE_CELLS: {
@@ -145,8 +138,7 @@ class Change {
                 first = false;
                 columnValuePairs += std::format("{} = '{}'", col, val);
             }
-            sqlString = std::format(
-                "UPDATE {} SET {} WHERE id = {};", tableData.name, columnValuePairs, rowId.value());
+            sqlString = std::format("UPDATE {} SET {} WHERE id = {};", tableData.name, columnValuePairs, rowId.value());
             break;
         }
         default:
@@ -228,12 +220,12 @@ class Change {
 struct uiChangeInfo {
     Change::ctPKMD idMappedChanges;
     Change::chHashM changes;
+    std::unordered_set<std::size_t> roots;
 };
 
 namespace ChangeHelpers {
-inline std::unique_ptr<Change> getChangeOfRow(const std::shared_ptr<uiChangeInfo>& uiChanges,
-                                              const std::string& table,
-                                              const std::size_t id) {
+inline std::unique_ptr<Change>
+getChangeOfRow(const std::shared_ptr<uiChangeInfo>& uiChanges, const std::string& table, const std::size_t id) {
     if (!uiChanges->idMappedChanges.contains(table)) {
         return nullptr;
     }

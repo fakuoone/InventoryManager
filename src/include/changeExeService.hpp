@@ -14,9 +14,7 @@ class ChangeExeService {
 
     std::future<Change::chHashV> fApplyChanges;
 
-    void collectChanges(std::size_t key,
-                        std::unordered_set<std::size_t>& visited,
-                        std::vector<Change>& order) {
+    void collectChanges(std::size_t key, std::unordered_set<std::size_t>& visited, std::vector<Change>& order) {
         if (visited.contains(key)) {
             return;
         }
@@ -42,8 +40,7 @@ class ChangeExeService {
 
   public:
     bool isChangeApplicationDone() {
-        if (fApplyChanges.valid() &&
-            fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
+        if (fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
             return true;
         }
         return false;
@@ -75,7 +72,7 @@ class ChangeExeService {
     void requestChangeApplication(sqlAction action) {
         // request execution for all changes
         changeTracker.freeze();
-        std::vector<Change> allChanges = collectDescendants(changeTracker.getRoots());
+        std::vector<Change> allChanges = collectDescendants(changeTracker.getCalcRoots());
         fApplyChanges = dbService.requestChangeApplication(allChanges, action);
         changeTracker.unfreeze();
     }
