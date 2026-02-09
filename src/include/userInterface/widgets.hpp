@@ -343,7 +343,7 @@ class ChangeOverviewer {
 
     void setChangeData(std::shared_ptr<uiChangeInfo> changeData);
     bool drawChildren(const std::vector<std::size_t>& children, float allowedWidth);
-    void drawSingleChangeOverview(const Change& change);
+    MOUSE_EVENT_TYPE drawSingleChangeOverview(const Change& change);
 };
 
 } // namespace Widgets

@@ -446,13 +446,14 @@ bool ChangeOverviewer::drawChildren(const std::vector<std::size_t>& children, fl
     return clicked;
 }
 
-void ChangeOverviewer::drawSingleChangeOverview(const Change& change) {
+MOUSE_EVENT_TYPE ChangeOverviewer::drawSingleChangeOverview(const Change& change) {
+    MOUSE_EVENT_TYPE event(MOUSE_EVENT_TYPE::NONE);
     const uint32_t rowId = change.getRowId();
     const std::size_t uid = change.getKey();
     const std::vector<std::size_t> children = change.getChildren();
     const bool selected = changeTracker.isChangeSelected(uid);
 
-    const ImGuiID imGuiKeyId = static_cast<ImGuiID>(uid);
+    // const ImGuiID imGuiKeyId = static_cast<ImGuiID>(uid);
 
     const char* type = "UNKNOWN";
     switch (change.getType()) {
@@ -547,7 +548,8 @@ void ChangeOverviewer::drawSingleChangeOverview(const Change& change) {
     bool childClicked = drawChildren(children, childrenWidth);
 
     if (clicked && !childClicked) {
-        changeTracker.toggleChangeSelect(imGuiKeyId);
+        // changeTracker.toggleChangeSelect(imGuiKeyId);
+        event = MOUSE_EVENT_TYPE::CLICK;
     }
 
     // Row ID (right aligned)
@@ -560,5 +562,6 @@ void ChangeOverviewer::drawSingleChangeOverview(const Change& change) {
     ImVec2 end = ImGui::GetCursorScreenPos();
     ImGui::SetCursorScreenPos({end.x, max.y});
     ImGui::Dummy(ImVec2(0.0f, VPADDING));
+    return event;
 }
 } // namespace Widgets

@@ -41,6 +41,8 @@ class DbVisualizer {
     Widgets::DbTable dbTable{edit, selectedTable, changeHighlight, logger};
     Widgets::ChangeOverviewer changeOverviewer{changeTracker, changeExe, 60, changeHighlight, selectedTable};
 
+    std::unordered_set<std::size_t> clickedChanges;
+
     void drawChangeOverview() {
         ImGui::Text("CHANGE OVERVIEW");
         ImGui::BeginDisabled(dataStates.dbData != DataState::DATA_READY);
@@ -49,7 +51,7 @@ class DbVisualizer {
         }
 
         for (const std::size_t rootKey : uiChanges->roots) {
-            drawRootChangeOverview(rootKey);
+            drawChangesTree(rootKey);
         }
 
         /*
@@ -62,9 +64,28 @@ class DbVisualizer {
         ImGui::EndDisabled();
     }
 
-    void drawRootChangeOverview(const std::size_t key) {
+    void drawChangesTree(std::size_t key) {
+        if (drawChange(key) == Widgets::MOUSE_EVENT_TYPE::CLICK) {
+            toggleNode(key);
+        }
+
+        if (clickedChanges.contains(key)) {
+            const Change& change = uiChanges->changes.at(key);
+            for (std::size_t childKey : change.getChildren()) {
+                drawChangesTree(childKey);
+            }
+        }
+    }
+
+    void toggleNode(std::size_t key) {
+        if (!clickedChanges.insert(key).second) {
+            clickedChanges.erase(key);
+        }
+    }
+
+    Widgets::MOUSE_EVENT_TYPE drawChange(const std::size_t key) {
         const Change& change = uiChanges->changes.at(key);
-        changeOverviewer.drawSingleChangeOverview(change);
+        return changeOverviewer.drawSingleChangeOverview(change);
     }
 
     void drawTableChangeOverview(const std::string& table) {
