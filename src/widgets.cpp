@@ -446,14 +446,16 @@ bool ChangeOverviewer::drawChildren(const std::vector<std::size_t>& children, fl
     return clicked;
 }
 
-MOUSE_EVENT_TYPE ChangeOverviewer::drawSingleChangeOverview(const Change& change) {
+MOUSE_EVENT_TYPE ChangeOverviewer::drawSingleChangeOverview(const Change& change,
+                                                            std::size_t* visualDepth,
+                                                            const std::size_t parent,
+                                                            bool isChildrenNotLast) {
     MOUSE_EVENT_TYPE event(MOUSE_EVENT_TYPE::NONE);
     const uint32_t rowId = change.getRowId();
     const std::size_t uid = change.getKey();
-    const std::vector<std::size_t> children = change.getChildren();
+    // const std::vector<std::size_t> children = change.getChildren();
     const bool selected = changeTracker.isChangeSelected(uid);
-
-    // const ImGuiID imGuiKeyId = static_cast<ImGuiID>(uid);
+    constexpr float INDENTATION_WIDTH = 8.0f;
 
     const char* type = "UNKNOWN";
     switch (change.getType()) {
@@ -471,10 +473,13 @@ MOUSE_EVENT_TYPE ChangeOverviewer::drawSingleChangeOverview(const Change& change
         break;
     }
 
+    ImGui::PushID(static_cast<int>(parent));
     ImGui::PushID(static_cast<int>(rowId));
+    ImGui::PushID(static_cast<int>(*visualDepth));
 
     ImU32 bgCol = change.isValid() ? colValid.first : colInvalid.first;
     ImU32 borderCol = change.isValid() ? colValid.second : colInvalid.second;
+
     // make yellow
     if (changeHighlight.contains(change.getKey())) {
         childSelectTimer -= ImGui::GetIO().DeltaTime;
@@ -487,14 +492,16 @@ MOUSE_EVENT_TYPE ChangeOverviewer::drawSingleChangeOverview(const Change& change
     }
 
     // ---- Full width
-    const float width = ImGui::GetContentRegionAvail().x;
+    const float width = ImGui::GetContentRegionAvail().x - *visualDepth * INDENTATION_WIDTH;
     ImVec2 startPos = ImGui::GetCursorScreenPos();
+    startPos.x += *visualDepth * INDENTATION_WIDTH;
 
     // Calculate widths
     const float remainingWidth = width - (UID_COL + TYPE_COL + ROW_COL + HPADDING * 2.0f);
-    const uint16_t maxChildren = static_cast<uint16_t>(remainingWidth / (childWidth + HPADDING));
-    const uint16_t visibleChildren = std::min<uint16_t>(maxChildren, children.size());
-    const float childrenWidth = visibleChildren * (childWidth + HPADDING);
+    // const uint16_t maxChildren = static_cast<uint16_t>(remainingWidth / (childWidth + HPADDING));
+    // const uint16_t visibleChildren = std::min<uint16_t>(maxChildren, children.size());
+    // const float childrenWidth = visibleChildren * (childWidth + HPADDING);
+    const float childrenWidth = 0;
     const float remainingTextWidth = remainingWidth - childrenWidth;
 
     const std::string summary = change.getCellSummary(60);
@@ -530,11 +537,11 @@ MOUSE_EVENT_TYPE ChangeOverviewer::drawSingleChangeOverview(const Change& change
 
     // UID
     ImGui::Text("%zu", uid);
-    ImGui::SameLine(UID_COL);
+    ImGui::SameLine(startPos.x + HPADDING + UID_COL);
 
     // Type
     ImGui::TextUnformatted(type);
-    ImGui::SameLine(UID_COL + TYPE_COL);
+    ImGui::SameLine(startPos.x + HPADDING + UID_COL + TYPE_COL);
 
     // Summary
     if ((remainingTextWidth - summarySize.x) > 0) {
@@ -544,10 +551,11 @@ MOUSE_EVENT_TYPE ChangeOverviewer::drawSingleChangeOverview(const Change& change
     }
 
     // children
-    ImGui::SameLine(UID_COL + TYPE_COL + summarySize.x);
-    bool childClicked = drawChildren(children, childrenWidth);
+    ImGui::SameLine(startPos.x + HPADDING + UID_COL + TYPE_COL + summarySize.x);
+    // bool childClicked = drawChildren(children, childrenWidth);
 
-    if (clicked && !childClicked) {
+    // if (clicked && !childClicked) {
+    if (clicked) {
         // changeTracker.toggleChangeSelect(imGuiKeyId);
         event = MOUSE_EVENT_TYPE::CLICK;
     }
@@ -557,11 +565,18 @@ MOUSE_EVENT_TYPE ChangeOverviewer::drawSingleChangeOverview(const Change& change
     ImGui::Text("Row %u", rowId);
 
     ImGui::PopID();
+    ImGui::PopID();
+    ImGui::PopID();
 
     // padding
     ImVec2 end = ImGui::GetCursorScreenPos();
     ImGui::SetCursorScreenPos({end.x, max.y});
-    ImGui::Dummy(ImVec2(0.0f, VPADDING));
+    if (isChildrenNotLast) {
+        ImGui::Dummy(ImVec2(0.0f, 0.25f));
+    } else {
+        ImGui::Dummy(ImVec2(0.0f, VPADDING));
+    }
+
     return event;
 }
 } // namespace Widgets

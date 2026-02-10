@@ -116,8 +116,7 @@ class App {
     void initFont(const std::string& font) {
         if (!font.empty()) {
             ImGuiIO& io = ImGui::GetIO();
-            ImFont* fontPtr = io.Fonts->AddFontFromFileTTF(font.c_str(), 16.0f);
-            IM_ASSERT(fontPtr != nullptr);
+            io.Fonts->AddFontFromFileTTF(font.c_str(), 16.0f);
         }
     }
 

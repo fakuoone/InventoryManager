@@ -9,30 +9,34 @@
 
 #include "timing.hpp"
 
+// #define WITH_LOGGING
+
 class Log {
-   private:
+  private:
     std::string content;
     std::chrono::time_point<std::chrono::steady_clock> timeOfCreation;
 
-   public:
+  public:
     Log(std::string cLog) : content(cLog) { timeOfCreation = Timing::getTime(); }
     void print() {
-        auto tp = timeOfCreation.time_since_epoch();  // duration since steady_clock epoch
+        auto tp = timeOfCreation.time_since_epoch(); // duration since steady_clock epoch
         auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(tp).count();
         std::cout << milliseconds << ": " << content << '\n';
     }
 };
 
 class Logger {
-   private:
+  private:
     std::vector<Log> logs;
     std::mutex mtx;
 
-   public:
+  public:
     void pushLog(Log log) {
         {
             std::lock_guard<std::mutex> lock(mtx);
+#ifdef WITH_LOGGING
             log.print();
+#endif
         }
         logs.emplace_back(log);
     }

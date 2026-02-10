@@ -50,8 +50,9 @@ class DbVisualizer {
             changeExe.requestChangeApplication(sqlAction::EXECUTE);
         }
 
-        for (const std::size_t rootKey : uiChanges->roots) {
-            drawChangesTree(rootKey);
+        for (const std::size_t rootKey : uiChanges->roots) { // TODO segfault when switching tab before db data is ready
+            std::size_t depth = 0;
+            drawChangesTree(rootKey, &depth, INVALID_ID, INVALID_ID);
         }
 
         /*
@@ -64,16 +65,27 @@ class DbVisualizer {
         ImGui::EndDisabled();
     }
 
-    void drawChangesTree(std::size_t key) {
-        if (drawChange(key) == Widgets::MOUSE_EVENT_TYPE::CLICK) {
+    void drawChangesTree(const std::size_t key, std::size_t* treeDepth, const std::size_t lastChild, const std::size_t parent) {
+        bool containsKey = clickedChanges.contains(key);
+        const Change& change = uiChanges->changes.at(key);
+        bool isChildrenNotLast = false;
+        if (change.hasParent()) {
+            isChildrenNotLast = lastChild != key;
+        } else if (containsKey && change.hasChildren()) {
+            isChildrenNotLast = true;
+        }
+
+        if (drawChange(key, treeDepth, parent, isChildrenNotLast) == Widgets::MOUSE_EVENT_TYPE::CLICK) {
             toggleNode(key);
         }
 
-        if (clickedChanges.contains(key)) {
-            const Change& change = uiChanges->changes.at(key);
-            for (std::size_t childKey : change.getChildren()) {
-                drawChangesTree(childKey);
+        if (containsKey) {
+            (*treeDepth)++;
+            const std::vector<std ::size_t>& children = change.getChildren();
+            for (std::size_t childKey : children) {
+                drawChangesTree(childKey, treeDepth, children.back(), key);
             }
+            (*treeDepth)--;
         }
     }
 
@@ -83,24 +95,10 @@ class DbVisualizer {
         }
     }
 
-    Widgets::MOUSE_EVENT_TYPE drawChange(const std::size_t key) {
+    Widgets::MOUSE_EVENT_TYPE
+    drawChange(const std::size_t key, std::size_t* visualDepth, const std::size_t parent, bool isChildrenNotLast) {
         const Change& change = uiChanges->changes.at(key);
-        return changeOverviewer.drawSingleChangeOverview(change);
-    }
-
-    void drawTableChangeOverview(const std::string& table) {
-        if (!uiChanges->idMappedChanges.contains(table)) {
-            return;
-        }
-
-        ImGui::PushID(table.c_str());
-
-        for (const auto& [_, key] : uiChanges->idMappedChanges.at(table)) {
-            const Change& change = uiChanges->changes.at(key);
-            changeOverviewer.drawSingleChangeOverview(change);
-        }
-
-        ImGui::PopID();
+        return changeOverviewer.drawSingleChangeOverview(change, visualDepth, parent, isChildrenNotLast);
     }
 
     void handleTableEvent() {
