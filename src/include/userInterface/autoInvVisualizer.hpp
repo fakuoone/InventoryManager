@@ -24,7 +24,7 @@ class CsvMappingVisualizer {
     std::vector<std::string> firstRow;
     std::vector<MappingSource> csvHeaderWidgets;
     std::vector<MappingNumber> mappingsN;
-    std::vector<MappingStr> mappingsS;
+    std::vector<MappingCsv> mappingsS;
     std::unordered_map<mappingIdType, ImVec2> sourceAnchors;
     std::unordered_map<mappingIdType, ImVec2> destAnchors;
     std::unordered_map<MappingNumber, MappingDrawing, MappingHash> mappingsDrawingInfo;
@@ -190,7 +190,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
             return;
         }
         MappingNumber newMappingN = MappingNumber(source.id, dest.id);
-        MappingStr newMappingS = MappingStr(source.header, PreciseHeader(dest.table, dest.header.name));
+        MappingCsv newMappingS = MappingCsv(source.header, PreciseHeader(dest.table, dest.header.name));
         mappingsDrawingInfo.insert_or_assign(newMappingN, MappingDrawing());
         mappingsN.emplace_back(std::move(newMappingN));
         mappingsS.emplace_back(std::move(newMappingS));
