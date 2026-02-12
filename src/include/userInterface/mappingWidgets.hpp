@@ -13,7 +13,7 @@ static constexpr const float INNER_PADDING = 3.0f;
 static constexpr const float INNER_TEXT_PADDING = 2.0f;
 static constexpr const float OUTER_PADDING = 3.0f;
 
-enum class mappingTypes { HEADER_HEADER };
+enum class mappingTypes { HEADER_HEADER, HEADER_API, API_HEADERR };
 
 static std::map<mappingTypes, std::string> mappingStrings = {{mappingTypes::HEADER_HEADER, "HEADER_HEADER"}};
 
@@ -21,15 +21,19 @@ struct MappingDrawing {
     float width;
 };
 
-struct DestinationDetail {
+struct DbDestinationDetail {
     std::string table;
     tHeaderInfo header;
     mappingIdType id;
-    bool mappable;
+    bool mappable = false;
+};
+
+struct ApiDestinationDetail {
+    bool mappable = false;
 };
 
 struct SourceDetail {
-    const std::string header;
+    const std::string attribute;
     const std::string example;
     mappingIdType id;
 };
@@ -48,18 +52,37 @@ class MappingSource {
 };
 
 class MappingDestination {
-  private:
-    const std::string table;
-    const std::vector<DestinationDetail> headers;
+  protected:
     static inline CsvMappingVisualizer* parentVisualizer;
     bool mappable = true;
 
   public:
-    MappingDestination(const std::string cTable, const std::vector<DestinationDetail> cHeaders, bool cMappable)
-        : table(cTable), headers(cHeaders), mappable(cMappable) {}
-
     static void setDragHandler(CsvMappingVisualizer* handler);
-    void draw(const float width);
-    bool handleDrag(const DestinationDetail& headerInfo);
+    virtual void draw(float width) = 0;
+
+    MappingDestination(bool cMappable) : mappable(cMappable) {}
+};
+
+class MappingDestinationDb : public MappingDestination {
+  private:
+    const std::string table;
+    const std::vector<DbDestinationDetail> headers;
+
+  public:
+    MappingDestinationDb(const std::string cTable, const std::vector<DbDestinationDetail> cHeaders, bool cMappable)
+        : MappingDestination(cMappable), table(cTable), headers(cHeaders) {}
+
+    void draw(float width) override;
+    bool handleDrag(const DbDestinationDetail& headerInfo);
+};
+
+class MappingDestinationToApi : public MappingDestination {
+  private:
+    ApiDestinationDetail destination;
+
+  public:
+    MappingDestinationToApi(bool cMappable) : MappingDestination(cMappable) {}
+    void draw(float width) override;
+    bool handleDrag(const ApiDestinationDetail& detail);
 };
 } // namespace AutoInv

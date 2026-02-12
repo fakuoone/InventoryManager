@@ -8,12 +8,12 @@ void MappingSource::setDragHandler(CsvMappingVisualizer* handler) {
 }
 
 const std::string& MappingSource::getHeader() {
-    return data.header;
+    return data.attribute;
 }
 
-void MappingSource::draw(const float width) {
+void MappingSource::draw(float width) {
     // Calc Height
-    const float headerHeight = ImGui::CalcTextSize(data.header.c_str()).y + 2 * INNER_TEXT_PADDING;
+    const float headerHeight = ImGui::CalcTextSize(data.attribute.c_str()).y + 2 * INNER_TEXT_PADDING;
     const float height = 2 * (headerHeight) + 2 * INNER_PADDING;
 
     const float anchorRadius = headerHeight / 2 - INNER_PADDING * 2;
@@ -34,7 +34,7 @@ void MappingSource::draw(const float width) {
     drawList->AddRect(bgRectBegin, bgRectEnd, IM_COL32(120, 120, 120, 200), 0.0f);
 
     ImGui::SetCursorScreenPos(cursor);
-    ImGui::InvisibleButton(data.header.c_str(), ImVec2(width, headerHeight));
+    ImGui::InvisibleButton(data.attribute.c_str(), ImVec2(width, headerHeight));
 
     // hover effect on header
     cursor.x += INNER_PADDING;
@@ -61,7 +61,7 @@ void MappingSource::draw(const float width) {
     // header
     drawList->AddText(ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING),
                       hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
-                      data.header.c_str());
+                      data.attribute.c_str());
     cursor.y += headerHeight;
 
     // example
@@ -93,7 +93,7 @@ void MappingDestination::setDragHandler(CsvMappingVisualizer* handler) {
     parentVisualizer = handler;
 }
 
-void MappingDestination::draw(const float width) {
+void MappingDestinationDb::draw(float width) {
     if (headers.size() == 0) {
         return;
     }
@@ -176,23 +176,58 @@ void MappingDestination::draw(const float width) {
     ImGui::PopID();
 }
 
-bool MappingDestination::handleDrag(const DestinationDetail& header) {
-    // TODO types need to match
-    if (!parentVisualizer) {
-        return false;
-    }
-    if (header.header.type == headerType::PRIMARY_KEY) {
-        return false;
-    }
+template <typename T> bool handleDragInternal(CsvMappingVisualizer* parentVisualizer, const mappingTypes mapType, const T& destination) {
     bool success = false;
     if (ImGui::BeginDragDropTarget()) {
-        const ImGuiPayload* payload =
-            ImGui::AcceptDragDropPayload(mappingStrings.at(mappingTypes::HEADER_HEADER).c_str(),
-                                         ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
-        success = parentVisualizer->handleDrag(header, payload);
+        const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
+            mappingStrings.at(mapType).c_str(), ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
+        success = parentVisualizer->handleDrag(destination, payload);
         ImGui::EndDragDropTarget();
     }
     return success;
+}
+
+bool MappingDestinationDb::handleDrag(const DbDestinationDetail& header) {
+    // TODO types need to match
+    if (header.header.type == headerType::PRIMARY_KEY) {
+        return false;
+    }
+    if (!parentVisualizer) {
+        return false;
+    }
+    return handleDragInternal<DbDestinationDetail>(parentVisualizer, mappingTypes::HEADER_HEADER, header);
+}
+
+void MappingDestinationToApi::draw(float width) {
+    ImGui::PushID(this);
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+
+    const float widthPadded = width - 2 * OUTER_PADDING;
+
+    // Calc Height
+    const float headerHeight = 10; // ImGui::CalcTextSize(headers.at(0).header.name.c_str()).y + 2 * INNER_TEXT_PADDING;
+    ImVec2 begin = ImGui::GetCursorScreenPos();
+    begin.x += OUTER_PADDING;
+    begin.y += OUTER_PADDING;
+    ImVec2 cursor = begin;
+    // complete background
+    ImVec2 bgRectBegin = cursor;
+    ImVec2 bgRectEnd = ImVec2(cursor.x + widthPadded, cursor.y + headerHeight);
+    drawList->AddRectFilled(bgRectBegin, bgRectEnd, Widgets::colGreyBg, 0.0f);
+    drawList->AddRect(bgRectBegin, bgRectEnd, IM_COL32(120, 120, 120, 200), 0.0f);
+
+    cursor.x += INNER_PADDING;
+    cursor.y += INNER_PADDING;
+
+    ImGui::Dummy(ImVec2(0, OUTER_PADDING));
+    ImGui::PopID();
+}
+
+bool MappingDestinationToApi::handleDrag(const ApiDestinationDetail& detail) {
+    if (!parentVisualizer) {
+        return false;
+    }
+    return handleDragInternal<ApiDestinationDetail>(parentVisualizer, mappingTypes::HEADER_API, detail);
 }
 
 Widgets::MOUSE_EVENT_TYPE isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness) {
