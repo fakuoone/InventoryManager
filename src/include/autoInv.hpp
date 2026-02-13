@@ -21,15 +21,28 @@ struct PreciseHeader {
 
 struct ApiData {};
 
-using MappingCsvDb = Mapping<std::string, PreciseHeader>;
-using MappingApiDb = Mapping<std::string, PreciseHeader>;
+using MappingToDb = Mapping<std::string, PreciseHeader>;
 using MappingCsvApi = Mapping<std::string, uint32_t>;
-using MappingNumber = Mapping<mappingIdType, mappingIdType>;
+using MappingNumberInternal = Mapping<mappingIdType, mappingIdType>;
+
+using MappingVariant = std::variant<MappingToDb, MappingCsvApi>;
+
+// enum class MappingTypes { CSV_API, CSV_DB, API_DB };
+
+struct MappingNumber {
+    MappingNumberInternal uniqueData;
+    MappingVariant usableData;
+    bool operator==(const MappingNumber& other) const noexcept {
+        // no need to hash the type aswell since the ids are unique
+        return uniqueData.source == other.uniqueData.source && uniqueData.destination == other.uniqueData.destination;
+    }
+};
 
 struct MappingHash {
     size_t operator()(const MappingNumber& m) const noexcept {
-        size_t h1 = std::hash<mappingIdType>{}(m.source);
-        size_t h2 = std::hash<mappingIdType>{}(m.destination);
+        // no need to hash the type aswell since the ids are unique
+        size_t h1 = std::hash<mappingIdType>{}(m.uniqueData.source);
+        size_t h2 = std::hash<mappingIdType>{}(m.uniqueData.destination);
         return h1 ^ (h2 << 1);
     }
 };
@@ -128,7 +141,7 @@ class CsvChangeGenerator {
 
     bool dataRead = false;
 
-    std::vector<MappingCsvDb> committedMappings;
+    std::vector<MappingToDb> committedMappings;
     std::size_t missingParam = 0;
 
     CsvChangeGenerator(ThreadPool& cThreadPool, ChangeTracker& cChangeTracker, DbService& cDbService, Config& cConfig, Logger& cLogger)
@@ -159,7 +172,7 @@ class CsvChangeGenerator {
         std::unordered_set<std::string> foundTables;
         const std::vector<std::string>& csvHeader = csvData[0];
 
-        for (const MappingCsvDb& mapping : committedMappings) {
+        for (const MappingToDb& mapping : committedMappings) {
             // check legality of mapping
             const auto it = std::find_if(csvHeader.begin(), csvHeader.end(), [&](const std::string& col) { return mapping.source == col; });
             if (it == csvHeader.end()) {
@@ -293,10 +306,10 @@ class CsvChangeGenerator {
 
     const std::vector<std::string>& getFirstRow() { return *(csvData.begin() + 1); }
 
-    void setMappings(const std::vector<MappingCsvDb> mappings) {
+    void setMappings(const std::vector<MappingToDb> mappings) {
         // TODO: Get actual names instead of ids
         committedMappings = mappings;
-        for (const MappingCsvDb& mapping : mappings) {
+        for (const MappingToDb& mapping : mappings) {
             logger.pushLog(
                 Log{std::format("MAPPINGS: MAPPED {} TO {} OF {}", mapping.source, mapping.destination.header, mapping.destination.table)});
         }

@@ -6,16 +6,17 @@
 
 #include <filesystem>
 #include <map>
+#include <string_view>
 
 namespace AutoInv {
 class CsvMappingVisualizer;
-static constexpr const float INNER_PADDING = 3.0f;
-static constexpr const float INNER_TEXT_PADDING = 2.0f;
-static constexpr const float OUTER_PADDING = 3.0f;
+static constexpr float INNER_PADDING = 3.0f;
+static constexpr float INNER_TEXT_PADDING = 2.0f;
+static constexpr float OUTER_PADDING = 3.0f;
 
-enum class mappingTypes { HEADER_HEADER, HEADER_API, API_HEADERR };
+enum class mappingTypes { HEADER_HEADER, HEADER_API, API_HEADER };
 
-static std::map<mappingTypes, std::string> mappingStrings = {{mappingTypes::HEADER_HEADER, "HEADER_HEADER"}};
+static constexpr std::string_view imguiMappingDragString = "MAPPING";
 
 struct MappingDrawing {
     float width;
@@ -30,6 +31,8 @@ struct DbDestinationDetail {
 
 struct ApiDestinationDetail {
     bool mappable = false;
+    mappingIdType id;
+    std::string dataPoint;
 };
 
 struct SourceDetail {
@@ -78,10 +81,10 @@ class MappingDestinationDb : public MappingDestination {
 
 class MappingDestinationToApi : public MappingDestination {
   private:
-    ApiDestinationDetail destination;
+    ApiDestinationDetail data;
 
   public:
-    MappingDestinationToApi(bool cMappable) : MappingDestination(cMappable) {}
+    MappingDestinationToApi(ApiDestinationDetail cData, bool cMappable) : MappingDestination(cMappable), data(cData) {}
     void draw(float width) override;
     bool handleDrag(const ApiDestinationDetail& detail);
 };

@@ -9,7 +9,7 @@
 
 #include "timing.hpp"
 
-// #define WITH_LOGGING
+#define WITH_LOGGING
 
 class Log {
   private:

@@ -10,8 +10,10 @@ enum class MappingStage { CSV, API };
 
 Widgets::MOUSE_EVENT_TYPE isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness);
 
-template <typename T>
-concept ValidDestination = std::same_as<T, DbDestinationDetail> || std::same_as<T, ApiDestinationDetail>;
+struct WidgetAnchors {
+    mappingIdType largestId = 0;
+    std::unordered_map<mappingIdType, ImVec2> anchors;
+};
 
 class CsvMappingVisualizer {
   protected:
@@ -27,10 +29,11 @@ class CsvMappingVisualizer {
     std::vector<MappingDestinationDb> dbHeaderWidgets;
     std::vector<MappingSource> csvHeaderWidgets;
     std::vector<MappingNumber> mappingsN;
-    std::vector<MappingCsvDb> mappingsS;
-    std::vector<MappingDestinationToApi> mappingsToApi;
-    std::unordered_map<mappingIdType, ImVec2> sourceAnchors;
-    std::unordered_map<mappingIdType, ImVec2> destAnchors;
+    // std::vector<MappingToDb> mappingsSToDb;
+    // std::vector<MappingCsvApi> mappingsSToApi;
+    std::vector<MappingDestinationToApi> mappingsToApiWidgets;
+    WidgetAnchors sourceAnchors;
+    WidgetAnchors destAnchors;
     std::unordered_map<MappingNumber, MappingDrawing, MappingHash> mappingsDrawingInfo;
 
     std::array<char, 256> csvBuffer;
@@ -42,10 +45,14 @@ class CsvMappingVisualizer {
     virtual ~CsvMappingVisualizer() = default;
     virtual void run() = 0;
     virtual void createMappingToDb(const SourceDetail& source, const DbDestinationDetail& dest) = 0;
-    virtual bool hasMappingToDb(const SourceDetail& source, const DbDestinationDetail& dest) = 0;
+    virtual void createMappingToApi(const SourceDetail& source, const ApiDestinationDetail& dest) = 0;
+    virtual bool hasMapping(const SourceDetail& source, mappingIdType dest) = 0;
     virtual void removeMappingToDb(const MappingNumber& mapping) = 0;
-    virtual void storeAnchorSource(mappingIdType source, ImVec2 pos) = 0; // TODO: needs to be virtual ?
-    virtual void storeAnchorDest(mappingIdType dest, ImVec2 pos) = 0;     // TODO: needs to be virtual ?
+
+    void storeAnchorSource(mappingIdType source, ImVec2 pos);
+    void storeAnchorDest(mappingIdType dest, ImVec2 pos);
+    mappingIdType getLastIdSource();
+    mappingIdType getLastIdDest();
 
     void setData(std::shared_ptr<const completeDbData> newData);
 
@@ -59,14 +66,9 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     static constexpr const float CENTER_WIDTH = 300.0f;
 
     void drawApiWidgets() {
-        const char* btnLabel = "ADD API STAGE";
-        const float height = ImGui::CalcTextSize(btnLabel).y;
         const ImVec2 avail = ImGui::GetContentRegionAvail();
-        if (ImGui::Button(btnLabel, ImVec2{avail.x, height})) {
-            mappingsToApi.emplace_back(MappingDestinationToApi(true));
-        };
 
-        for (auto& mapping : mappingsToApi) {
+        for (auto& mapping : mappingsToApiWidgets) {
             mapping.draw(avail.x);
         }
     }
@@ -80,6 +82,13 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
                 logger.pushLog(Log{std::format("ERROR reading order: {}", e.what())});
             }
         }
+
+        // add api intermediate stage
+        ImGui::SameLine();
+        const char* btnLabel = "ADD API STAGE";
+        if (ImGui::Button(btnLabel)) {
+            mappingsToApiWidgets.emplace_back(MappingDestinationToApi(ApiDestinationDetail(true, ++destAnchors.largestId, ""), true));
+        };
 
         // Stage selector
         ImGui::SameLine();
@@ -208,19 +217,30 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     }
 
     void createMappingToDb(const SourceDetail& source, const DbDestinationDetail& dest) override {
-        if (hasMappingToDb(source, dest)) {
+        if (hasMapping(source, dest.id)) {
             return;
         }
-        MappingNumber newMappingN = MappingNumber(source.id, dest.id);
-        MappingCsvDb newMappingS = MappingCsvDb(source.attribute, PreciseHeader(dest.table, dest.header.name));
+        MappingToDb newMappingS = MappingToDb(source.attribute, PreciseHeader(dest.table, dest.header.name));
+        MappingNumber newMappingN = MappingNumber(MappingNumberInternal{source.id, dest.id}, std::move(newMappingS));
         mappingsDrawingInfo.insert_or_assign(newMappingN, MappingDrawing());
         mappingsN.emplace_back(std::move(newMappingN));
-        mappingsS.emplace_back(std::move(newMappingS));
+        // mappingsSToDb.emplace_back(std::move(newMappingS));
     }
 
-    bool hasMappingToDb(const SourceDetail& source, const DbDestinationDetail& dest) override {
+    void createMappingToApi(const SourceDetail& source, const ApiDestinationDetail& dest) override {
+        if (hasMapping(source, dest.id)) {
+            return;
+        }
+        MappingCsvApi newMappingS = MappingCsvApi(source.attribute, dest.id);
+        MappingNumber newMappingN = MappingNumber(MappingNumberInternal{source.id, dest.id}, std::move(newMappingS));
+        mappingsDrawingInfo.insert_or_assign(newMappingN, MappingDrawing());
+        mappingsN.emplace_back(std::move(newMappingN));
+        // mappingsSToApi.emplace_back(std::move(newMappingS));
+    }
+
+    bool hasMapping(const SourceDetail& source, mappingIdType dest) override {
         if (std::find_if(mappingsN.begin(), mappingsN.end(), [&](const MappingNumber& m) {
-                return m == MappingNumber(source.id, dest.id);
+                return m.uniqueData == MappingNumberInternal(source.id, dest);
             }) != mappingsN.end()) {
             return true;
         }
@@ -228,24 +248,20 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     }
 
     void removeMappingToDb(const MappingNumber& mapping) override {
+        // not very efficient, but mappingnumber is small
         auto it = std::find(mappingsN.begin(), mappingsN.end(), mapping);
         if (it != mappingsN.end()) {
-            mappingsDrawingInfo.erase(*it);
+            mappingsDrawingInfo.erase(mapping);
             mappingsN.erase(it);
-            mappingsS.erase(std::distance(mappingsN.begin(), it) + mappingsS.begin()); // assumes both are added simul
         }
     }
 
-    void storeAnchorSource(mappingIdType source, ImVec2 pos) override { sourceAnchors[source] = pos; }
-
-    void storeAnchorDest(mappingIdType dest, ImVec2 pos) override { destAnchors[dest] = pos; }
-
     bool drawMapping(const MappingNumber& mapping, ImDrawList* drawlist, MappingDrawing& mappingDrawingInfo) {
-        if (!sourceAnchors.count(mapping.source) || !destAnchors.count(mapping.destination)) {
+        if (!sourceAnchors.anchors.count(mapping.uniqueData.source) || !destAnchors.anchors.count(mapping.uniqueData.destination)) {
             return false;
         }
-        ImVec2 start = sourceAnchors.at(mapping.source);
-        ImVec2 end = destAnchors.at(mapping.destination);
+        ImVec2 start = sourceAnchors.anchors.at(mapping.uniqueData.source);
+        ImVec2 end = destAnchors.anchors.at(mapping.uniqueData.destination);
 
         Widgets::MOUSE_EVENT_TYPE event = isMouseOnLine(start, end, mappingDrawingInfo.width * 2);
         const float thickness = event != Widgets::MOUSE_EVENT_TYPE::NONE ? 6.0f : 2.0f;
@@ -255,9 +271,16 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         return event == Widgets::MOUSE_EVENT_TYPE::CLICK;
     }
 
-    bool hasMappings() { return mappingsS.size() > 2; }
+    bool hasMappings() {
+        // TODO: only detect mappings to db
+        return mappingsN.size() > 2;
+    }
 
-    void commitMappings() { reader.setMappings(mappingsS); }
+    void commitMappings() {
+
+        // TODO: store mappingsToDb separately
+        // reader.setMappings(mappingsSToDb);
+    }
 };
 
 class BomVisualizer : public CsvVisualizerImpl<ChangeGeneratorFromBom> {
