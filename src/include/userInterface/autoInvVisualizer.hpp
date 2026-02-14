@@ -60,7 +60,7 @@ class CsvMappingVisualizer {
 
     void setData(std::shared_ptr<const completeDbData> newData);
 
-    void handleApiClick(const ApiDestinationDetail& destination);
+    void handleApiClick(MappingDestinationToApi& destination);
 
     bool handleDrag(const DbDestinationDetail& destination, const ImGuiPayload* payload);
     bool handleDrag(const ApiDestinationDetail& destination, const ImGuiPayload* payload);
@@ -93,7 +93,10 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         ImGui::SameLine();
         const char* btnLabel = "ADD API STAGE";
         if (ImGui::Button(btnLabel)) {
-            mappingsToApiWidgets.emplace_back(MappingDestinationToApi(ApiDestinationDetail(true, ++destAnchors.largestId, "API"), true));
+            const std::size_t newIndex = ++destAnchors.largestId;
+            apiPreviewCache.insert_or_assign(newIndex, ApiPreviewState{});
+            mappingsToApiWidgets.emplace_back(
+                MappingDestinationToApi(ApiDestinationDetail(true, ++destAnchors.largestId, "API"), apiPreviewCache.at(newIndex), true));
         };
 
         // Stage selector

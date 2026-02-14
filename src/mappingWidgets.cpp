@@ -232,18 +232,16 @@ void MappingDestinationToApi::draw(float width) {
     ImGui::InvisibleButton(data.dataPoint.c_str(), ImVec2(cellWidth, dataHeight));
     bool hovered = ImGui::IsItemHovered();
 
-    if (ImGui::IsItemClicked() && !data.dataPoint.empty()) {
-        parentVisualizer->handleApiClick(data);
+    // 1. click: query api, 2nd click: open selectionpoup
+    const char* apiPopup = "API";
+    if (ImGui::IsItemClicked()) {
+        if (!previewData.fields.empty()) {
+            ImGui::OpenPopup(apiPopup);
+        } else if (!data.dataPoint.empty()) {
+            parentVisualizer->handleApiClick(*this);
+        }
     }
-
-    // const char* apiPopup = "API";
-    // ImGui::OpenPopup("API");
-    // if (ImGui::BeginPopup()) {
-    //     if (ImGui::Button("X")) {
-    //         ImGui::CloseCurrentPopup();
-    //     }
-    //     ImGui::EndPopup();
-    // }
+    drawPreview(apiPopup);
 
     bool draggedTo = handleDrag(data);
 
@@ -266,11 +264,27 @@ void MappingDestinationToApi::draw(float width) {
     ImGui::PopID();
 }
 
+void MappingDestinationToApi::drawPreview(const char* popup) {
+    if (ImGui::BeginPopup(popup)) {
+        for (const std::string& cell : previewData.fields) {
+            ImGui::TextUnformatted(cell.c_str());
+        }
+        if (ImGui::Button("X")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
 bool MappingDestinationToApi::handleDrag(const ApiDestinationDetail& detail) {
     if (!parentVisualizer) {
         return false;
     }
     return handleDragInternal<ApiDestinationDetail>(parentVisualizer, mappingTypes::HEADER_API, detail);
+}
+
+const std::string& MappingDestinationToApi::getDataPoint() const {
+    return data.dataPoint;
 }
 
 Widgets::MOUSE_EVENT_TYPE isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness) {

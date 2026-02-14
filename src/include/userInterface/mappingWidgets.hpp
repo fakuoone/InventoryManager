@@ -2,6 +2,7 @@
 
 #include "autoInv.hpp"
 #include "dbService.hpp"
+#include "userInterface/uiTypes.hpp"
 #include "userInterface/widgets.hpp"
 
 #include <filesystem>
@@ -84,8 +85,13 @@ class MappingDestinationToApi : public MappingDestination {
     ApiDestinationDetail data;
 
   public:
-    MappingDestinationToApi(ApiDestinationDetail cData, bool cMappable) : MappingDestination(cMappable), data(cData) {}
+    ApiPreviewState& previewData;
+    MappingDestinationToApi(ApiDestinationDetail cData, ApiPreviewState& cPreviewData, bool cMappable)
+        : MappingDestination(cMappable), data(cData), previewData(cPreviewData) {}
+
     void draw(float width) override;
+    void drawPreview(const char* popup);
     bool handleDrag(const ApiDestinationDetail& detail);
+    const std::string& getDataPoint() const;
 };
 } // namespace AutoInv

@@ -3,6 +3,7 @@
 #include "config.hpp"
 #include "logger.hpp"
 #include "threadPool.hpp"
+#include "userInterface/uiTypes.hpp"
 
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
@@ -24,12 +25,6 @@ struct CurlListDeleter {
             curl_slist_free_all(list);
         }
     }
-};
-
-struct ApiPreviewState {
-    bool loading = false;
-    bool ready = false;
-    std::vector<std::string> fields;
 };
 
 class PartApi {
@@ -157,7 +152,7 @@ class PartApi {
 
         curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers.get());
 
-        if (triggerRequest() == CURLE_OK) {
+        if (triggerRequest() != CURLE_OK) {
             state.loading = false;
             return;
         }
