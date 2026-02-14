@@ -3,7 +3,7 @@
 
 namespace AutoInv {
 
-void MappingSource::setDragHandler(CsvMappingVisualizer* handler) {
+void MappingSource::setInteractionHandler(CsvMappingVisualizer* handler) {
     parentVisualizer = handler;
 }
 
@@ -89,7 +89,7 @@ bool MappingSource::beginDrag() {
     return false;
 }
 
-void MappingDestination::setDragHandler(CsvMappingVisualizer* handler) {
+void MappingDestination::setInteractionHandler(CsvMappingVisualizer* handler) {
     parentVisualizer = handler;
 }
 
@@ -231,6 +231,20 @@ void MappingDestinationToApi::draw(float width) {
     ImGui::SetCursorScreenPos(cursor);
     ImGui::InvisibleButton(data.dataPoint.c_str(), ImVec2(cellWidth, dataHeight));
     bool hovered = ImGui::IsItemHovered();
+
+    if (ImGui::IsItemClicked() && !data.dataPoint.empty()) {
+        parentVisualizer->handleApiClick(data);
+    }
+
+    // const char* apiPopup = "API";
+    // ImGui::OpenPopup("API");
+    // if (ImGui::BeginPopup()) {
+    //     if (ImGui::Button("X")) {
+    //         ImGui::CloseCurrentPopup();
+    //     }
+    //     ImGui::EndPopup();
+    // }
+
     bool draggedTo = handleDrag(data);
 
     if ((hovered || draggedTo) && data.mappable) {

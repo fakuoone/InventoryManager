@@ -10,7 +10,7 @@
 
 #include <windows.h>
 
-struct partApi {
+struct ApiConfig {
     std::string key;
     std::string address;
 };
@@ -20,7 +20,7 @@ class Config {
     std::string dbString;
     std::string fontPath;
     std::string quantityColumn;
-    partApi api;
+    ApiConfig api;
 
     Logger& logger;
 
@@ -29,8 +29,7 @@ class Config {
             const std::string dbname = j.at("dbname").get<std::string>();
             const std::string user = j.at("user").get<std::string>();
             const std::string password = j.at("password").get<std::string>();
-            std::string connectionString =
-                std::format("dbname={} user={} password={}", dbname, user, password);
+            std::string connectionString = std::format("dbname={} user={} password={}", dbname, user, password);
             return connectionString;
         } catch (const nlohmann::json::parse_error& e) {
             logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
@@ -93,4 +92,6 @@ class Config {
     const std::string& getFont() const { return fontPath; }
 
     const std::string& getQuantityColumn() const { return quantityColumn; }
+
+    const ApiConfig& getApiConfig() const { return api; }
 };

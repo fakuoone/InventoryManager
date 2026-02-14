@@ -46,6 +46,12 @@ mappingIdType CsvMappingVisualizer::getLastIdDest() {
     return destAnchors.largestId;
 }
 
+void CsvMappingVisualizer::handleApiClick(const ApiDestinationDetail& destination) {
+    ApiPreviewState& state = apiPreviewCache[destination.id];
+    state.loading = true;
+    api.fetchExample(destination.dataPoint, state);
+}
+
 bool CsvMappingVisualizer::handleDrag(const ApiDestinationDetail& destination, const ImGuiPayload* payload) {
     // TODO: complete function
     if (payload) {

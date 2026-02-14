@@ -48,7 +48,7 @@ class MappingSource {
 
   public:
     MappingSource(const std::string& cHeader, const std::string& cExample, mappingIdType cId) : data(cHeader, cExample, cId) {}
-    static void setDragHandler(CsvMappingVisualizer* handler);
+    static void setInteractionHandler(CsvMappingVisualizer* handler);
     const std::string& getHeader();
     void draw(const float width);
     bool beginDrag();
@@ -60,7 +60,7 @@ class MappingDestination {
     bool mappable = true;
 
   public:
-    static void setDragHandler(CsvMappingVisualizer* handler);
+    static void setInteractionHandler(CsvMappingVisualizer* handler);
     virtual void draw(float width) = 0;
 
     MappingDestination(bool cMappable) : mappable(cMappable) {}

@@ -18,9 +18,10 @@ class App {
   private:
     ImGuiDX11Context imguiCtx;
 
+    Config& config;
+    ThreadPool& pool;
     DbService& dbService;
     ChangeTracker& changeTracker;
-    Config& config;
     AutoInv::ChangeGeneratorFromBom& bomReader;
     AutoInv::ChangeGeneratorFromOrder& orderReader;
     Logger& logger;
@@ -29,8 +30,10 @@ class App {
 
     ChangeExeService changeExe{dbService, changeTracker, logger};
     DbVisualizer dbVisualizer{dbService, changeTracker, changeExe, logger, dataStates};
-    AutoInv::BomVisualizer bomVisualizer{dbService, bomReader, logger, dataStates};
-    AutoInv::OrderVisualizer orderVisualizer{dbService, orderReader, logger, dataStates};
+
+    PartApi api{pool, config, logger};
+    AutoInv::BomVisualizer bomVisualizer{dbService, bomReader, api, logger, dataStates};
+    AutoInv::OrderVisualizer orderVisualizer{dbService, orderReader, api, logger, dataStates};
 
     std::shared_ptr<const completeDbData> dbData;
     std::shared_ptr<uiChangeInfo> uiChanges;
@@ -140,15 +143,15 @@ class App {
     void showOrder() { orderVisualizer.run(); }
 
   public:
-    App(DbService& cDbService,
+    App(Config& cConfig,
+        ThreadPool& cPool,
+        DbService& cDbService,
         ChangeTracker& cChangeTracker,
-        Config& cConfig,
         AutoInv::ChangeGeneratorFromBom& cBomReader,
         AutoInv::ChangeGeneratorFromOrder& cOrderReader,
-
         Logger& cLogger)
-        : dbService(cDbService), changeTracker(cChangeTracker), config(cConfig), bomReader(cBomReader), orderReader(cOrderReader),
-          logger(cLogger) {}
+        : config(cConfig), pool(cPool), dbService(cDbService), changeTracker(cChangeTracker), bomReader(cBomReader),
+          orderReader(cOrderReader), logger(cLogger) {}
 
     App(const App&) = delete;
     App& operator=(const App&) = delete;
@@ -159,6 +162,7 @@ class App {
         std::string dbString = config.setConfigString(std::filesystem::path{}); // OPTIONAL USER SUPPLIED CONFIG PATH
         initFont(config.getFont());
         dbService.initializeDbInterface(dbString);
+        api.connect();
     }
 
     void run() {

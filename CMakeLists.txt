@@ -6,9 +6,6 @@ project(InventoryManager VERSION 1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# --- Options: static-ish MinGW builds ---
-
-
 # --- Output directories ---
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -50,9 +47,6 @@ file(GLOB IMGUI_GLOB
     ${IMGUI_DIR}/backends/imgui_impl_dx11.h
 )
 
-set(IMGUI_LIBRARY_TYPE "STATIC" CACHE STRING "ImGui library type")
-set_property(CACHE IMGUI_LIBRARY_TYPE PROPERTY STRINGS STATIC SHARED)
-
 add_library(imgui ${IMGUI_LIBRARY_TYPE} ${IMGUI_GLOB})
 target_include_directories(imgui PUBLIC
     ${IMGUI_DIR}
@@ -66,31 +60,32 @@ set_target_properties(imgui PROPERTIES
 )
 
 target_link_libraries(imgui PUBLIC
-    d3d11
-    dxgi
-    d3dcompiler
-    imm32
-    user32
-    gdi32
-    dwmapi
+d3d11
+dxgi
+d3dcompiler
+imm32
+user32
+gdi32
+dwmapi
 )
 
 
 # --- Includes ---
 target_include_directories(InventoryManager PRIVATE
-    ${PROJECT_SOURCE_DIR}/src/include
+${PROJECT_SOURCE_DIR}/src/include
 )
 
 # --- Dependencies ---
+find_package(CURL CONFIG REQUIRED)
 find_package(libpqxx CONFIG REQUIRED)
-find_package(PostgreSQL REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 
 target_precompile_headers(InventoryManager PRIVATE ${PROJECT_SOURCE_DIR}/src/include/pch.hpp)
 
+# TODO: link statically
 target_link_libraries(InventoryManager PRIVATE
+    CURL::libcurl
     libpqxx::pqxx
-    PostgreSQL::PostgreSQL
     nlohmann_json::nlohmann_json
     imgui
     ws2_32
