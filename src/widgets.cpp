@@ -579,4 +579,29 @@ MOUSE_EVENT_TYPE ChangeOverviewer::drawSingleChangeOverview(const Change& change
 
     return event;
 }
+
+void drawJsonTree(const nlohmann::json& j, std::string* selected, std::string path) {
+    using json = nlohmann::json;
+    if (j.is_object()) {
+        for (auto it = j.begin(); it != j.end(); ++it) {
+            std::string key = it.key();
+            const json& value = it.value();
+            std::string currentPath = path.empty() ? key : path + "/" + key;
+
+            if (value.is_object() && !value.empty()) {
+                if (ImGui::TreeNode(key.c_str())) {
+                    drawJsonTree(value, selected, currentPath);
+                    ImGui::TreePop();
+                }
+            } else {
+                bool isSelected = (selected && *selected == currentPath);
+                if (ImGui::Selectable(key.c_str(), isSelected)) {
+                    if (selected) {
+                        *selected = currentPath;
+                    }
+                }
+            }
+        }
+    }
+}
 } // namespace Widgets

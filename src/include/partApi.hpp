@@ -57,8 +57,9 @@ class PartApi {
             return false;
         }
         const ApiConfig& apiConfig = config.getApiConfig();
+        const std::string url = std::format("{}?apiKey={}", apiConfig.address, apiConfig.key);
 
-        curl_easy_setopt(curl.get(), CURLOPT_URL, apiConfig.address.c_str());
+        curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
         curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, writeCallback);
         curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, this);
 
@@ -71,11 +72,11 @@ class PartApi {
 
     CURLcode triggerRequest() {
 #ifdef DUMMY_API
-        responseString = R"({"dummy":"value"})";
+        responseString = config.getDummyJson();
         return CURLE_OK;
 #else
         responseString.clear();
-        res = curl_easy_perform(curl.get());
+        CURLcode res = curl_easy_perform(curl.get());
         if (res != CURLE_OK) {
             logger.pushLog(Log{std::format("ERROR: API request failed: ", curl_easy_strerror(res))});
             return res;
@@ -107,42 +108,18 @@ class PartApi {
 
     static void cleanupGlobalCurl() { curl_global_cleanup(); }
 
-    void connect() {
-        if (!init()) {
-            return;
-        }
-
-        headers.reset(curl_slist_append(headers.release(), "Content-Type: application/json"));
-        curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers.get());
-
-        std::string payload = "TODO";
-        curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, payload.c_str());
-
-        CURLcode res = curl_easy_perform(curl.get());
-        if (res != CURLE_OK) {
-            logger.pushLog(Log{std::format("ERROR: Connecting to api: ", curl_easy_strerror(res))});
-        }
-    }
-
     void fetchExample(const std::string& dataPoint, ApiPreviewState& state) {
-        if (!curl) {
+        if (!init()) {
             return;
         }
         state.fields.clear();
         responseString.clear();
 
-        std::string payload =
-            R"({
-            "SearchByKeywordRequest": {
-                "keyword": ")" +
-            dataPoint + R"(",
-                "records": 10,
-                "startingRecord": 0
-            }
-        })";
+        nlohmann::json request = {{"SearchByPartRequest", {{"mouserPartNumber", dataPoint}, {"partSearchOptions", "ExactMatch"}}}};
 
-        curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, payload.c_str());
+        std::string payload = request.dump();
         curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE, payload.size());
+        curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, payload.c_str());
 
         headers.reset();
         curl_slist* raw = nullptr;
@@ -158,7 +135,7 @@ class PartApi {
         }
 
         if (parseData()) {
-            state.fields = {"TEST", "TEST2"};
+            state.fields = responseJson;
             state.ready = true;
             state.loading = false;
         }

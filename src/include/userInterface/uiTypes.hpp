@@ -1,5 +1,7 @@
 #pragma once
 
+#include <nlohmann/json.hpp>
+
 enum class DataState { INIT, DATA_OUTDATED, WAITING_FOR_DATA, DATA_READY };
 
 struct DataStates {
@@ -10,5 +12,5 @@ struct DataStates {
 struct ApiPreviewState {
     bool loading = false;
     bool ready = false;
-    std::vector<std::string> fields;
+    nlohmann::json fields;
 };

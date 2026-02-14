@@ -129,7 +129,7 @@ void MappingDestinationDb::draw(float width) {
     cursor.y += INNER_PADDING;
 
     // Headers column
-    for (const auto& header : headers) {
+    for (auto& header : headers) {
         // draw anchor
         const ImVec2 anchorCenter = ImVec2(cursor.x + INNER_PADDING + anchorRadius, cursor.y + headerHeight / 2);
         if (header.mappable) {
@@ -176,7 +176,7 @@ void MappingDestinationDb::draw(float width) {
     ImGui::PopID();
 }
 
-template <typename T> bool handleDragInternal(CsvMappingVisualizer* parentVisualizer, const mappingTypes mapType, const T& destination) {
+template <typename T> bool handleDragInternal(CsvMappingVisualizer* parentVisualizer, const mappingTypes mapType, T& destination) {
     bool success = false;
     if (ImGui::BeginDragDropTarget()) {
         const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
@@ -187,7 +187,7 @@ template <typename T> bool handleDragInternal(CsvMappingVisualizer* parentVisual
     return success;
 }
 
-bool MappingDestinationDb::handleDrag(const DbDestinationDetail& header) {
+bool MappingDestinationDb::handleDrag(DbDestinationDetail& header) {
     // TODO types need to match
     if (header.header.type == headerType::PRIMARY_KEY) {
         return false;
@@ -266,9 +266,7 @@ void MappingDestinationToApi::draw(float width) {
 
 void MappingDestinationToApi::drawPreview(const char* popup) {
     if (ImGui::BeginPopup(popup)) {
-        for (const std::string& cell : previewData.fields) {
-            ImGui::TextUnformatted(cell.c_str());
-        }
+        Widgets::drawJsonTree(previewData.fields, &selectedField);
         if (ImGui::Button("X")) {
             ImGui::CloseCurrentPopup();
         }
@@ -276,7 +274,7 @@ void MappingDestinationToApi::drawPreview(const char* popup) {
     }
 }
 
-bool MappingDestinationToApi::handleDrag(const ApiDestinationDetail& detail) {
+bool MappingDestinationToApi::handleDrag(ApiDestinationDetail& detail) {
     if (!parentVisualizer) {
         return false;
     }
@@ -285,6 +283,14 @@ bool MappingDestinationToApi::handleDrag(const ApiDestinationDetail& detail) {
 
 const std::string& MappingDestinationToApi::getDataPoint() const {
     return data.dataPoint;
+}
+
+mappingIdType MappingDestinationToApi::getId() const {
+    return data.id;
+}
+
+void MappingDestinationToApi::setDataPoint(const std::string& newData) {
+    data.dataPoint = newData;
 }
 
 Widgets::MOUSE_EVENT_TYPE isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness) {

@@ -20,6 +20,7 @@ class Config {
     std::string dbString;
     std::string fontPath;
     std::string quantityColumn;
+    nlohmann::json dummyJson;
     ApiConfig api;
 
     Logger& logger;
@@ -44,7 +45,10 @@ class Config {
                 fontPath = j.at("font").get<std::string>();
             }
             api.address = j["api"]["address"].get<std::string>();
-            api.key = j["api"]["address"].get<std::string>();
+            api.key = j["api"]["key"].get<std::string>();
+            if (j["api"].contains("dummyJson")) {
+                dummyJson = j["api"]["dummyJson"].get<nlohmann::json>();
+            }
         } catch (const nlohmann::json::parse_error& e) {
             logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
         }
@@ -94,4 +98,6 @@ class Config {
     const std::string& getQuantityColumn() const { return quantityColumn; }
 
     const ApiConfig& getApiConfig() const { return api; }
+
+    const std::string getDummyJson() const { return dummyJson.dump(); }
 };

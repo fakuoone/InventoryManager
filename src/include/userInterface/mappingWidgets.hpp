@@ -70,19 +70,20 @@ class MappingDestination {
 class MappingDestinationDb : public MappingDestination {
   private:
     const std::string table;
-    const std::vector<DbDestinationDetail> headers;
+    std::vector<DbDestinationDetail> headers;
 
   public:
     MappingDestinationDb(const std::string cTable, const std::vector<DbDestinationDetail> cHeaders, bool cMappable)
         : MappingDestination(cMappable), table(cTable), headers(cHeaders) {}
 
     void draw(float width) override;
-    bool handleDrag(const DbDestinationDetail& headerInfo);
+    bool handleDrag(DbDestinationDetail& headerInfo);
 };
 
 class MappingDestinationToApi : public MappingDestination {
   private:
     ApiDestinationDetail data;
+    std::string selectedField;
 
   public:
     ApiPreviewState& previewData;
@@ -91,7 +92,9 @@ class MappingDestinationToApi : public MappingDestination {
 
     void draw(float width) override;
     void drawPreview(const char* popup);
-    bool handleDrag(const ApiDestinationDetail& detail);
+    bool handleDrag(ApiDestinationDetail& detail);
     const std::string& getDataPoint() const;
+    mappingIdType getId() const;
+    void setDataPoint(const std::string& newData);
 };
 } // namespace AutoInv

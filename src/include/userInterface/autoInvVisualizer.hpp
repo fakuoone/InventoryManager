@@ -49,7 +49,7 @@ class CsvMappingVisualizer {
     virtual ~CsvMappingVisualizer() = default;
     virtual void run() = 0;
     virtual void createMappingToDb(const SourceDetail& source, const DbDestinationDetail& dest) = 0;
-    virtual void createMappingToApi(const SourceDetail& source, const ApiDestinationDetail& dest) = 0;
+    virtual void createMappingToApi(const SourceDetail& source, ApiDestinationDetail& dest) = 0;
     virtual bool hasMapping(const SourceDetail& source, mappingIdType dest) = 0;
     virtual void removeMappingToDb(const MappingNumber& mapping) = 0;
 
@@ -62,8 +62,8 @@ class CsvMappingVisualizer {
 
     void handleApiClick(MappingDestinationToApi& destination);
 
-    bool handleDrag(const DbDestinationDetail& destination, const ImGuiPayload* payload);
-    bool handleDrag(const ApiDestinationDetail& destination, const ImGuiPayload* payload);
+    bool handleDrag(DbDestinationDetail& destination, const ImGuiPayload* payload);
+    bool handleDrag(ApiDestinationDetail& destination, const ImGuiPayload* payload);
 };
 
 template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer {
@@ -236,10 +236,11 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         // mappingsSToDb.emplace_back(std::move(newMappingS));
     }
 
-    void createMappingToApi(const SourceDetail& source, const ApiDestinationDetail& dest) override {
+    void createMappingToApi(const SourceDetail& source, ApiDestinationDetail& dest) override {
         if (hasMapping(source, dest.id)) {
             return;
         }
+        dest.dataPoint = source.example;
         MappingCsvApi newMappingS = MappingCsvApi(source.attribute, dest.id);
         MappingNumber newMappingN = MappingNumber(MappingNumberInternal{source.id, dest.id}, std::move(newMappingS));
         mappingsDrawingInfo.insert_or_assign(newMappingN, MappingDrawing());
@@ -261,6 +262,14 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         auto it = std::find(mappingsN.begin(), mappingsN.end(), mapping);
         if (it != mappingsN.end()) {
             mappingsDrawingInfo.erase(mapping);
+            if (auto* apiMapping = std::get_if<MappingCsvApi>(&mapping.usableData)) {
+                auto itApi = std::find_if(mappingsToApiWidgets.begin(), mappingsToApiWidgets.end(), [&](const MappingDestinationToApi& m) {
+                    return m.getId() == mapping.uniqueData.destination;
+                });
+                if (itApi != mappingsToApiWidgets.end()) {
+                    itApi->setDataPoint("API");
+                }
+            }
             mappingsN.erase(it);
         }
     }

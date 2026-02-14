@@ -51,7 +51,7 @@ void CsvMappingVisualizer::handleApiClick(MappingDestinationToApi& destination) 
     api.fetchExample(destination.getDataPoint(), destination.previewData);
 }
 
-bool CsvMappingVisualizer::handleDrag(const ApiDestinationDetail& destination, const ImGuiPayload* payload) {
+bool CsvMappingVisualizer::handleDrag(ApiDestinationDetail& destination, const ImGuiPayload* payload) {
     // TODO: complete function
     if (payload) {
         const SourceDetail source = *static_cast<const SourceDetail*>(payload->Data);
@@ -68,7 +68,8 @@ bool CsvMappingVisualizer::handleDrag(const ApiDestinationDetail& destination, c
     }
     return false;
 }
-bool CsvMappingVisualizer::handleDrag(const DbDestinationDetail& destination, const ImGuiPayload* payload) {
+
+bool CsvMappingVisualizer::handleDrag(DbDestinationDetail& destination, const ImGuiPayload* payload) {
     if (payload) {
         const SourceDetail source = *static_cast<const SourceDetail*>(payload->Data);
         if (hasMapping(source, destination.id)) {

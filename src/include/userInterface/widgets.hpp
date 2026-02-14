@@ -347,4 +347,5 @@ class ChangeOverviewer {
     drawSingleChangeOverview(const Change& change, std::size_t* visualDepth, const std::size_t parent, bool childrenShowing);
 };
 
+void drawJsonTree(const nlohmann::json& j, std::string* selected = nullptr, std::string path = "");
 } // namespace Widgets
