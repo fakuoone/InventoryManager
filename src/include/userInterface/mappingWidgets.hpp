@@ -37,8 +37,8 @@ struct ApiDestinationDetail {
 };
 
 struct SourceDetail {
-    const std::string attribute;
-    const std::string example;
+    std::string attribute;
+    std::string example;
     mappingIdType id;
 };
 
@@ -48,11 +48,12 @@ class MappingSource {
     SourceDetail data;
 
   public:
-    MappingSource(const std::string& cHeader, const std::string& cExample, mappingIdType cId) : data(cHeader, cExample, cId) {}
+    MappingSource(const std::string& cHeader, const std::string& cExample);
+    ~MappingSource();
     static void setInteractionHandler(CsvMappingVisualizer* handler);
-    const std::string& getHeader();
-    void draw(const float width);
-    bool beginDrag();
+    const std::string& getAttribute() const;
+    void draw(const float width) const;
+    bool beginDrag() const;
 };
 
 class MappingDestination {
@@ -83,7 +84,7 @@ class MappingDestinationDb : public MappingDestination {
 class MappingDestinationToApi : public MappingDestination {
   private:
     ApiDestinationDetail data;
-    std::string selectedField;
+    std::vector<MappingSource> selectedFields;
 
   public:
     ApiPreviewState& previewData;
@@ -98,4 +99,9 @@ class MappingDestinationToApi : public MappingDestination {
     mappingIdType getId() const;
     void setDataPoint(const std::string& newData);
 };
+
+std::string getValueFromJsonCell(const nlohmann::json& value);
+void handleEntry(const nlohmann::json& value, const std::string& key, std::vector<MappingSource>* selected, const std::string& path);
+void drawJsonTree(const nlohmann::json& j, std::vector<MappingSource>* selected, std::string path = "");
+
 } // namespace AutoInv

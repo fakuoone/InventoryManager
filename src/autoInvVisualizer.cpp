@@ -38,12 +38,19 @@ void CsvMappingVisualizer::storeAnchorDest(mappingIdType dest, ImVec2 pos) {
     destAnchors.anchors[dest] = pos;
 }
 
-mappingIdType CsvMappingVisualizer::getLastIdSource() {
-    return sourceAnchors.largestId;
+mappingIdType CsvMappingVisualizer::getNextIdSource() {
+    return ++sourceAnchors.largestId;
 }
 
-mappingIdType CsvMappingVisualizer::getLastIdDest() {
-    return destAnchors.largestId;
+mappingIdType CsvMappingVisualizer::getNextIdDest() {
+    return ++destAnchors.largestId;
+}
+
+void CsvMappingVisualizer::removeSourceAnchor(mappingIdType id) {
+    if (sourceAnchors.largestId == id) {
+        sourceAnchors.largestId--;
+    }
+    sourceAnchors.anchors.erase(id);
 }
 
 void CsvMappingVisualizer::handleApiClick(MappingDestinationToApi& destination) {

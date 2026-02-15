@@ -3,15 +3,21 @@
 
 namespace AutoInv {
 
+MappingSource::MappingSource(const std::string& cHeader, const std::string& cExample)
+    : data(cHeader, cExample, parentVisualizer->getNextIdSource()) {}
+MappingSource::~MappingSource() {
+    parentVisualizer->removeSourceAnchor(data.id);
+}
+
 void MappingSource::setInteractionHandler(CsvMappingVisualizer* handler) {
     parentVisualizer = handler;
 }
 
-const std::string& MappingSource::getHeader() {
+const std::string& MappingSource::getAttribute() const {
     return data.attribute;
 }
 
-void MappingSource::draw(float width) {
+void MappingSource::draw(float width) const {
     // Calc Height
     const float headerHeight = ImGui::CalcTextSize(data.attribute.c_str()).y + 2 * INNER_TEXT_PADDING;
     const float height = 2 * (headerHeight) + 2 * INNER_PADDING;
@@ -80,7 +86,7 @@ void MappingSource::draw(float width) {
     ImGui::PopID();
 }
 
-bool MappingSource::beginDrag() {
+bool MappingSource::beginDrag() const {
     if (ImGui::BeginDragDropSource()) {
         ImGui::SetDragDropPayload(imguiMappingDragString.data(), &data, sizeof(data));
         ImGui::EndDragDropSource();
@@ -275,37 +281,43 @@ void MappingDestinationToApi::draw(float width) {
     {
         cursor.x = begin.x + width / 2;
         // RIGHT side drag source
-        if (!selectedField.empty()) {
-            drawList->AddCircleFilled(anchorCenterRight, anchorRadius, Widgets::colHoveredGrey);
+        // if (!selectedFields.empty()) {
+        //     drawList->AddCircleFilled(anchorCenterRight, anchorRadius, Widgets::colHoveredGrey);
+        // }
+
+        // auto findFieldName = [&]() {
+        //     std::size_t pos = selectedField.rfind('/');
+        //     if (pos == std::string_view::npos) {
+        //         return std::string{};
+        //     }
+        //     return selectedField.substr(pos + 1);
+        // };
+
+        // const std::string_view fieldName = findFieldName();
+
+        // ImGui::SetCursorScreenPos(cursor);
+        // ImGui::InvisibleButton("", ImVec2(cellWidth, dataHeight));
+
+        // bool hovered = ImGui::IsItemHovered();
+        // bool dragged = beginDrag();
+        // if (hovered || dragged) {
+        //     // handle drag drop source
+        //     ImU32 colBg = dragged ? Widgets::colSelected.first : Widgets::colGreyBg;
+        //     ImU32 colBorder = dragged ? Widgets::colSelected.second : Widgets::colHoveredGrey;
+
+        //     drawList->AddRectFilled(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBg, 0.0f);
+        //     drawList->AddRect(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBorder, 0.0f);
+        // }
+
+        // drawList->AddText(ImVec2(cursor.x + INNER_PADDING + INNER_TEXT_PADDING + 2 * anchorRadius, cursor.y + INNER_TEXT_PADDING),
+        //                   hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
+        //                   fieldName.data());
+
+        for (const MappingSource& source : selectedFields) {
+            source.draw(cellWidth);
         }
 
-        auto findFieldName = [&]() {
-            std::size_t pos = selectedField.rfind('/');
-            if (pos == std::string_view::npos) {
-                return std::string{};
-            }
-            return selectedField.substr(pos + 1);
-        };
-
-        const std::string_view fieldName = findFieldName();
-
-        ImGui::SetCursorScreenPos(cursor);
-        ImGui::InvisibleButton(fieldName.data(), ImVec2(cellWidth, dataHeight));
-
-        bool hovered = ImGui::IsItemHovered();
-        bool dragged = beginDrag();
-        if (hovered || dragged) {
-            // handle drag drop source
-            ImU32 colBg = dragged ? Widgets::colSelected.first : Widgets::colGreyBg;
-            ImU32 colBorder = dragged ? Widgets::colSelected.second : Widgets::colHoveredGrey;
-
-            drawList->AddRectFilled(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBg, 0.0f);
-            drawList->AddRect(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBorder, 0.0f);
-        }
-
-        drawList->AddText(ImVec2(cursor.x + INNER_PADDING + INNER_TEXT_PADDING + 2 * anchorRadius, cursor.y + INNER_TEXT_PADDING),
-                          hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
-                          fieldName.data());
+        // store anchor in parent
     }
 
     ImGui::Dummy(ImVec2(0, OUTER_PADDING));
@@ -315,7 +327,7 @@ void MappingDestinationToApi::draw(float width) {
 void MappingDestinationToApi::drawPreview(const char* popup) {
     ImGui::SetNextWindowSizeConstraints(ImVec2(200, 150), ImVec2(600, 500));
     if (ImGui::BeginPopup(popup, ImGuiWindowFlags_AlwaysAutoResize)) {
-        Widgets::drawJsonTree(previewData.fields, &selectedField);
+        drawJsonTree(previewData.fields, &selectedFields);
         if (ImGui::Button("X")) {
             ImGui::CloseCurrentPopup();
         }
@@ -362,4 +374,60 @@ Widgets::MOUSE_EVENT_TYPE isMouseOnLine(const ImVec2& p1, const ImVec2& p2, cons
     }
     return Widgets::MOUSE_EVENT_TYPE::NONE;
 }
+
+std::string getValueFromJsonCell(const nlohmann::json& value) {
+    return value.is_string()    ? value.get<std::string>()
+           : value.is_boolean() ? (value.get<bool>() ? "true" : "false")
+           : value.is_null()    ? "null"
+                                : value.dump();
+}
+
+void handleEntry(const nlohmann::json& value, const std::string& key, std::vector<MappingSource>* selected, const std::string& path) {
+    if (value.is_object() || value.is_array()) {
+        if (ImGui::TreeNode(key.c_str())) {
+            drawJsonTree(value, selected, path);
+            ImGui::TreePop();
+        }
+    } else {
+        std::string valueStr = getValueFromJsonCell(value);
+        std::string label = key + ": " + valueStr;
+        bool isSelected = false;
+        if (selected) {
+            auto it = std::find_if(selected->begin(), selected->end(), [&](const MappingSource& s) { return s.getAttribute() == path; });
+            if (it != selected->end()) {
+                isSelected = true;
+            }
+        }
+        if (ImGui::Selectable(label.c_str(), isSelected)) {
+            if (selected) {
+                auto it =
+                    std::find_if(selected->begin(), selected->end(), [&](const MappingSource& s) { return s.getAttribute() == path; });
+                if (it != selected->end()) {
+                    selected->erase(it);
+                } else {
+                    selected->emplace_back(path, valueStr);
+                }
+            }
+        }
+    }
+}
+
+void drawJsonTree(const nlohmann::json& j, std::vector<MappingSource>* selected, std::string path) {
+    if (j.is_object()) { // OBJECT
+        for (auto it = j.begin(); it != j.end(); ++it) {
+            const std::string key = it.key();
+            const nlohmann::json& value = it.value();
+            std::string currentPath = path.empty() ? key : path + "/" + key;
+            handleEntry(value, key, selected, currentPath);
+        }
+    } else if (j.is_array()) { // ARRAY
+        for (size_t i = 0; i < j.size(); ++i) {
+            const nlohmann::json& value = j[i];
+            std::string indexLabel = "[" + std::to_string(i) + "]";
+            std::string currentPath = path + "/" + std::to_string(i);
+            handleEntry(value, indexLabel, selected, currentPath);
+        }
+    }
+}
+
 } // namespace AutoInv

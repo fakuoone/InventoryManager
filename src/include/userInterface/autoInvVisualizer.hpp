@@ -55,8 +55,9 @@ class CsvMappingVisualizer {
 
     void storeAnchorSource(mappingIdType source, ImVec2 pos);
     void storeAnchorDest(mappingIdType dest, ImVec2 pos);
-    mappingIdType getLastIdSource();
-    mappingIdType getLastIdDest();
+    mappingIdType getNextIdSource();
+    mappingIdType getNextIdDest();
+    void removeSourceAnchor(mappingIdType id);
 
     void setData(std::shared_ptr<const completeDbData> newData);
 
@@ -123,7 +124,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     std::pair<ImVec2, ImVec2> drawMappingSourceRawCSV() {
         float maxWidth = 0;
         for (auto& csvHeaderWidget : csvHeaderWidgets) {
-            float width = ImGui::CalcTextSize(csvHeaderWidget.getHeader().c_str()).x;
+            float width = ImGui::CalcTextSize(csvHeaderWidget.getAttribute().c_str()).x;
             if (width > maxWidth) {
                 maxWidth = width;
             }
@@ -153,7 +154,10 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     Reader& reader;
 
     CsvVisualizerImpl(DbService& cDbService, Reader& cReader, PartApi& cApi, Logger& cLogger, DataStates& cDataStates)
-        : CsvMappingVisualizer(cDbService, cApi, cLogger, cDataStates), reader(cReader) {}
+        : CsvMappingVisualizer(cDbService, cApi, cLogger, cDataStates), reader(cReader) {
+        MappingSource::setInteractionHandler(static_cast<CsvMappingVisualizer*>(this));
+        MappingDestinationDb::setInteractionHandler(static_cast<CsvMappingVisualizer*>(this));
+    }
 
   public:
     void run() override {
@@ -216,11 +220,8 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
             // TODO clear old data
             headers = reader.getHeader();
             firstRow = reader.getFirstRow();
-            MappingSource::setInteractionHandler(static_cast<CsvMappingVisualizer*>(this));
-            MappingDestinationDb::setInteractionHandler(static_cast<CsvMappingVisualizer*>(this));
-            mappingIdType id = 0;
             for (std::size_t i = 0; i < headers.size(); ++i) {
-                csvHeaderWidgets.push_back(std::move(MappingSource(headers[i], firstRow[i], id++)));
+                csvHeaderWidgets.emplace_back(headers[i], firstRow[i]);
             }
         }
     }
