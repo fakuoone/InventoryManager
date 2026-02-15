@@ -8,6 +8,8 @@
 namespace AutoInv {
 using mappingIdType = uint32_t;
 
+enum class SourceType { NONE, CSV, API };
+
 template <typename S, typename D> struct Mapping {
     S source;
     D destination;
@@ -27,15 +29,17 @@ using MappingNumberInternal = Mapping<mappingIdType, mappingIdType>;
 
 using MappingVariant = std::variant<MappingToDb, MappingCsvApi>;
 
-// enum class MappingTypes { CSV_API, CSV_DB, API_DB };
-
 struct MappingNumber {
     MappingNumberInternal uniqueData;
     MappingVariant usableData;
+    SourceType sourceType;
     bool operator==(const MappingNumber& other) const noexcept {
         // no need to hash the type aswell since the ids are unique
-        return uniqueData.source == other.uniqueData.source && uniqueData.destination == other.uniqueData.destination;
+        return uniqueData.source == other.uniqueData.source && uniqueData.destination == other.uniqueData.destination &&
+               sourceType == other.sourceType;
     }
+    explicit MappingNumber(MappingNumberInternal cUniqueData, MappingVariant cUsableData, SourceType cSourceType)
+        : uniqueData(cUniqueData), usableData(cUsableData), sourceType(cSourceType) {};
 };
 
 struct MappingHash {
@@ -141,7 +145,8 @@ class CsvChangeGenerator {
 
     bool dataRead = false;
 
-    std::vector<MappingToDb> committedMappings;
+    std::vector<MappingToDb> directMappings;
+    std::vector<MappingToDb> indirectApiMappings;
     std::size_t missingParam = 0;
 
     CsvChangeGenerator(ThreadPool& cThreadPool, ChangeTracker& cChangeTracker, DbService& cDbService, Config& cConfig, Logger& cLogger)
@@ -172,7 +177,7 @@ class CsvChangeGenerator {
         std::unordered_set<std::string> foundTables;
         const std::vector<std::string>& csvHeader = csvData[0];
 
-        for (const MappingToDb& mapping : committedMappings) {
+        for (const MappingToDb& mapping : directMappings) {
             // check legality of mapping
             const auto it = std::find_if(csvHeader.begin(), csvHeader.end(), [&](const std::string& col) { return mapping.source == col; });
             if (it == csvHeader.end()) {
@@ -202,7 +207,13 @@ class CsvChangeGenerator {
 
     void fillInApiData(const std::vector<std::vector<std::string>>& rows) {
         // TODO:takes a json of api data and precomputes cell data based on a hmi mapping selection api -> precisehader
-        // this data is then combined with the traditional mapping
+        std::size_t i = 0;
+        for (const auto& row : csvData) {
+            if (i++ == 0) {
+                continue;
+            }
+            // indirectApiMappings;
+        }
     }
 
     void applyBasicMappingToRow(const std::vector<std::string>& row, ChangeConvertedMapping& mapped) {
@@ -214,7 +225,9 @@ class CsvChangeGenerator {
         }
     }
 
-    void applyApiMappingToRow(const std::vector<std::string>& row, ChangeConvertedMapping& mapped) {}
+    void applyApiMappingToRow(const std::vector<std::string>& row, ChangeConvertedMapping& mapped) {
+        // TODO combine api answer with csv row
+    }
 
     void fillInAdditional(ChangeConvertedMapping& mapped) {
         // Fill in missing
@@ -306,13 +319,33 @@ class CsvChangeGenerator {
 
     const std::vector<std::string>& getFirstRow() { return *(csvData.begin() + 1); }
 
-    void setMappings(const std::vector<MappingToDb> mappings) {
+    void setMappings(const std::vector<MappingNumber> mappings) {
         // TODO: Get actual names instead of ids
-        committedMappings = mappings;
-        for (const MappingToDb& mapping : mappings) {
+        std::vector<MappingToDb> mappingsFromCsv;
+        std::vector<MappingToDb> mappingsFromApi;
+        mappingsFromCsv.reserve(mappings.size());
+        mappingsFromApi.reserve(mappings.size());
+        for (const MappingNumber& mapping : mappings) {
+            if (auto* mappingToDb = std::get_if<MappingToDb>(&mapping.usableData)) {
+                switch (mapping.sourceType) {
+                case SourceType::API:
+                    mappingsFromApi.push_back(*mappingToDb);
+                    break;
+                case SourceType::CSV:
+                    mappingsFromCsv.push_back(*mappingToDb);
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+
+        for (const MappingToDb& mapping : mappingsFromCsv) {
             logger.pushLog(
                 Log{std::format("MAPPINGS: MAPPED {} TO {} OF {}", mapping.source, mapping.destination.header, mapping.destination.table)});
         }
+        directMappings = std::move(mappingsFromCsv);
+        indirectApiMappings = std::move(mappingsFromApi);
         reqExecuteCsv();
     }
 

@@ -85,8 +85,12 @@ class MappingDestinationDb : public MappingDestination {
 
 class MappingDestinationToApi : public MappingDestination {
   private:
+    static constexpr std::string_view API_POPUP = "API";
     ApiDestinationDetail data;
     std::vector<MappingSource> selectedFields;
+    void drawPreview(ImVec2 startUp);
+    bool handleDrag(ApiDestinationDetail& detail);
+    bool beginDrag();
 
   public:
     ApiPreviewState* previewData;
@@ -94,9 +98,6 @@ class MappingDestinationToApi : public MappingDestination {
         : MappingDestination(cMappable), data(cData), previewData(cPreviewData) {}
 
     void draw(float width) override;
-    void drawPreview(const char* popup);
-    bool handleDrag(ApiDestinationDetail& detail);
-    bool beginDrag();
     const std::string& getDataPoint() const;
     mappingIdType getId() const;
     void setDataPoint(const std::string& newData);

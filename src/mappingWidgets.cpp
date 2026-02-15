@@ -262,15 +262,17 @@ void MappingDestinationToApi::draw(float width) {
         bool hovered = ImGui::IsItemHovered();
 
         // 1. click: query api, 2nd click: open selectionpoup
-        const char* apiPopup = "API";
         if (ImGui::IsItemClicked()) {
             if (!previewData->fields.empty()) {
-                ImGui::OpenPopup(apiPopup);
+                ImGui::OpenPopup(API_POPUP.data());
             } else if (!data.dataPoint.empty()) {
                 parentVisualizer->handleApiClick(*this);
             }
         }
-        drawPreview(apiPopup);
+
+        // preview
+        ImVec2 previewPos = ImGui::GetWindowPos();
+        drawPreview(ImVec2(previewPos.x + OUTER_PADDING, previewPos.y + OUTER_PADDING + dataHeight));
 
         bool draggedTo = handleDrag(data);
 
@@ -306,13 +308,11 @@ void MappingDestinationToApi::draw(float width) {
     ImGui::PopID();
 }
 
-void MappingDestinationToApi::drawPreview(const char* popup) {
-    ImGui::SetNextWindowSizeConstraints(ImVec2(200, 150), ImVec2(600, 500));
-    if (ImGui::BeginPopup(popup, ImGuiWindowFlags_AlwaysAutoResize)) {
+void MappingDestinationToApi::drawPreview(ImVec2 startUp) {
+    ImGui::SetNextWindowSizeConstraints(ImVec2(300, 300), ImVec2(700, 600));
+    ImGui::SetNextWindowPos(startUp, ImGuiCond_Appearing);
+    if (ImGui::BeginPopup(API_POPUP.data(), ImGuiWindowFlags_AlwaysAutoResize)) {
         drawJsonTree(previewData->fields, &selectedFields);
-        if (ImGui::Button("X")) {
-            ImGui::CloseCurrentPopup();
-        }
         ImGui::EndPopup();
     }
 }

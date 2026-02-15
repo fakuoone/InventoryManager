@@ -74,7 +74,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     static constexpr float CENTER_MIN = 400.0f;
     static constexpr float RIGHT_MIN = 200.0f;
 
-    void drawApiWidgets(const float width) {
+    void drawApiWidgets(const float width, ImVec2 popupStartup) {
         for (auto& mapping : mappingsToApiWidgets) {
             mapping.draw(width);
         }
@@ -140,6 +140,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     void run() override {
         drawHead();
 
+        ImGui::BeginChild("READER");
         if (dataStates.dbData != DataState::DATA_READY) {
             return;
         }
@@ -153,7 +154,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
             float totalMin = LEFT_MIN + CENTER_MIN + RIGHT_MIN + SPACING * 2;
             float extra = std::max(0.0f, avail.x - totalMin);
 
-            // Keep middle column centered, distribute remaining space equally to left/right
+            // Keep middle column centered, distribute remaining space amongst all three
             float leftWidth = LEFT_MIN + extra * 0.3f;
             float centerWidth = CENTER_MIN + extra * 0.4f;
             float rightWidth = RIGHT_MIN + extra * 0.3f;
@@ -173,7 +174,8 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
 
             ImGui::SetCursorPosX((avail.x - centerWidth) / 2);
             ImGui::BeginChild("API", ImVec2(centerWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
-            drawApiWidgets(centerWidth);
+            drawApiWidgets(centerWidth, ImVec2(leftWidth + ImGui::GetStyle().ItemSpacing.x, ImGui::GetStyle().ItemSpacing.y));
+
             ImGui::EndChild();
             ImGui::SameLine();
 
@@ -204,6 +206,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
                 removeMappingToDb(*toRemove);
             }
         }
+        ImGui::EndChild();
     }
 
     void checkNewData() {
@@ -211,6 +214,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
             // TODO clear old data
             headers = reader.getHeader();
             firstRow = reader.getFirstRow();
+            csvHeaderWidgets.clear();
             for (std::size_t i = 0; i < headers.size(); ++i) {
                 csvHeaderWidgets.emplace_back(headers[i], firstRow[i]);
             }
@@ -222,7 +226,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
             return;
         }
         MappingToDb newMappingS = MappingToDb(source.attribute, PreciseHeader(dest.table, dest.header.name));
-        MappingNumber newMappingN = MappingNumber(MappingNumberInternal{source.id, dest.id}, std::move(newMappingS));
+        MappingNumber newMappingN = MappingNumber{MappingNumberInternal{source.id, dest.id}, std::move(newMappingS), SourceType::CSV};
         mappingsDrawingInfo.insert_or_assign(newMappingN, MappingDrawing());
         mappingsN.emplace_back(std::move(newMappingN));
         // mappingsSToDb.emplace_back(std::move(newMappingS));
@@ -234,7 +238,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         }
         dest.dataPoint = source.example;
         MappingCsvApi newMappingS = MappingCsvApi(source.attribute, dest.id);
-        MappingNumber newMappingN = MappingNumber(MappingNumberInternal{source.id, dest.id}, std::move(newMappingS));
+        MappingNumber newMappingN = MappingNumber{MappingNumberInternal{source.id, dest.id}, std::move(newMappingS), SourceType::API};
         mappingsDrawingInfo.insert_or_assign(newMappingN, MappingDrawing());
         mappingsN.emplace_back(std::move(newMappingN));
         // mappingsSToApi.emplace_back(std::move(newMappingS));
@@ -308,15 +312,11 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     }
 
     bool hasMappings() {
-        // TODO: only detect mappings to db
-        return mappingsN.size() > 2;
+        return std::count_if(
+            mappingsN.begin(), mappingsN.end(), [&](const MappingNumber& m) { return std::holds_alternative<MappingToDb>(m.usableData); });
     }
 
-    void commitMappings() {
-
-        // TODO: store mappingsToDb separately
-        // reader.setMappings(mappingsSToDb);
-    }
+    void commitMappings() { reader.setMappings(mappingsN); }
 };
 
 class BomVisualizer : public CsvVisualizerImpl<ChangeGeneratorFromBom> {
