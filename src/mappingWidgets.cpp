@@ -198,6 +198,15 @@ bool MappingDestinationDb::handleDrag(DbDestinationDetail& header) {
     return handleDragInternal<DbDestinationDetail>(parentVisualizer, mappingTypes::HEADER_HEADER, header);
 }
 
+bool MappingDestinationToApi::beginDrag() {
+    if (ImGui::BeginDragDropSource()) {
+        ImGui::SetDragDropPayload(imguiMappingDragString.data(), &data, sizeof(data));
+        ImGui::EndDragDropSource();
+        return true;
+    }
+    return false;
+}
+
 void MappingDestinationToApi::draw(float width) {
     ImGui::PushID(this);
     ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -221,51 +230,91 @@ void MappingDestinationToApi::draw(float width) {
     cursor.x += INNER_PADDING;
     cursor.y += INNER_PADDING;
 
-    const ImVec2 anchorCenter = ImVec2(cursor.x + INNER_PADDING + anchorRadius, cursor.y + dataHeight / 2);
-
-    if (data.mappable) {
-        drawList->AddCircleFilled(anchorCenter, anchorRadius, Widgets::colHoveredGrey);
-    }
-
+    const ImVec2 anchorCenterLeft = ImVec2(cursor.x + INNER_PADDING + anchorRadius, cursor.y + dataHeight / 2);
+    const ImVec2 anchorCenterRight = ImVec2(bgRectEnd.x - INNER_PADDING - anchorRadius, cursor.y + dataHeight / 2);
     const float cellWidth = widthPadded / 2 - INNER_PADDING;
-    ImGui::SetCursorScreenPos(cursor);
-    ImGui::InvisibleButton(data.dataPoint.c_str(), ImVec2(cellWidth, dataHeight));
-    bool hovered = ImGui::IsItemHovered();
-
-    // 1. click: query api, 2nd click: open selectionpoup
-    const char* apiPopup = "API";
-    if (ImGui::IsItemClicked()) {
-        if (!previewData.fields.empty()) {
-            ImGui::OpenPopup(apiPopup);
-        } else if (!data.dataPoint.empty()) {
-            parentVisualizer->handleApiClick(*this);
+    {
+        // LEFT side drag destination
+        if (data.mappable) {
+            drawList->AddCircleFilled(anchorCenterLeft, anchorRadius, Widgets::colHoveredGrey);
         }
+
+        ImGui::SetCursorScreenPos(cursor);
+        ImGui::InvisibleButton(data.dataPoint.c_str(), ImVec2(cellWidth, dataHeight));
+        bool hovered = ImGui::IsItemHovered();
+
+        // 1. click: query api, 2nd click: open selectionpoup
+        const char* apiPopup = "API";
+        if (ImGui::IsItemClicked()) {
+            if (!previewData.fields.empty()) {
+                ImGui::OpenPopup(apiPopup);
+            } else if (!data.dataPoint.empty()) {
+                parentVisualizer->handleApiClick(*this);
+            }
+        }
+        drawPreview(apiPopup);
+
+        bool draggedTo = handleDrag(data);
+
+        if ((hovered || draggedTo) && data.mappable) {
+            ImU32 colBg = draggedTo ? Widgets::colSelected.first : Widgets::colGreyBg;
+            ImU32 colBorder = draggedTo ? Widgets::colSelected.second : Widgets::colHoveredGrey;
+
+            drawList->AddRectFilled(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBg, 0.0f);
+            drawList->AddRect(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBorder, 0.0f);
+        }
+
+        drawList->AddText(ImVec2(cursor.x + INNER_PADDING + INNER_TEXT_PADDING + 2 * anchorRadius, cursor.y + INNER_TEXT_PADDING),
+                          hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
+                          data.dataPoint.c_str());
+
+        // store anchor in parent
+        parentVisualizer->storeAnchorDest(data.id, anchorCenterLeft);
     }
-    drawPreview(apiPopup);
 
-    bool draggedTo = handleDrag(data);
+    {
+        cursor.x = begin.x + width / 2;
+        // RIGHT side drag source
+        if (!selectedField.empty()) {
+            drawList->AddCircleFilled(anchorCenterRight, anchorRadius, Widgets::colHoveredGrey);
+        }
 
-    if ((hovered || draggedTo) && data.mappable) {
-        ImU32 colBg = draggedTo ? Widgets::colSelected.first : Widgets::colGreyBg;
-        ImU32 colBorder = draggedTo ? Widgets::colSelected.second : Widgets::colHoveredGrey;
+        auto findFieldName = [&]() {
+            std::size_t pos = selectedField.rfind('/');
+            if (pos == std::string_view::npos) {
+                return std::string{};
+            }
+            return selectedField.substr(pos + 1);
+        };
 
-        drawList->AddRectFilled(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBg, 0.0f);
-        drawList->AddRect(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBorder, 0.0f);
+        const std::string_view fieldName = findFieldName();
+
+        ImGui::SetCursorScreenPos(cursor);
+        ImGui::InvisibleButton(fieldName.data(), ImVec2(cellWidth, dataHeight));
+
+        bool hovered = ImGui::IsItemHovered();
+        bool dragged = beginDrag();
+        if (hovered || dragged) {
+            // handle drag drop source
+            ImU32 colBg = dragged ? Widgets::colSelected.first : Widgets::colGreyBg;
+            ImU32 colBorder = dragged ? Widgets::colSelected.second : Widgets::colHoveredGrey;
+
+            drawList->AddRectFilled(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBg, 0.0f);
+            drawList->AddRect(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBorder, 0.0f);
+        }
+
+        drawList->AddText(ImVec2(cursor.x + INNER_PADDING + INNER_TEXT_PADDING + 2 * anchorRadius, cursor.y + INNER_TEXT_PADDING),
+                          hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
+                          fieldName.data());
     }
-
-    drawList->AddText(ImVec2(cursor.x + INNER_PADDING + INNER_TEXT_PADDING + 2 * anchorRadius, cursor.y + INNER_TEXT_PADDING),
-                      hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
-                      data.dataPoint.c_str());
-
-    // store anchor in parent
-    parentVisualizer->storeAnchorDest(data.id, anchorCenter);
 
     ImGui::Dummy(ImVec2(0, OUTER_PADDING));
     ImGui::PopID();
 }
 
 void MappingDestinationToApi::drawPreview(const char* popup) {
-    if (ImGui::BeginPopup(popup)) {
+    ImGui::SetNextWindowSizeConstraints(ImVec2(200, 150), ImVec2(600, 500));
+    if (ImGui::BeginPopup(popup, ImGuiWindowFlags_AlwaysAutoResize)) {
         Widgets::drawJsonTree(previewData.fields, &selectedField);
         if (ImGui::Button("X")) {
             ImGui::CloseCurrentPopup();

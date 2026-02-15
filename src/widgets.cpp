@@ -580,28 +580,53 @@ MOUSE_EVENT_TYPE ChangeOverviewer::drawSingleChangeOverview(const Change& change
     return event;
 }
 
-void drawJsonTree(const nlohmann::json& j, std::string* selected, std::string path) {
-    using json = nlohmann::json;
-    if (j.is_object()) {
-        for (auto it = j.begin(); it != j.end(); ++it) {
-            std::string key = it.key();
-            const json& value = it.value();
-            std::string currentPath = path.empty() ? key : path + "/" + key;
+std::string getValueFromJsonCell(const nlohmann::json& value) {
+    return value.is_string()    ? value.get<std::string>()
+           : value.is_boolean() ? (value.get<bool>() ? "true" : "false")
+           : value.is_null()    ? "null"
+                                : value.dump();
+}
 
-            if (value.is_object() && !value.empty()) {
-                if (ImGui::TreeNode(key.c_str())) {
-                    drawJsonTree(value, selected, currentPath);
-                    ImGui::TreePop();
-                }
-            } else {
-                bool isSelected = (selected && *selected == currentPath);
-                if (ImGui::Selectable(key.c_str(), isSelected)) {
-                    if (selected) {
-                        *selected = currentPath;
-                    }
-                }
+void handleEntry(const nlohmann::json& value, const std::string& key, std::string* selected, const std::string& path) {
+    if (value.is_object()) {
+        if (ImGui::TreeNode(key.c_str())) {
+            drawJsonTree(value, selected, path);
+            ImGui::TreePop();
+        }
+    } else if (value.is_array()) {
+        if (ImGui::TreeNode(key.c_str())) {
+            drawJsonTree(value, selected, path);
+            ImGui::TreePop();
+        }
+    } else {
+        std::string valueStr = getValueFromJsonCell(value);
+        std::string label = key + ": " + valueStr;
+
+        bool isSelected = (selected && *selected == path);
+        if (ImGui::Selectable(label.c_str(), isSelected)) {
+            if (selected) {
+                *selected = path;
             }
         }
     }
 }
+
+void drawJsonTree(const nlohmann::json& j, std::string* selected, std::string path) {
+    if (j.is_object()) { // OBJECT
+        for (auto it = j.begin(); it != j.end(); ++it) {
+            const std::string key = it.key();
+            const nlohmann::json& value = it.value();
+            std::string currentPath = path.empty() ? key : path + "/" + key;
+            handleEntry(value, key, selected, currentPath);
+        }
+    } else if (j.is_array()) { // ARRAY
+        for (size_t i = 0; i < j.size(); ++i) {
+            const nlohmann::json& value = j[i];
+            std::string indexLabel = "[" + std::to_string(i) + "]";
+            std::string currentPath = path + "/" + std::to_string(i);
+            handleEntry(value, indexLabel, selected, currentPath);
+        }
+    }
+}
+
 } // namespace Widgets

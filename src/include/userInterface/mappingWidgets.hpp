@@ -93,6 +93,7 @@ class MappingDestinationToApi : public MappingDestination {
     void draw(float width) override;
     void drawPreview(const char* popup);
     bool handleDrag(ApiDestinationDetail& detail);
+    bool beginDrag();
     const std::string& getDataPoint() const;
     mappingIdType getId() const;
     void setDataPoint(const std::string& newData);

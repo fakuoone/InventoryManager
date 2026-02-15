@@ -26,6 +26,7 @@ constexpr std::pair<ImU32, ImU32> colSelected = std::pair<ImU32, ImU32>{IM_COL32
 constexpr ImU32 colGreyBg = IM_COL32(71, 71, 71, 100);
 constexpr ImU32 colHoveredGrey = IM_COL32(255, 255, 255, 100);
 constexpr ImU32 colWhiteSemiOpaque = IM_COL32(255, 255, 255, 255);
+
 struct Rect {
     ImVec2 start;
     ImVec2 end;
@@ -346,6 +347,8 @@ class ChangeOverviewer {
     MOUSE_EVENT_TYPE
     drawSingleChangeOverview(const Change& change, std::size_t* visualDepth, const std::size_t parent, bool childrenShowing);
 };
+
+void handleEntry(const nlohmann::json& value, const std::string& key, std::string* selected, const std::string& path);
 
 void drawJsonTree(const nlohmann::json& j, std::string* selected = nullptr, std::string path = "");
 } // namespace Widgets
