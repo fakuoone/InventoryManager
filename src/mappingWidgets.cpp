@@ -7,6 +7,7 @@ MappingSource::MappingSource(const std::string& cHeader, const std::string& cExa
     : data(cHeader, cExample, parentVisualizer->getNextIdSource()) {}
 MappingSource::~MappingSource() {
     parentVisualizer->removeSourceAnchor(data.id);
+    parentVisualizer->removeMappingToDbFromSource(data.id);
 }
 
 void MappingSource::setInteractionHandler(CsvMappingVisualizer* handler) {
@@ -17,13 +18,18 @@ const std::string& MappingSource::getAttribute() const {
     return data.attribute;
 }
 
-void MappingSource::draw(float width) const {
-    // Calc Height
-    const float headerHeight = ImGui::CalcTextSize(data.attribute.c_str()).y + 2 * INNER_TEXT_PADDING;
-    const float height = 2 * (headerHeight) + 2 * INNER_PADDING;
+const float MappingSource::getTotalHeight() const {
+    return 2 * (singleAttributeHeight) + 2 * INNER_PADDING;
+}
 
-    const float anchorRadius = headerHeight / 2 - INNER_PADDING * 2;
-    const float actualWidth = width + 2 * OUTER_PADDING + INNER_PADDING + 2 * anchorRadius;
+void MappingSource::draw(float width) {
+    // TODO: Fix slight layout issues regarding actualwidth
+    // Calc Height
+    singleAttributeHeight = ImGui::CalcTextSize(data.attribute.c_str()).y + 2 * INNER_TEXT_PADDING;
+    const float height = getTotalHeight();
+
+    const float anchorRadius = singleAttributeHeight / 2 - INNER_PADDING * 2;
+    const float actualWidth = width; //  + 2 * OUTER_PADDING + INNER_PADDING + 2 * anchorRadius;
 
     ImGui::PushID(this);
 
@@ -40,7 +46,7 @@ void MappingSource::draw(float width) const {
     drawList->AddRect(bgRectBegin, bgRectEnd, IM_COL32(120, 120, 120, 200), 0.0f);
 
     ImGui::SetCursorScreenPos(cursor);
-    ImGui::InvisibleButton(data.attribute.c_str(), ImVec2(width, headerHeight));
+    ImGui::InvisibleButton(data.attribute.c_str(), ImVec2(width, singleAttributeHeight));
 
     // hover effect on header
     cursor.x += INNER_PADDING;
@@ -52,13 +58,13 @@ void MappingSource::draw(float width) const {
         ImU32 colBg = dragged ? Widgets::colSelected.first : Widgets::colGreyBg;
         ImU32 colBorder = dragged ? Widgets::colSelected.second : Widgets::colHoveredGrey;
 
-        drawList->AddRectFilled(cursor, ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING, cursor.y + headerHeight), colBg, 0.0f);
-        drawList->AddRect(cursor, ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING, cursor.y + headerHeight), colBorder, 0.0f);
+        drawList->AddRectFilled(cursor, ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING, cursor.y + singleAttributeHeight), colBg, 0.0f);
+        drawList->AddRect(cursor, ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING, cursor.y + singleAttributeHeight), colBorder, 0.0f);
     }
 
     // draw anchor
 
-    const ImVec2 anchorCenter = ImVec2(cursor.x + actualWidth - INNER_PADDING - 2 * anchorRadius, cursor.y + headerHeight / 2);
+    const ImVec2 anchorCenter = ImVec2(cursor.x + actualWidth - INNER_PADDING - 2 * anchorRadius, cursor.y + singleAttributeHeight / 2);
     drawList->AddCircleFilled(anchorCenter, anchorRadius, Widgets::colHoveredGrey);
 
     // store anchor in parent
@@ -68,18 +74,18 @@ void MappingSource::draw(float width) const {
     drawList->AddText(ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING),
                       hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
                       data.attribute.c_str());
-    cursor.y += headerHeight;
+    cursor.y += singleAttributeHeight;
 
     // example
     drawList->PushClipRect(ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING),
-                           ImVec2(cursor.x + actualWidth - 2 * INNER_TEXT_PADDING, cursor.y + headerHeight),
+                           ImVec2(cursor.x + actualWidth - 2 * INNER_TEXT_PADDING, cursor.y + singleAttributeHeight),
                            true);
 
     drawList->AddText(
         ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING), IM_COL32(220, 220, 220, 255), data.example.c_str());
 
     drawList->PopClipRect();
-    cursor.y += headerHeight;
+    cursor.y += singleAttributeHeight;
 
     ImGui::SetCursorScreenPos(cursor);
     ImGui::Dummy(ImVec2(0, OUTER_PADDING));
@@ -220,7 +226,12 @@ void MappingDestinationToApi::draw(float width) {
     const float widthPadded = width - 2 * OUTER_PADDING;
 
     // Calc Height
-    const float dataHeight = ImGui::CalcTextSize(data.dataPoint.c_str()).y + 2 * INNER_TEXT_PADDING;
+    float dataPointHeight = ImGui::CalcTextSize(data.dataPoint.c_str()).y + 2 * INNER_TEXT_PADDING;
+    float dataHeight = dataPointHeight;
+    if (!selectedFields.empty()) {
+        dataHeight = std::max(selectedFields[0].getTotalHeight() * selectedFields.size(), dataHeight);
+    }
+
     ImVec2 begin = ImGui::GetCursorScreenPos();
     begin.x += OUTER_PADDING;
     begin.y += OUTER_PADDING;
@@ -231,14 +242,15 @@ void MappingDestinationToApi::draw(float width) {
     drawList->AddRectFilled(bgRectBegin, bgRectEnd, Widgets::colGreyBg, 0.0f);
     drawList->AddRect(bgRectBegin, bgRectEnd, IM_COL32(120, 120, 120, 200), 0.0f);
 
-    const float anchorRadius = dataHeight / 2 - INNER_PADDING * 2;
+    const float anchorRadius = dataPointHeight / 2 - INNER_PADDING * 2;
 
     cursor.x += INNER_PADDING;
     cursor.y += INNER_PADDING;
 
     const ImVec2 anchorCenterLeft = ImVec2(cursor.x + INNER_PADDING + anchorRadius, cursor.y + dataHeight / 2);
     const ImVec2 anchorCenterRight = ImVec2(bgRectEnd.x - INNER_PADDING - anchorRadius, cursor.y + dataHeight / 2);
-    const float cellWidth = widthPadded / 2 - INNER_PADDING;
+    const float cellWidthLeft = (widthPadded * 0.4) - INNER_PADDING;
+    const float cellWidthRight = (widthPadded * 0.6) - INNER_PADDING;
     {
         // LEFT side drag destination
         if (data.mappable) {
@@ -246,13 +258,13 @@ void MappingDestinationToApi::draw(float width) {
         }
 
         ImGui::SetCursorScreenPos(cursor);
-        ImGui::InvisibleButton(data.dataPoint.c_str(), ImVec2(cellWidth, dataHeight));
+        ImGui::InvisibleButton(data.dataPoint.c_str(), ImVec2(cellWidthLeft, dataHeight));
         bool hovered = ImGui::IsItemHovered();
 
         // 1. click: query api, 2nd click: open selectionpoup
         const char* apiPopup = "API";
         if (ImGui::IsItemClicked()) {
-            if (!previewData.fields.empty()) {
+            if (!previewData->fields.empty()) {
                 ImGui::OpenPopup(apiPopup);
             } else if (!data.dataPoint.empty()) {
                 parentVisualizer->handleApiClick(*this);
@@ -266,11 +278,12 @@ void MappingDestinationToApi::draw(float width) {
             ImU32 colBg = draggedTo ? Widgets::colSelected.first : Widgets::colGreyBg;
             ImU32 colBorder = draggedTo ? Widgets::colSelected.second : Widgets::colHoveredGrey;
 
-            drawList->AddRectFilled(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBg, 0.0f);
-            drawList->AddRect(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBorder, 0.0f);
+            drawList->AddRectFilled(cursor, ImVec2(cursor.x + cellWidthLeft - 2 * INNER_PADDING, cursor.y + dataHeight), colBg, 0.0f);
+            drawList->AddRect(cursor, ImVec2(cursor.x + cellWidthLeft - 2 * INNER_PADDING, cursor.y + dataHeight), colBorder, 0.0f);
         }
 
-        drawList->AddText(ImVec2(cursor.x + INNER_PADDING + INNER_TEXT_PADDING + 2 * anchorRadius, cursor.y + INNER_TEXT_PADDING),
+        drawList->AddText(ImVec2(cursor.x + INNER_PADDING + INNER_TEXT_PADDING + 2 * anchorRadius,
+                                 cursor.y + dataHeight / 2 - dataPointHeight / 2 + INNER_TEXT_PADDING),
                           hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
                           data.dataPoint.c_str());
 
@@ -279,45 +292,14 @@ void MappingDestinationToApi::draw(float width) {
     }
 
     {
-        cursor.x = begin.x + width / 2;
+        cursor.y = begin.y;
         // RIGHT side drag source
-        // if (!selectedFields.empty()) {
-        //     drawList->AddCircleFilled(anchorCenterRight, anchorRadius, Widgets::colHoveredGrey);
-        // }
-
-        // auto findFieldName = [&]() {
-        //     std::size_t pos = selectedField.rfind('/');
-        //     if (pos == std::string_view::npos) {
-        //         return std::string{};
-        //     }
-        //     return selectedField.substr(pos + 1);
-        // };
-
-        // const std::string_view fieldName = findFieldName();
-
-        // ImGui::SetCursorScreenPos(cursor);
-        // ImGui::InvisibleButton("", ImVec2(cellWidth, dataHeight));
-
-        // bool hovered = ImGui::IsItemHovered();
-        // bool dragged = beginDrag();
-        // if (hovered || dragged) {
-        //     // handle drag drop source
-        //     ImU32 colBg = dragged ? Widgets::colSelected.first : Widgets::colGreyBg;
-        //     ImU32 colBorder = dragged ? Widgets::colSelected.second : Widgets::colHoveredGrey;
-
-        //     drawList->AddRectFilled(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBg, 0.0f);
-        //     drawList->AddRect(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + dataHeight), colBorder, 0.0f);
-        // }
-
-        // drawList->AddText(ImVec2(cursor.x + INNER_PADDING + INNER_TEXT_PADDING + 2 * anchorRadius, cursor.y + INNER_TEXT_PADDING),
-        //                   hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
-        //                   fieldName.data());
-
-        for (const MappingSource& source : selectedFields) {
-            source.draw(cellWidth);
+        for (MappingSource& source : selectedFields) {
+            cursor.x = begin.x + INNER_PADDING * 2 + cellWidthLeft;
+            ImGui::SetCursorScreenPos(cursor);
+            source.draw(cellWidthRight);
+            cursor.y += source.getTotalHeight();
         }
-
-        // store anchor in parent
     }
 
     ImGui::Dummy(ImVec2(0, OUTER_PADDING));
@@ -327,7 +309,7 @@ void MappingDestinationToApi::draw(float width) {
 void MappingDestinationToApi::drawPreview(const char* popup) {
     ImGui::SetNextWindowSizeConstraints(ImVec2(200, 150), ImVec2(600, 500));
     if (ImGui::BeginPopup(popup, ImGuiWindowFlags_AlwaysAutoResize)) {
-        drawJsonTree(previewData.fields, &selectedFields);
+        drawJsonTree(previewData->fields, &selectedFields);
         if (ImGui::Button("X")) {
             ImGui::CloseCurrentPopup();
         }
@@ -352,6 +334,14 @@ mappingIdType MappingDestinationToApi::getId() const {
 
 void MappingDestinationToApi::setDataPoint(const std::string& newData) {
     data.dataPoint = newData;
+}
+
+void MappingDestinationToApi::removeFields() {
+    selectedFields.clear();
+}
+
+const std::vector<MappingSource>& MappingDestinationToApi::getFields() const {
+    return selectedFields;
 }
 
 Widgets::MOUSE_EVENT_TYPE isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness) {

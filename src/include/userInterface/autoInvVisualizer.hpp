@@ -52,6 +52,7 @@ class CsvMappingVisualizer {
     virtual void createMappingToApi(const SourceDetail& source, ApiDestinationDetail& dest) = 0;
     virtual bool hasMapping(const SourceDetail& source, mappingIdType dest) = 0;
     virtual void removeMappingToDb(const MappingNumber& mapping) = 0;
+    virtual void removeMappingToDbFromSource(const mappingIdType mapping) = 0;
 
     void storeAnchorSource(mappingIdType source, ImVec2 pos);
     void storeAnchorDest(mappingIdType dest, ImVec2 pos);
@@ -69,14 +70,13 @@ class CsvMappingVisualizer {
 
 template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer {
   private:
-    static constexpr const float RIGHT_WIDTH = 300.0f;
-    static constexpr const float CENTER_WIDTH = 300.0f;
+    static constexpr float LEFT_MIN = 200.0f;
+    static constexpr float CENTER_MIN = 400.0f;
+    static constexpr float RIGHT_MIN = 200.0f;
 
-    void drawApiWidgets() {
-        const ImVec2 avail = ImGui::GetContentRegionAvail();
-
+    void drawApiWidgets(const float width) {
         for (auto& mapping : mappingsToApiWidgets) {
-            mapping.draw(avail.x);
+            mapping.draw(width);
         }
     }
 
@@ -97,7 +97,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
             const std::size_t newIndex = ++destAnchors.largestId;
             apiPreviewCache.insert_or_assign(newIndex, ApiPreviewState{});
             mappingsToApiWidgets.emplace_back(
-                MappingDestinationToApi(ApiDestinationDetail(true, ++destAnchors.largestId, "API"), apiPreviewCache.at(newIndex), true));
+                MappingDestinationToApi(ApiDestinationDetail(true, ++destAnchors.largestId, "API"), &apiPreviewCache.at(newIndex), true));
         };
 
         // Stage selector
@@ -121,33 +121,10 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         ImGui::EndDisabled();
     }
 
-    std::pair<ImVec2, ImVec2> drawMappingSourceRawCSV() {
-        float maxWidth = 0;
+    void drawMappingSourceRawCSV(const float width) {
         for (auto& csvHeaderWidget : csvHeaderWidgets) {
-            float width = ImGui::CalcTextSize(csvHeaderWidget.getAttribute().c_str()).x;
-            if (width > maxWidth) {
-                maxWidth = width;
-            }
+            csvHeaderWidget.draw(width);
         }
-        ImVec2 leftMin = ImGui::GetItemRectMin();
-        ImVec2 leftMax = ImGui::GetItemRectMax();
-
-        for (auto& csvHeaderWidget : csvHeaderWidgets) {
-            csvHeaderWidget.draw(maxWidth);
-        }
-        return std::pair(leftMin, leftMax);
-    }
-
-    std::pair<ImVec2, ImVec2> drawMappingSourceStage() {
-        switch (stage) {
-        case MappingStage::CSV:
-            return drawMappingSourceRawCSV();
-        case MappingStage::API:
-            break;
-        default:
-            break;
-        }
-        return std::pair(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     }
 
   protected:
@@ -170,37 +147,51 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         checkNewData();
 
         if (reader.dataValid(false)) {
-            const float spacing = ImGui::GetStyle().ItemSpacing.x;
-            const float leftWidth = ImGui::GetContentRegionAvail().x - RIGHT_WIDTH - CENTER_WIDTH - spacing;
+            const float SPACING = ImGui::GetStyle().ItemSpacing.x * 10;
 
-            // LEFT (maxWidth)
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            float totalMin = LEFT_MIN + CENTER_MIN + RIGHT_MIN + SPACING * 2;
+            float extra = std::max(0.0f, avail.x - totalMin);
+
+            // Keep middle column centered, distribute remaining space equally to left/right
+            float leftWidth = LEFT_MIN + extra * 0.3f;
+            float centerWidth = CENTER_MIN + extra * 0.4f;
+            float rightWidth = RIGHT_MIN + extra * 0.3f;
+
+            // adapt layout if no api
+            if (mappingsToApiWidgets.size() == 0) {
+                leftWidth = avail.x / 2 - SPACING / 2;
+                rightWidth = avail.x / 2 - SPACING / 2;
+            }
+
+            ImVec2 begin = ImGui::GetCursorScreenPos();
+
             ImGui::BeginChild("CSV", ImVec2(leftWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
-            std::pair left = drawMappingSourceStage();
+            drawMappingSourceRawCSV(leftWidth);
             ImGui::EndChild();
             ImGui::SameLine();
 
-            ImGui::BeginChild("API", ImVec2(CENTER_WIDTH, 0), false, ImGuiWindowFlags_NoScrollbar);
-            drawApiWidgets();
+            ImGui::SetCursorPosX((avail.x - centerWidth) / 2);
+            ImGui::BeginChild("API", ImVec2(centerWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
+            drawApiWidgets(centerWidth);
             ImGui::EndChild();
             ImGui::SameLine();
 
-            // RIGHT (fixed)
-            ImGui::BeginChild("DB", ImVec2(RIGHT_WIDTH, 0), false, ImGuiWindowFlags_NoScrollbar);
+            ImGui::SetCursorPosX(avail.x - rightWidth);
+            ImGui::BeginChild("DB", ImVec2(rightWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
             for (auto& headerWidget : dbHeaderWidgets) {
-                headerWidget.draw(ImGui::GetContentRegionAvail().x);
+                headerWidget.draw(rightWidth);
             }
             ImGui::EndChild();
 
             // clipping rect
-            ImVec2 rightMin = ImGui::GetItemRectMin();
-            ImVec2 rightMax = ImGui::GetItemRectMax();
-            ImVec2 clipMin(std::min(left.first.x, rightMin.x), std::min(left.first.y, rightMin.y));
-            ImVec2 clipMax(std::max(left.second.x, rightMax.x), std::max(left.second.y, rightMax.y));
-            ImDrawList* drawlist = ImGui::GetWindowDrawList();
+            ImVec2 clipMin(begin.x, begin.y);
+            ImVec2 clipMax(begin.x + avail.x, begin.y + avail.y);
 
             // mappings
             const MappingNumber* toRemove = nullptr;
 
+            ImDrawList* drawlist = ImGui::GetWindowDrawList();
             drawlist->PushClipRect(clipMin, clipMax, true);
             for (const MappingNumber& mapping : mappingsN) {
                 if (drawMapping(mapping, drawlist, mappingsDrawingInfo.at(mapping))) {
@@ -258,18 +249,44 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         return false;
     }
 
+    void removeMappingToDbFromSource(const mappingIdType sourceId) override {
+        auto it = std::find_if(mappingsN.begin(), mappingsN.end(), [&](const MappingNumber& m) { return m.uniqueData.source == sourceId; });
+        if (it == mappingsN.end()) {
+            return;
+        }
+
+        removeMappingToDb(*it);
+    }
+
     void removeMappingToDb(const MappingNumber& mapping) override {
         // not very efficient, but mappingnumber is small
         auto it = std::find(mappingsN.begin(), mappingsN.end(), mapping);
         if (it != mappingsN.end()) {
             mappingsDrawingInfo.erase(mapping);
-            if (auto* apiMapping = std::get_if<MappingCsvApi>(&mapping.usableData)) {
+            if (std::get_if<MappingCsvApi>(&mapping.usableData)) {
                 auto itApi = std::find_if(mappingsToApiWidgets.begin(), mappingsToApiWidgets.end(), [&](const MappingDestinationToApi& m) {
                     return m.getId() == mapping.uniqueData.destination;
                 });
                 if (itApi != mappingsToApiWidgets.end()) {
                     itApi->setDataPoint("API");
+                    mappingsToApiWidgets.erase(itApi);
                 }
+            } else if (auto* mToDb = std::get_if<MappingToDb>(&mapping.usableData)) {
+                // NOT THE RIGHT SPOT FOR THIS: find api mapping if it exists to remove the fields from the widget
+                // auto it = std::find_if(mappingsToApiWidgets.begin(), mappingsToApiWidgets.end(), [&](MappingDestinationToApi& m) {
+                //     if (m.getId() != mapping.uniqueData.source) {
+                //         return false;
+                //     }
+                //     const std::vector<MappingSource>& fields = m.getFields();
+                //     auto itApiField = std::find_if(
+                //         fields.begin(), fields.end(), [&](const MappingSource& s) { return s.getAttribute() == mToDb->source; });
+
+                //     return itApiField != fields.end();
+                // });
+
+                // if (it != mappingsToApiWidgets.end()) {
+                //     it->removeFields();
+                // }
             }
             mappingsN.erase(it);
         }

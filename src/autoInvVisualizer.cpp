@@ -54,8 +54,8 @@ void CsvMappingVisualizer::removeSourceAnchor(mappingIdType id) {
 }
 
 void CsvMappingVisualizer::handleApiClick(MappingDestinationToApi& destination) {
-    destination.previewData.loading = true;
-    api.fetchExample(destination.getDataPoint(), destination.previewData);
+    destination.previewData->loading = true;
+    api.fetchExample(destination.getDataPoint(), *destination.previewData);
 }
 
 bool CsvMappingVisualizer::handleDrag(ApiDestinationDetail& destination, const ImGuiPayload* payload) {

@@ -46,13 +46,15 @@ class MappingSource {
   private:
     static inline CsvMappingVisualizer* parentVisualizer;
     SourceDetail data;
+    float singleAttributeHeight;
 
   public:
     MappingSource(const std::string& cHeader, const std::string& cExample);
     ~MappingSource();
     static void setInteractionHandler(CsvMappingVisualizer* handler);
     const std::string& getAttribute() const;
-    void draw(const float width) const;
+    const float getTotalHeight() const;
+    void draw(const float width);
     bool beginDrag() const;
 };
 
@@ -87,8 +89,8 @@ class MappingDestinationToApi : public MappingDestination {
     std::vector<MappingSource> selectedFields;
 
   public:
-    ApiPreviewState& previewData;
-    MappingDestinationToApi(ApiDestinationDetail cData, ApiPreviewState& cPreviewData, bool cMappable)
+    ApiPreviewState* previewData;
+    MappingDestinationToApi(ApiDestinationDetail cData, ApiPreviewState* cPreviewData, bool cMappable)
         : MappingDestination(cMappable), data(cData), previewData(cPreviewData) {}
 
     void draw(float width) override;
@@ -98,6 +100,8 @@ class MappingDestinationToApi : public MappingDestination {
     const std::string& getDataPoint() const;
     mappingIdType getId() const;
     void setDataPoint(const std::string& newData);
+    void removeFields();
+    const std::vector<MappingSource>& getFields() const;
 };
 
 std::string getValueFromJsonCell(const nlohmann::json& value);
