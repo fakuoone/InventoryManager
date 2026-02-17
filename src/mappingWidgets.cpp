@@ -3,8 +3,8 @@
 
 namespace AutoInv {
 
-MappingSource::MappingSource(const std::string& cHeader, const std::string& cExample)
-    : data(cHeader, cExample, parentVisualizer->getNextIdSource()) {}
+MappingSource::MappingSource(const std::string& cSelectedField, const std::string& cHeader, const std::string& cExample)
+    : data(cSelectedField, cHeader, cExample, parentVisualizer->getNextIdSource()) {}
 MappingSource::~MappingSource() {
     parentVisualizer->removeSourceAnchor(data.id);
     parentVisualizer->removeMappingToDbFromSource(data.id);
@@ -15,17 +15,17 @@ void MappingSource::setInteractionHandler(CsvMappingVisualizer* handler) {
 }
 
 const std::string& MappingSource::getAttribute() const {
-    return data.attribute;
+    return data.apiSelector;
 }
 
-const float MappingSource::getTotalHeight() const {
+float MappingSource::getTotalHeight() const {
     return 2 * (singleAttributeHeight) + 2 * INNER_PADDING;
 }
 
 void MappingSource::draw(float width) {
     // TODO: Fix slight layout issues regarding actualwidth
     // Calc Height
-    singleAttributeHeight = ImGui::CalcTextSize(data.attribute.c_str()).y + 2 * INNER_TEXT_PADDING;
+    singleAttributeHeight = ImGui::CalcTextSize(data.primaryField.c_str()).y + 2 * INNER_TEXT_PADDING;
     const float height = getTotalHeight();
 
     const float anchorRadius = singleAttributeHeight / 2 - INNER_PADDING * 2;
@@ -46,7 +46,7 @@ void MappingSource::draw(float width) {
     drawList->AddRect(bgRectBegin, bgRectEnd, IM_COL32(120, 120, 120, 200), 0.0f);
 
     ImGui::SetCursorScreenPos(cursor);
-    ImGui::InvisibleButton(data.attribute.c_str(), ImVec2(width, singleAttributeHeight));
+    ImGui::InvisibleButton(data.primaryField.c_str(), ImVec2(width, singleAttributeHeight));
 
     // hover effect on header
     cursor.x += INNER_PADDING;
@@ -73,7 +73,7 @@ void MappingSource::draw(float width) {
     // header
     drawList->AddText(ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING),
                       hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
-                      data.attribute.c_str());
+                      data.primaryField.c_str());
     cursor.y += singleAttributeHeight;
 
     // example
@@ -226,7 +226,7 @@ void MappingDestinationToApi::draw(float width) {
     const float widthPadded = width - 2 * OUTER_PADDING;
 
     // Calc Height
-    float dataPointHeight = ImGui::CalcTextSize(data.dataPoint.c_str()).y + 2 * INNER_TEXT_PADDING;
+    float dataPointHeight = ImGui::CalcTextSize(data.example.c_str()).y + 2 * INNER_TEXT_PADDING;
     float dataHeight = dataPointHeight;
     if (!selectedFields.empty()) {
         dataHeight = std::max(selectedFields[0].getTotalHeight() * selectedFields.size(), dataHeight);
@@ -248,7 +248,6 @@ void MappingDestinationToApi::draw(float width) {
     cursor.y += INNER_PADDING;
 
     const ImVec2 anchorCenterLeft = ImVec2(cursor.x + INNER_PADDING + anchorRadius, cursor.y + dataHeight / 2);
-    const ImVec2 anchorCenterRight = ImVec2(bgRectEnd.x - INNER_PADDING - anchorRadius, cursor.y + dataHeight / 2);
     const float cellWidthLeft = (widthPadded * 0.4) - INNER_PADDING;
     const float cellWidthRight = (widthPadded * 0.6) - INNER_PADDING;
     {
@@ -258,14 +257,14 @@ void MappingDestinationToApi::draw(float width) {
         }
 
         ImGui::SetCursorScreenPos(cursor);
-        ImGui::InvisibleButton(data.dataPoint.c_str(), ImVec2(cellWidthLeft, dataHeight));
+        ImGui::InvisibleButton(data.example.c_str(), ImVec2(cellWidthLeft, dataHeight));
         bool hovered = ImGui::IsItemHovered();
 
         // 1. click: query api, 2nd click: open selectionpoup
         if (ImGui::IsItemClicked()) {
             if (!previewData->fields.empty()) {
                 ImGui::OpenPopup(API_POPUP.data());
-            } else if (!data.dataPoint.empty()) {
+            } else if (!data.example.empty()) {
                 parentVisualizer->handleApiClick(*this);
             }
         }
@@ -287,7 +286,7 @@ void MappingDestinationToApi::draw(float width) {
         drawList->AddText(ImVec2(cursor.x + INNER_PADDING + INNER_TEXT_PADDING + 2 * anchorRadius,
                                  cursor.y + dataHeight / 2 - dataPointHeight / 2 + INNER_TEXT_PADDING),
                           hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
-                          data.dataPoint.c_str());
+                          data.example.c_str());
 
         // store anchor in parent
         parentVisualizer->storeAnchorDest(data.id, anchorCenterLeft);
@@ -312,7 +311,7 @@ void MappingDestinationToApi::drawPreview(ImVec2 startUp) {
     ImGui::SetNextWindowSizeConstraints(ImVec2(300, 300), ImVec2(700, 600));
     ImGui::SetNextWindowPos(startUp, ImGuiCond_Appearing);
     if (ImGui::BeginPopup(API_POPUP.data(), ImGuiWindowFlags_AlwaysAutoResize)) {
-        drawJsonTree(previewData->fields, &selectedFields);
+        drawJsonTree(previewData->fields, &selectedFields, data.attribute);
         ImGui::EndPopup();
     }
 }
@@ -324,16 +323,20 @@ bool MappingDestinationToApi::handleDrag(ApiDestinationDetail& detail) {
     return handleDragInternal<ApiDestinationDetail>(parentVisualizer, mappingTypes::HEADER_API, detail);
 }
 
-const std::string& MappingDestinationToApi::getDataPoint() const {
-    return data.dataPoint;
+const std::string& MappingDestinationToApi::getExample() const {
+    return data.example;
 }
 
-mappingIdType MappingDestinationToApi::getId() const {
+MappingIdType MappingDestinationToApi::getId() const {
     return data.id;
 }
 
-void MappingDestinationToApi::setDataPoint(const std::string& newData) {
-    data.dataPoint = newData;
+void MappingDestinationToApi::setExample(const std::string& newData) {
+    data.example = newData;
+}
+
+void MappingDestinationToApi::setAttribute(const std::string& newData) {
+    data.attribute = newData;
 }
 
 void MappingDestinationToApi::removeFields() {
@@ -372,10 +375,14 @@ std::string getValueFromJsonCell(const nlohmann::json& value) {
                                 : value.dump();
 }
 
-void handleEntry(const nlohmann::json& value, const std::string& key, std::vector<MappingSource>* selected, const std::string& path) {
+void handleEntry(const nlohmann::json& value,
+                 const std::string& key,
+                 std::vector<MappingSource>* selected,
+                 const std::string& path,
+                 const std::string& source) {
     if (value.is_object() || value.is_array()) {
         if (ImGui::TreeNode(key.c_str())) {
-            drawJsonTree(value, selected, path);
+            drawJsonTree(value, selected, source, path);
             ImGui::TreePop();
         }
     } else {
@@ -395,27 +402,27 @@ void handleEntry(const nlohmann::json& value, const std::string& key, std::vecto
                 if (it != selected->end()) {
                     selected->erase(it);
                 } else {
-                    selected->emplace_back(path, valueStr);
+                    selected->emplace_back(source, path, valueStr);
                 }
             }
         }
     }
 }
 
-void drawJsonTree(const nlohmann::json& j, std::vector<MappingSource>* selected, std::string path) {
+void drawJsonTree(const nlohmann::json& j, std::vector<MappingSource>* selected, const std::string& source, std::string path) {
     if (j.is_object()) { // OBJECT
         for (auto it = j.begin(); it != j.end(); ++it) {
             const std::string key = it.key();
             const nlohmann::json& value = it.value();
             std::string currentPath = path.empty() ? key : path + "/" + key;
-            handleEntry(value, key, selected, currentPath);
+            handleEntry(value, key, selected, currentPath, source);
         }
     } else if (j.is_array()) { // ARRAY
         for (size_t i = 0; i < j.size(); ++i) {
             const nlohmann::json& value = j[i];
             std::string indexLabel = "[" + std::to_string(i) + "]";
             std::string currentPath = path + "/" + std::to_string(i);
-            handleEntry(value, indexLabel, selected, currentPath);
+            handleEntry(value, indexLabel, selected, currentPath, source);
         }
     }
 }

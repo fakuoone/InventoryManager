@@ -23,10 +23,12 @@ int main() {
 
     ChangeTracker changeTracker{dbService, logger};
 
-    AutoInv::ChangeGeneratorFromBom bomReader{pool, changeTracker, dbService, config, logger};
-    AutoInv::ChangeGeneratorFromOrder orderReader{pool, changeTracker, dbService, config, logger};
+    PartApi api{pool, config, logger};
 
-    App app{config, pool, dbService, changeTracker, bomReader, orderReader, logger};
+    AutoInv::ChangeGeneratorFromBom bomReader{pool, changeTracker, dbService, api, config, logger};
+    AutoInv::ChangeGeneratorFromOrder orderReader{pool, changeTracker, dbService, api, config, logger};
+
+    App app{config, pool, dbService, changeTracker, api, bomReader, orderReader, logger};
 
     app.run();
 

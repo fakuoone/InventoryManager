@@ -40,3 +40,7 @@ void ThreadPool::workerLoop() {
         task(); // execute outside the lock
     }
 }
+
+std::size_t ThreadPool::getAvailableThreadCount() const {
+    return workers.size() - tasks.size();
+}

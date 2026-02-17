@@ -22,6 +22,7 @@ class App {
     ThreadPool& pool;
     DbService& dbService;
     ChangeTracker& changeTracker;
+    PartApi& api;
     AutoInv::ChangeGeneratorFromBom& bomReader;
     AutoInv::ChangeGeneratorFromOrder& orderReader;
     Logger& logger;
@@ -31,7 +32,6 @@ class App {
     ChangeExeService changeExe{dbService, changeTracker, logger};
     DbVisualizer dbVisualizer{dbService, changeTracker, changeExe, logger, dataStates};
 
-    PartApi api{pool, config, logger};
     AutoInv::BomVisualizer bomVisualizer{dbService, bomReader, api, logger, dataStates};
     AutoInv::OrderVisualizer orderVisualizer{dbService, orderReader, api, logger, dataStates};
 
@@ -147,10 +147,11 @@ class App {
         ThreadPool& cPool,
         DbService& cDbService,
         ChangeTracker& cChangeTracker,
+        PartApi& cPartApi,
         AutoInv::ChangeGeneratorFromBom& cBomReader,
         AutoInv::ChangeGeneratorFromOrder& cOrderReader,
         Logger& cLogger)
-        : config(cConfig), pool(cPool), dbService(cDbService), changeTracker(cChangeTracker), bomReader(cBomReader),
+        : config(cConfig), pool(cPool), dbService(cDbService), changeTracker(cChangeTracker), api(cPartApi), bomReader(cBomReader),
           orderReader(cOrderReader), logger(cLogger) {}
 
     App(const App&) = delete;

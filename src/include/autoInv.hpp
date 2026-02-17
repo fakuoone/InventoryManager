@@ -3,10 +3,11 @@
 #include "changeTracker.hpp"
 #include "dbService.hpp"
 #include "logger.hpp"
+#include "partApi.hpp"
 #include "threadPool.hpp"
 
 namespace AutoInv {
-using mappingIdType = uint32_t;
+using MappingIdType = uint32_t;
 
 enum class SourceType { NONE, CSV, API };
 
@@ -16,18 +17,18 @@ template <typename S, typename D> struct Mapping {
     bool operator==(const Mapping& other) const { return other.source == source && other.destination == destination; }
 };
 
-struct PreciseHeader {
-    std::string table;
-    std::string header;
+struct PreciseMapLocation {
+    std::string outerIdentifier;
+    std::string innerIdentifier;
 };
 
 struct ApiData {};
 
-using MappingToDb = Mapping<std::string, PreciseHeader>;
+using MappingCsvToDb = Mapping<PreciseMapLocation, PreciseMapLocation>;
 using MappingCsvApi = Mapping<std::string, uint32_t>;
-using MappingNumberInternal = Mapping<mappingIdType, mappingIdType>;
+using MappingNumberInternal = Mapping<MappingIdType, MappingIdType>;
 
-using MappingVariant = std::variant<MappingToDb, MappingCsvApi>;
+using MappingVariant = std::variant<MappingCsvToDb, MappingCsvApi>;
 
 struct MappingNumber {
     MappingNumberInternal uniqueData;
@@ -45,8 +46,8 @@ struct MappingNumber {
 struct MappingHash {
     size_t operator()(const MappingNumber& m) const noexcept {
         // no need to hash the type aswell since the ids are unique
-        size_t h1 = std::hash<mappingIdType>{}(m.uniqueData.source);
-        size_t h2 = std::hash<mappingIdType>{}(m.uniqueData.destination);
+        size_t h1 = std::hash<MappingIdType>{}(m.uniqueData.source);
+        size_t h2 = std::hash<MappingIdType>{}(m.uniqueData.destination);
         return h1 ^ (h2 << 1);
     }
 };
@@ -134,6 +135,7 @@ class CsvChangeGenerator {
     ThreadPool& threadPool;
     ChangeTracker& changeTracker;
     DbService& dbService;
+    PartApi& partApi;
     Config& config;
     Logger& logger;
 
@@ -145,12 +147,15 @@ class CsvChangeGenerator {
 
     bool dataRead = false;
 
-    std::vector<MappingToDb> directMappings;
-    std::vector<MappingToDb> indirectApiMappings;
+    std::vector<MappingCsvToDb> directMappings;
+    std::vector<MappingCsvToDb> indirectApiMappings;
+    std::vector<MappingCsvApi> intermediateApiMappings;
     std::size_t missingParam = 0;
 
-    CsvChangeGenerator(ThreadPool& cThreadPool, ChangeTracker& cChangeTracker, DbService& cDbService, Config& cConfig, Logger& cLogger)
-        : threadPool(cThreadPool), changeTracker(cChangeTracker), dbService(cDbService), config(cConfig), logger(cLogger) {}
+    CsvChangeGenerator(
+        ThreadPool& cThreadPool, ChangeTracker& cChangeTracker, DbService& cDbService, PartApi& cPartApi, Config& cConfig, Logger& cLogger)
+        : threadPool(cThreadPool), changeTracker(cChangeTracker), dbService(cDbService), partApi(cPartApi), config(cConfig),
+          logger(cLogger) {}
 
     virtual ~CsvChangeGenerator() = default;
 
@@ -166,7 +171,7 @@ class CsvChangeGenerator {
 
     struct ChangeConvertedMapping {
         std::vector<std::size_t> columnIndexes;
-        std::unordered_map<std::size_t, std::vector<PreciseHeader>> preciseHeaders;
+        std::unordered_map<std::size_t, std::vector<PreciseMapLocation>> preciseHeaders;
         std::map<std::string, TableCells> cells;
         std::vector<TableCells*> orderedCells;
     };
@@ -177,25 +182,27 @@ class CsvChangeGenerator {
         std::unordered_set<std::string> foundTables;
         const std::vector<std::string>& csvHeader = csvData[0];
 
-        for (const MappingToDb& mapping : directMappings) {
+        for (const MappingCsvToDb& mapping : directMappings) {
             // check legality of mapping
-            const auto it = std::find_if(csvHeader.begin(), csvHeader.end(), [&](const std::string& col) { return mapping.source == col; });
+            const auto it = std::find_if(
+                csvHeader.begin(), csvHeader.end(), [&](const std::string& col) { return mapping.source.outerIdentifier == col; });
             if (it == csvHeader.end()) {
-                logger.pushLog(
-                    Log{std::format("ERROR: Converting mappings failed because {} does not match a csv column.", mapping.source)});
+                logger.pushLog(Log{std::format("ERROR: Converting mappings failed because {} does not match a csv column.",
+                                               mapping.source.outerIdentifier)});
                 return convertedMapping;
             }
 
             // store found tables to construct changes later
             std::size_t j = std::distance(csvHeader.begin(), it);
-            if (!foundTables.contains(mapping.destination.table)) {
-                foundTables.insert(mapping.destination.table);
+            if (!foundTables.contains(mapping.destination.outerIdentifier)) {
+                foundTables.insert(mapping.destination.outerIdentifier);
             }
 
             // csv column references new db header
             if (!convertedMapping.preciseHeaders.contains(j)) {
-                convertedMapping.cells.emplace(mapping.destination.table, TableCells{mapping.destination.table, Change::colValMap{}});
-                convertedMapping.preciseHeaders.emplace(j, std::vector<PreciseHeader>{});
+                convertedMapping.cells.emplace(mapping.destination.outerIdentifier,
+                                               TableCells{mapping.destination.outerIdentifier, Change::colValMap{}});
+                convertedMapping.preciseHeaders.emplace(j, std::vector<PreciseMapLocation>{});
             }
 
             // add mapping-destination to the csv header (1 to n)
@@ -205,22 +212,90 @@ class CsvChangeGenerator {
         return convertedMapping;
     }
 
-    void fillInApiData(const std::vector<std::vector<std::string>>& rows) {
-        // TODO:takes a json of api data and precomputes cell data based on a hmi mapping selection api -> precisehader
-        std::size_t i = 0;
-        for (const auto& row : csvData) {
-            if (i++ == 0) {
-                continue;
+    const MappingCsvApi& findApiSource(MappingIdType mappingId) const {
+        auto it = std::find_if(intermediateApiMappings.begin(), intermediateApiMappings.end(), [&](const MappingCsvApi& m) {
+            return m.destination == mappingId;
+        });
+        // if this doesnt exist, might as well crash
+        return *it;
+    }
+
+    std::string getJsonTarget(const nlohmann::json& j, const std::string& selectedField) {
+        std::string_view path = selectedField;
+        std::size_t start = 0;
+        std::size_t end = 0;
+        nlohmann::json const* nextLevel = &j;
+        while ((end = path.find('/', start)) != std::string_view::npos) {
+            // TODO: Handle array
+            std::string_view pathEntry = path.substr(start, end - start);
+            if (nextLevel->contains(pathEntry)) {
+                nextLevel = &(*nextLevel)[pathEntry];
+            } else {
+                nextLevel = nullptr;
+                break;
             }
-            // indirectApiMappings;
+            start = end + 1;
+        }
+
+        if (start < path.size()) {
+            std::string_view token = path.substr(start);
+        }
+
+        assert(nextLevel); // TODO
+        return nextLevel->get<std::string>();
+    }
+
+    void fetchChunk(std::span<std::vector<std::string>> chunk, std::span<Change::colValMap> resultChunk, std::size_t i) {
+        if (resultChunk.size() != chunk.size()) {
+            return;
+        }
+
+        std::unordered_map<std::string, nlohmann::json> responses;
+        for (std::size_t j = 0; j < chunk.size(); ++j) {
+            resultChunk[j] = Change::colValMap{};
+            const std::vector<std::string>& row = chunk[j];
+            for (const MappingCsvToDb& mapping : indirectApiMappings) {
+                // const MappingCsvApi& apiMapping = findApiSource(mapping.source.innerIdentifier);
+                nlohmann::json& result =
+                    responses.try_emplace(mapping.source.outerIdentifier, partApi.fetchDataPoint(mapping.source.outerIdentifier))
+                        .first->second;
+
+                resultChunk[j].emplace(mapping.source.outerIdentifier, getJsonTarget(result, mapping.source.outerIdentifier));
+            }
+        }
+    }
+
+    void fetchApiData() {
+        std::size_t totalRows = csvData.size();
+        if (totalRows <= 1) {
+            return;
+        }
+
+        std::size_t threadCount = threadPool.getAvailableThreadCount();
+        std::size_t dataRows = totalRows - 1; // skip header
+
+        threadCount = std::min(threadCount, dataRows / 10);
+
+        std::size_t baseChunkSize = dataRows / threadCount;
+        std::size_t remainder = dataRows % threadCount;
+        std::size_t begin = 1; // skip header
+
+        std::vector<Change::colValMap> results;
+        results.reserve(threadCount);
+
+        for (std::size_t i = 0; i < threadCount; ++i) {
+            std::size_t currentChunkSize = baseChunkSize + (i < remainder ? 1 : 0);
+            std::span<std::vector<std::string>> chunk = std::span(csvData).subspan(begin, currentChunkSize);
+            std::span<Change::colValMap> resultChunk = std::span(results).subspan(begin, currentChunkSize);
+            threadPool.submit(&CsvChangeGenerator::fetchChunk, this, chunk, resultChunk, i);
         }
     }
 
     void applyBasicMappingToRow(const std::vector<std::string>& row, ChangeConvertedMapping& mapped) {
         for (std::size_t j = 0; j < mapped.columnIndexes.size(); j++) {
             const std::size_t mappedColumnIndex = mapped.columnIndexes[j];
-            for (const PreciseHeader& preciseHeader : mapped.preciseHeaders[mappedColumnIndex]) {
-                mapped.cells[preciseHeader.table].cells.emplace(preciseHeader.header, row[mappedColumnIndex]);
+            for (const PreciseMapLocation& preciseHeader : mapped.preciseHeaders[mappedColumnIndex]) {
+                mapped.cells[preciseHeader.outerIdentifier].cells.emplace(preciseHeader.innerIdentifier, row[mappedColumnIndex]);
             }
         }
     }
@@ -233,17 +308,17 @@ class CsvChangeGenerator {
         // Fill in missing
         for (const auto& [_, preciseHeaders] : mapped.preciseHeaders) {
             std::unordered_set<std::string> visitedTables;
-            for (const PreciseHeader& preciseHeader : preciseHeaders) {
-                if (visitedTables.contains(preciseHeader.table)) {
+            for (const PreciseMapLocation& preciseHeader : preciseHeaders) {
+                if (visitedTables.contains(preciseHeader.outerIdentifier)) {
                     continue;
                 }
-                visitedTables.insert(preciseHeader.table);
-                for (const auto& header : dbData->headers.at(preciseHeader.table).data) {
-                    if (mapped.cells[preciseHeader.table].cells.contains(header.name) || header.nullable ||
+                visitedTables.insert(preciseHeader.outerIdentifier);
+                for (const auto& header : dbData->headers.at(preciseHeader.outerIdentifier).data) {
+                    if (mapped.cells[preciseHeader.outerIdentifier].cells.contains(header.name) || header.nullable ||
                         header.type == headerType::PRIMARY_KEY) {
                         continue;
                     }
-                    mapped.cells[preciseHeader.table].cells.emplace(header.name, std::format("TODO{}", missingParam++));
+                    mapped.cells[preciseHeader.outerIdentifier].cells.emplace(header.name, std::format("TODO{}", missingParam++));
                 }
             }
         }
@@ -281,7 +356,7 @@ class CsvChangeGenerator {
         ChangeConvertedMapping mapped = convertMapping();
 
         std::vector<Change> changes;
-        // fillInApiData(mapped);
+        fetchApiData();
         for (const auto& row : csvData) {
             if (i++ == 0) {
                 continue;
@@ -319,14 +394,14 @@ class CsvChangeGenerator {
 
     const std::vector<std::string>& getFirstRow() { return *(csvData.begin() + 1); }
 
-    void setMappings(const std::vector<MappingNumber> mappings) {
+    void setMappingsToDb(const std::vector<MappingNumber> mappings) {
         // TODO: Get actual names instead of ids
-        std::vector<MappingToDb> mappingsFromCsv;
-        std::vector<MappingToDb> mappingsFromApi;
+        std::vector<MappingCsvToDb> mappingsFromCsv;
+        std::vector<MappingCsvToDb> mappingsFromApi;
         mappingsFromCsv.reserve(mappings.size());
         mappingsFromApi.reserve(mappings.size());
         for (const MappingNumber& mapping : mappings) {
-            if (auto* mappingToDb = std::get_if<MappingToDb>(&mapping.usableData)) {
+            if (auto* mappingToDb = std::get_if<MappingCsvToDb>(&mapping.usableData)) {
                 switch (mapping.sourceType) {
                 case SourceType::API:
                     mappingsFromApi.push_back(*mappingToDb);
@@ -337,12 +412,18 @@ class CsvChangeGenerator {
                 default:
                     break;
                 }
+            } else {
+                // auto* mappingToApi = std::get<MappingToApi>(&mapping.usableData);
+                // mappingsToApi.push_back(*mappingsToApi);
             }
         }
 
-        for (const MappingToDb& mapping : mappingsFromCsv) {
-            logger.pushLog(
-                Log{std::format("MAPPINGS: MAPPED {} TO {} OF {}", mapping.source, mapping.destination.header, mapping.destination.table)});
+        for (const MappingCsvToDb& mapping : mappingsFromCsv) {
+            logger.pushLog(Log{std::format("MAPPINGS: MAPPED {} WITH {} TO {} OF {}",
+                                           mapping.source.outerIdentifier,
+                                           mapping.source.innerIdentifier,
+                                           mapping.destination.innerIdentifier,
+                                           mapping.destination.outerIdentifier)});
         }
         directMappings = std::move(mappingsFromCsv);
         indirectApiMappings = std::move(mappingsFromApi);
@@ -355,14 +436,16 @@ class CsvChangeGenerator {
 class ChangeGeneratorFromBom : public CsvChangeGenerator {
   private:
   public:
-    ChangeGeneratorFromBom(ThreadPool& cPool, ChangeTracker& cChangeTracker, DbService& cDbService, Config& cConfig, Logger& cLogger)
-        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cConfig, cLogger) {}
+    ChangeGeneratorFromBom(
+        ThreadPool& cPool, ChangeTracker& cChangeTracker, DbService& cDbService, PartApi& cPartApi, Config& cConfig, Logger& cLogger)
+        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cPartApi, cConfig, cLogger) {}
 };
 
 class ChangeGeneratorFromOrder : public CsvChangeGenerator {
   private:
   public:
-    ChangeGeneratorFromOrder(ThreadPool& cPool, ChangeTracker& cChangeTracker, DbService& cDbService, Config& cConfig, Logger& cLogger)
-        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cConfig, cLogger) {}
+    ChangeGeneratorFromOrder(
+        ThreadPool& cPool, ChangeTracker& cChangeTracker, DbService& cDbService, PartApi& cPartApi, Config& cConfig, Logger& cLogger)
+        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cPartApi, cConfig, cLogger) {}
 };
 }; // namespace AutoInv

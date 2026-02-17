@@ -1,3 +1,5 @@
+# --- Couldnt manage to link to curl statically, if it is even possible at all
+
 cmake_minimum_required(VERSION 3.21)
 
 project(InventoryManager VERSION 1.0 LANGUAGES CXX)
@@ -69,24 +71,21 @@ gdi32
 dwmapi
 )
 
-
 # --- Includes ---
 target_include_directories(InventoryManager PRIVATE
 ${PROJECT_SOURCE_DIR}/src/include
 )
 
+target_precompile_headers(InventoryManager PRIVATE ${PROJECT_SOURCE_DIR}/src/include/pch.hpp)
+
 # --- Dependencies ---
-find_package(CURL CONFIG REQUIRED)
+find_package(CURL REQUIRED)
 find_package(libpqxx CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 
-target_precompile_headers(InventoryManager PRIVATE ${PROJECT_SOURCE_DIR}/src/include/pch.hpp)
-
-# TODO: link statically
 target_link_libraries(InventoryManager PRIVATE
     CURL::libcurl
     libpqxx::pqxx
     nlohmann_json::nlohmann_json
     imgui
-    ws2_32
 )

@@ -26,20 +26,22 @@ struct MappingDrawing {
 struct DbDestinationDetail {
     std::string table;
     tHeaderInfo header;
-    mappingIdType id;
+    MappingIdType id;
     bool mappable = false;
 };
 
 struct ApiDestinationDetail {
     bool mappable = false;
-    mappingIdType id;
-    std::string dataPoint;
+    MappingIdType id;
+    std::string example;
+    std::string attribute;
 };
 
 struct SourceDetail {
-    std::string attribute;
+    std::string primaryField; // the main data field (csv source)
+    std::string apiSelector;  // for api selector
     std::string example;
-    mappingIdType id;
+    MappingIdType id;
 };
 
 class MappingSource {
@@ -49,11 +51,11 @@ class MappingSource {
     float singleAttributeHeight;
 
   public:
-    MappingSource(const std::string& cHeader, const std::string& cExample);
+    MappingSource(const std::string& cPrimary, const std::string& cApiSelector, const std::string& cExample);
     ~MappingSource();
     static void setInteractionHandler(CsvMappingVisualizer* handler);
     const std::string& getAttribute() const;
-    const float getTotalHeight() const;
+    float getTotalHeight() const;
     void draw(const float width);
     bool beginDrag() const;
 };
@@ -98,15 +100,20 @@ class MappingDestinationToApi : public MappingDestination {
         : MappingDestination(cMappable), data(cData), previewData(cPreviewData) {}
 
     void draw(float width) override;
-    const std::string& getDataPoint() const;
-    mappingIdType getId() const;
-    void setDataPoint(const std::string& newData);
+    const std::string& getExample() const;
+    MappingIdType getId() const;
+    void setExample(const std::string& newData);
+    void setAttribute(const std::string& newData);
     void removeFields();
     const std::vector<MappingSource>& getFields() const;
 };
 
 std::string getValueFromJsonCell(const nlohmann::json& value);
-void handleEntry(const nlohmann::json& value, const std::string& key, std::vector<MappingSource>* selected, const std::string& path);
-void drawJsonTree(const nlohmann::json& j, std::vector<MappingSource>* selected, std::string path = "");
+void handleEntry(const nlohmann::json& value,
+                 const std::string& key,
+                 std::vector<MappingSource>* selected,
+                 const std::string& path,
+                 const std::string& source);
+void drawJsonTree(const nlohmann::json& j, std::vector<MappingSource>* selected, const std::string& source, std::string path = "");
 
 } // namespace AutoInv

@@ -15,7 +15,7 @@ void CsvMappingVisualizer::setData(std::shared_ptr<const completeDbData> newData
     mappingsDrawingInfo.clear();
     // TODO: Reset old mappings etc
 
-    mappingIdType id = 0;
+    MappingIdType id = 0;
     for (const std::string& s : dbData->tables) {
         std::vector<DbDestinationDetail> destDetails;
         for (const tHeaderInfo& header : dbData->headers.at(s).data) {
@@ -28,25 +28,25 @@ void CsvMappingVisualizer::setData(std::shared_ptr<const completeDbData> newData
     destAnchors.largestId = id;
 }
 
-void CsvMappingVisualizer::storeAnchorSource(mappingIdType source, ImVec2 pos) {
+void CsvMappingVisualizer::storeAnchorSource(MappingIdType source, ImVec2 pos) {
     sourceAnchors.largestId = std::max(sourceAnchors.largestId, source);
     sourceAnchors.anchors[source] = pos;
 }
 
-void CsvMappingVisualizer::storeAnchorDest(mappingIdType dest, ImVec2 pos) {
+void CsvMappingVisualizer::storeAnchorDest(MappingIdType dest, ImVec2 pos) {
     destAnchors.largestId = std::max(destAnchors.largestId, dest);
     destAnchors.anchors[dest] = pos;
 }
 
-mappingIdType CsvMappingVisualizer::getNextIdSource() {
+MappingIdType CsvMappingVisualizer::getNextIdSource() {
     return ++sourceAnchors.largestId;
 }
 
-mappingIdType CsvMappingVisualizer::getNextIdDest() {
+MappingIdType CsvMappingVisualizer::getNextIdDest() {
     return ++destAnchors.largestId;
 }
 
-void CsvMappingVisualizer::removeSourceAnchor(mappingIdType id) {
+void CsvMappingVisualizer::removeSourceAnchor(MappingIdType id) {
     if (sourceAnchors.largestId == id) {
         sourceAnchors.largestId--;
     }
@@ -55,7 +55,7 @@ void CsvMappingVisualizer::removeSourceAnchor(mappingIdType id) {
 
 void CsvMappingVisualizer::handleApiClick(MappingDestinationToApi& destination) {
     destination.previewData->loading = true;
-    api.fetchExample(destination.getDataPoint(), *destination.previewData);
+    api.fetchExample(destination.getExample(), *destination.previewData);
 }
 
 bool CsvMappingVisualizer::handleDrag(ApiDestinationDetail& destination, const ImGuiPayload* payload) {

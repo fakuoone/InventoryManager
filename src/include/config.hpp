@@ -13,14 +13,15 @@
 struct ApiConfig {
     std::string key;
     std::string address;
+    std::string searchPattern;
+    nlohmann::json dummyJson;
 };
 
 class Config {
   private:
+    std::string quantityColumn;
     std::string dbString;
     std::string fontPath;
-    std::string quantityColumn;
-    nlohmann::json dummyJson;
     ApiConfig api;
 
     Logger& logger;
@@ -47,8 +48,9 @@ class Config {
             api.address = j["api"]["address"].get<std::string>();
             api.key = j["api"]["key"].get<std::string>();
             if (j["api"].contains("dummyJson")) {
-                dummyJson = j["api"]["dummyJson"].get<nlohmann::json>();
+                api.dummyJson = j["api"]["dummyJson"].get<nlohmann::json>();
             }
+            api.searchPattern = j["api"]["search"].get<nlohmann::json>().dump();
         } catch (const nlohmann::json::parse_error& e) {
             logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
         }
@@ -76,6 +78,8 @@ class Config {
     }
 
   public:
+    const std::string_view ITEM_PLACE_HOLDER = "ITEM";
+
     Config(Logger& cLogger) : logger(cLogger) {}
 
     std::string setConfigString(const std::filesystem::path& configPath) {
@@ -99,5 +103,7 @@ class Config {
 
     const ApiConfig& getApiConfig() const { return api; }
 
-    const std::string getDummyJson() const { return dummyJson.dump(); }
+    const std::string getDummyJson() const { return api.dummyJson.dump(); }
+
+    const std::string getSearchPattern() const { return api.searchPattern; }
 };

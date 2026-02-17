@@ -95,6 +95,16 @@ class PartApi {
         }
     }
 
+    std::string formSearchPattern(const std::string& item) {
+        std::string searchPattern = config.getSearchPattern();
+        size_t pos = 0;
+        while ((pos = searchPattern.find(config.ITEM_PLACE_HOLDER, pos)) != std::string::npos) {
+            searchPattern.replace(pos, config.ITEM_PLACE_HOLDER.length(), item);
+            pos += item.length();
+        }
+        return searchPattern;
+    }
+
   public:
     PartApi(ThreadPool& cPool, Config& cConfig, Logger& cLogger) : pool(cPool), config(cConfig), logger(cLogger) {}
     ~PartApi() {}
@@ -108,18 +118,19 @@ class PartApi {
 
     static void cleanupGlobalCurl() { curl_global_cleanup(); }
 
+    nlohmann::json fetchDataPoint(const std::string& dataPoint) { return nlohmann::json{}; }
+
     void fetchExample(const std::string& dataPoint, ApiPreviewState& state) {
+        // TODO: make a threaded wrapper around a "fetchInternal-function"
         if (!init()) {
             return;
         }
         state.fields.clear();
         responseString.clear();
 
-        nlohmann::json request = {{"SearchByPartRequest", {{"mouserPartNumber", dataPoint}, {"partSearchOptions", "ExactMatch"}}}};
-
-        std::string payload = request.dump();
-        curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE, payload.size());
-        curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, payload.c_str());
+        std::string searchPattern = formSearchPattern(dataPoint);
+        curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE, searchPattern.size());
+        curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, searchPattern.c_str());
 
         headers.reset();
         curl_slist* raw = nullptr;
