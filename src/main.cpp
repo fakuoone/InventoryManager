@@ -16,7 +16,7 @@ int main() {
     Change::setLogger(logger);
     Config config{logger};
 
-    ThreadPool pool{5, logger};
+    ThreadPool pool{10, logger};
 
     DbInterface dbInterface{logger};
     DbService dbService{dbInterface, pool, config, logger};
