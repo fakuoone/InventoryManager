@@ -15,6 +15,8 @@ struct protectedChanges {
     std::map<std::string, std::size_t> maxPKeys;
 };
 
+enum class ChangeAddResult { ALREADY_EXISTING, INVALID, INTERNAL_FAILURE, SUCCESS };
+
 class ChangeTracker {
   private:
     protectedChanges changes;
@@ -49,7 +51,7 @@ class ChangeTracker {
     void unfreeze();
     const Change getChange(const std::size_t key);
     void propagateValidity(Change& change);
-    bool addChange(Change change, std::optional<uint32_t> existingRowId = std::nullopt);
+    ChangeAddResult addChange(Change change, std::optional<uint32_t> existingRowId = std::nullopt);
     void removeChanges(const std::size_t key);
     void removeChanges(const Change::chHashV& changeHashes);
     uiChangeInfo getSnapShot();
@@ -62,4 +64,5 @@ class ChangeTracker {
     std::vector<std::size_t> getChildren(const std::size_t key);
     std::vector<std::size_t> getCalcRoots();
     std::unordered_set<std::size_t> getRoots();
+    static bool gotAdded(ChangeAddResult result);
 };

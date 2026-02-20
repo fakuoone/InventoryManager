@@ -118,7 +118,10 @@ class PartApi {
 
     static void cleanupGlobalCurl() { curl_global_cleanup(); }
 
-    nlohmann::json fetchDataPoint(const std::string& dataPoint) { return nlohmann::json{}; }
+    nlohmann::json fetchDataPoint(const std::string& dataPoint) {
+        // TODO: Proper function
+        return config.getApiConfig().dummyJson;
+    }
 
     void fetchExample(const std::string& dataPoint, ApiPreviewState& state) {
         // TODO: make a threaded wrapper around a "fetchInternal-function"

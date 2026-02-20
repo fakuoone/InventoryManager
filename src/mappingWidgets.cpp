@@ -73,7 +73,7 @@ void MappingSource::draw(float width) {
     // header
     drawList->AddText(ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING),
                       hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
-                      data.primaryField.c_str());
+                      data.apiSelector.empty() ? data.primaryField.c_str() : data.apiSelector.c_str());
     cursor.y += singleAttributeHeight;
 
     // example

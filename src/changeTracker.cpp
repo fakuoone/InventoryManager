@@ -94,7 +94,7 @@ void ChangeTracker::propagateValidity(Change& change) {
     }
 }
 
-bool ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRowId) {
+ChangeAddResult ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRowId) {
     logDetail(std::format("Attempting to add change to table {}.", change.getTable()));
     {
         std::lock_guard<std::mutex> lg(changes.mtx);
@@ -104,13 +104,13 @@ bool ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRow
             const std::string ukey = dbService.getTableUKey(change.getTable());
             if (changes.uKeyMappedData.at(change.getTable()).contains(change.getCell(ukey))) {
                 logger.pushLog(Log{std::format("ERROR: change with the same ukey (name): {} already exists", ukey)});
-                return false;
+                return ChangeAddResult::ALREADY_EXISTING;
             }
         }
     }
 
     if (!dbService.validateChange(change, false)) {
-        return false;
+        return ChangeAddResult::INVALID;
     }
 
     std::vector<Change> allChanges;
@@ -132,11 +132,11 @@ bool ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRow
         c = manageConflictL(c);
         propagateValidity(c);
         if (!addChangeInternalL(c)) {
-            return false;
+            return ChangeAddResult::INTERNAL_FAILURE;
         }
     }
 
-    return true;
+    return ChangeAddResult::SUCCESS;
 }
 
 void ChangeTracker::collectRequiredChangesL(Change& change, std::vector<Change>& out) {
@@ -440,6 +440,10 @@ std::vector<std::size_t> ChangeTracker::getCalcRoots() {
 std::unordered_set<std::size_t> ChangeTracker::getRoots() {
     std::lock_guard<std::mutex> lgChanges(changes.mtx);
     return changes.roots;
+}
+
+bool ChangeTracker::gotAdded(ChangeAddResult result) {
+    return result == ChangeAddResult::SUCCESS || result == ChangeAddResult::ALREADY_EXISTING;
 }
 
 void ChangeTracker::logDetail(std::string content) {

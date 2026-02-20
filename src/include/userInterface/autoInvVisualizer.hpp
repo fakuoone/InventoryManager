@@ -227,7 +227,8 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         }
         MappingCsvToDb newMappingS =
             MappingCsvToDb(PreciseMapLocation(source.primaryField, source.apiSelector), PreciseMapLocation(dest.table, dest.header.name));
-        MappingNumber newMappingN = MappingNumber{MappingNumberInternal{source.id, dest.id}, std::move(newMappingS), SourceType::CSV};
+        SourceType sourceType = source.apiSelector.empty() ? SourceType::CSV : SourceType::API; // not very clean, but gets the job done
+        MappingNumber newMappingN = MappingNumber{MappingNumberInternal{source.id, dest.id}, std::move(newMappingS), sourceType};
         mappingsDrawingInfo.insert_or_assign(newMappingN, MappingDrawing());
         mappingsN.emplace_back(std::move(newMappingN));
         // mappingsSToDb.emplace_back(std::move(newMappingS));
