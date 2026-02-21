@@ -44,12 +44,12 @@ void DbTable::drawHeader(const std::string& tableName) {
     for (size_t i = 0; i < headers.size(); ++i) {
         float width = i > 0 ? splitterPoss[i] - splitterPoss[i - 1] - SPLITTER_WIDTH : splitterPoss[0] - 0.5 * SPLITTER_WIDTH;
         ImGui::PushID(headers[i].name.c_str());
-        const CellBoilerPlate cellBoiler = CellBoilerPlate(headers[i].name, cursor, width, true, false, false, false, i);
-        eventTypes fromHeader = drawCellSC(
+        const CellBoilerPlate cellBoiler = CellBoilerPlate(headers[i], cursor, nullptr, width, true, false, false, false, i);
+        EventTypes fromHeader = drawCellSC(
             cellBoiler,
-            [this](const CellBoilerPlate& cb, const Rect& r, const std::string& v) -> ACTION_TYPE { return drawHeaderCell(cb, r, v); },
+            [this](const CellBoilerPlate& cb, const Rect& r, const std::string& v) -> ActionType { return drawHeaderCell(cb, r, v); },
             headers[i].name);
-        if (fromHeader.mouse != MOUSE_EVENT_TYPE::NONE) {
+        if (fromHeader.mouse != MouseEventType::NONE) {
             lastEvent.type = fromHeader;
             lastEvent.origin = DataEvent(tableName, "", headers[i].name);
         }
@@ -89,16 +89,76 @@ void DbTable::drawColumns(const std::string& tableName) {
     cursor.x = 0;
 
     for (std::size_t i = 0; i < headers.size(); ++i) {
-        drawColumn(tableName,
-                   i,
-                   splitterPoss,
-                   cursor,
-                   [this](const CellBoilerPlate& cellBoiler, const Rect& r, const std::string& v) -> ACTION_TYPE {
-                       return drawDataCell(cellBoiler, r, v);
-                   });
+        drawColumn(tableName, i, splitterPoss, cursor);
         cursor.x = splitterPoss[i] + 0.5f * SPLITTER_WIDTH;
         cursor.y = headerPos.end.y - headerPos.start.y + rowHeight;
     }
+}
+
+void DbTable::drawColumn(const std::string& tableName, const std::size_t i, const std::vector<float>& splitterPoss, ImVec2& cursor) {
+    const tHeaderInfo& headerInfo = dbData->headers.at(tableName).data[i];
+    ImGui::PushID(headerInfo.name.c_str());
+    ImGui::PushID(static_cast<int>(i));
+    std::size_t cellIndex = 0;
+
+    for (const std::string& cell : dbData->tableRows.at(tableName).at(headerInfo.name)) {
+        const std::string pKey = dbData->tableRows.at(tableName).at(dbData->headers.at(tableName).pkey)[cellIndex];
+        const std::size_t pKeyId = static_cast<std::size_t>(std::stoi(pKey));
+        rowChange = ChangeHelpers::getChangeOfRow(uiChanges, tableName, static_cast<std::size_t>(std::stoi(pKey)));
+        float width = i > 0 ? splitterPoss[i] - splitterPoss[i - 1] : splitterPoss[0] + 0.5f * SPLITTER_WIDTH;
+
+        ImGui::PushID(static_cast<int>(cellIndex));
+
+        // selection column
+        if (i == 0) {
+            // drawRowBackgroundIfNeeded(cursor, splitterPoss, rowChange.get());
+            handleFirstColumnIfNeeded(tableName, headerInfo, pKey, cursor, rowChange.get());
+        }
+
+        // data cell via celldrawer
+        bool isUkeyAndHasParent = false;
+        if (rowChange) {
+            isUkeyAndHasParent = headerInfo.type == headerType::UNIQUE_KEY && rowChange->hasParent();
+        }
+        bool editable = edit.whichId == pKeyId && headerInfo.type != headerType::PRIMARY_KEY && !isUkeyAndHasParent;
+        const CellBoilerPlate cellBoiler = CellBoilerPlate(headerInfo, cursor, rowChange.get(), width, true, editable, false, false, i);
+
+        EventTypes fromData = drawCellSC(
+            cellBoiler,
+            [this](const CellBoilerPlate& cellBoiler, const Rect& r, const std::string& v) -> ActionType {
+                return drawDataCell(cellBoiler, r, v, CellType::DATA);
+            },
+            cell);
+        if (fromData.mouse != MouseEventType::NONE || fromData.action == ActionType::EDIT) {
+            lastEvent.type = fromData;
+            lastEvent.origin = Widgets::DataEvent(tableName, pKey, headerInfo.name);
+        }
+
+        // draw any insertion/change overlay for this cell (uses same rect as the cell)
+        {
+            ImVec2 min = ImVec2(cursor.x + headerPos.start.x + PAD_INNER, cursor.y + headerPos.start.y + PAD_INNER);
+            ImVec2 max = ImVec2(min.x + width - PAD_INNER, min.y + rowHeight - PAD_INNER);
+            Rect cellRect(min, max);
+            drawList->PushClipRect(min, max, true);
+            drawChangeOverlayIfNeeded(rowChange.get(), cell, headerInfo.name, cellRect, fromData);
+            drawList->PopClipRect();
+        }
+
+        // edit column
+        if (i + 1 == dbData->headers.at(tableName).data.size()) {
+            handleLastActionIfNeeded(tableName, splitterPoss, i, cursor, rowChange.get(), pKey);
+        }
+
+        cursor.y += rowHeight;
+        cellIndex++;
+        ImGui::PopID();
+    }
+
+    // --- Render insertion changes (rows that don't exist in dbData but are in uiChanges)
+    drawInsertionCellsOfColumn(tableName, headerInfo, i, splitterPoss, cursor, cellIndex);
+
+    ImGui::PopID();
+    ImGui::PopID();
 }
 
 void DbTable::drawUserInputRowFields(const std::string& tableName,
@@ -114,24 +174,25 @@ void DbTable::drawUserInputRowFields(const std::string& tableName,
     for (std::size_t i = 0; i < headers.size(); ++i) {
         const tHeaderInfo& headerInfo = headers[i];
         float width = i > 0 ? splitterPoss[i] - splitterPoss[i - 1] : splitterPoss[0] + 0.5f * SPLITTER_WIDTH;
-        const CellBoilerPlate cellBoiler = CellBoilerPlate(headerInfo.name,
+        const CellBoilerPlate cellBoiler = CellBoilerPlate(headerInfo,
                                                            cursor,
+                                                           nullptr,
                                                            width,
                                                            headerInfo.type != headerType::PRIMARY_KEY,
                                                            headerInfo.type != headerType::PRIMARY_KEY,
                                                            false,
                                                            true,
                                                            i);
-        eventTypes inputEvent;
+        EventTypes inputEvent;
         ImGui::PushID(static_cast<int>(i));
         inputEvent = drawCellSC(
-            cellBoiler, [this](const CellBoilerPlate& cell, const Rect& r) -> ACTION_TYPE { return drawInsertionInputField(cell, r); });
+            cellBoiler, [this](const CellBoilerPlate& cell, const Rect& r) -> ActionType { return drawInsertionInputField(cell, r); });
         ImGui::PopID();
 
         ImGui::PushID("ENTER");
         if (i + 1 == headers.size()) {
-            eventTypes lastColEnter = drawLastColumnEnter(cursor, splitterPoss, i);
-            if (lastColEnter.mouse == MOUSE_EVENT_TYPE::CLICK) {
+            EventTypes lastColEnter = drawLastColumnEnter(cursor, splitterPoss, i);
+            if (lastColEnter.mouse == MouseEventType::CLICK) {
                 lastEvent.cells = insertCells;
                 lastEvent.type = lastColEnter;
                 insertCells.clear();
@@ -149,21 +210,21 @@ void DbTable::drawUserInputRowFields(const std::string& tableName,
 
 // Helper: draw the first column cell (left reserved area) for the current row and update
 // lastEvent
-eventTypes DbTable::handleFirstColumnIfNeeded(
-    const std::string& tableName, const std::string& headerName, const std::string& pKey, ImVec2& cursor, const Change* change) {
-    eventTypes fromFirst;
+EventTypes DbTable::handleFirstColumnIfNeeded(
+    const std::string& tableName, const tHeaderInfo& header, const std::string& pKey, ImVec2& cursor, const Change* change) {
+    EventTypes fromFirst;
     ImVec2 firstColumnStart = ImVec2(-LEFT_RESERVE, cursor.y);
     bool selected = false;
     if (change) {
         selected = change->isSelected();
         ImGui::PushID("FIRST");
         const CellBoilerPlate cellBoiler =
-            CellBoilerPlate(headerName, firstColumnStart, LEFT_RESERVE, true, false, selected, false, INVALID_ID);
-        fromFirst = drawCellSC(cellBoiler,
-                               [this](const CellBoilerPlate& cell, const Rect& r) -> ACTION_TYPE { return drawFirstColumnSC(cell, r); });
+            CellBoilerPlate(header, firstColumnStart, change, LEFT_RESERVE, true, false, selected, false, INVALID_ID);
+        fromFirst =
+            drawCellSC(cellBoiler, [this](const CellBoilerPlate& cell, const Rect& r) -> ActionType { return drawFirstColumnSC(cell, r); });
         ImGui::PopID();
     }
-    if (fromFirst.mouse != MOUSE_EVENT_TYPE::NONE) {
+    if (fromFirst.mouse != MouseEventType::NONE) {
         lastEvent.type = fromFirst;
         if (change) {
             lastEvent.origin = *change;
@@ -175,14 +236,14 @@ eventTypes DbTable::handleFirstColumnIfNeeded(
 }
 
 // Helper: draw the last/action column(s) for the current row and update lastEvent
-eventTypes DbTable::handleLastActionIfNeeded(const std::string& tableName,
+EventTypes DbTable::handleLastActionIfNeeded(const std::string& tableName,
                                              const std::vector<float>& splitterPoss,
                                              const std::size_t columnIndex,
                                              ImVec2& cursor,
                                              const Change* change,
                                              const std::string& pKey) {
-    eventTypes fromAction = drawActionColumn(cursor, splitterPoss, columnIndex, change);
-    if (fromAction.mouse != MOUSE_EVENT_TYPE::NONE) {
+    EventTypes fromAction = drawActionColumn(cursor, splitterPoss, columnIndex, change);
+    if (fromAction.mouse != MouseEventType::NONE) {
         lastEvent.type = fromAction;
         if (change) {
             lastEvent.origin = *change;
@@ -209,8 +270,73 @@ void DbTable::drawRowBackgroundIfNeeded(const ImVec2& cursor, const std::vector<
     drawList->AddRect(min, max, borderCol, 0.0f, ~0, 1.0f);
 }
 
+void DbTable::drawInsertionCellsOfColumn(const std::string& tableName,
+                                         const tHeaderInfo& headerInfo,
+                                         const std::size_t i,
+                                         const std::vector<float>& splitterPoss,
+                                         ImVec2& cursor,
+                                         std::size_t& cellIndex) {
+    if (!uiChanges) {
+        return;
+    }
+    if (!uiChanges->idMappedChanges.contains(tableName)) {
+        return;
+    }
+
+    for (const auto& [pKeyNum, changeKey] : uiChanges->idMappedChanges.at(tableName)) {
+        Change& change = uiChanges->changes.at(changeKey);
+        if (change.getType() != ChangeType::INSERT_ROW) {
+            continue;
+        }
+        const std::string pKey = std::to_string(pKeyNum);
+
+        float width = i > 0 ? splitterPoss[i] - splitterPoss[i - 1] : splitterPoss[0] + 0.5f * SPLITTER_WIDTH;
+        ImGui::PushID(static_cast<int>(cellIndex));
+
+        // first column for insertion row
+        if (i == 0) {
+            // drawRowBackgroundIfNeeded(cursor, splitterPoss, &change);
+            handleFirstColumnIfNeeded(tableName, headerInfo, pKey, cursor, &change);
+        }
+
+        // data cell: use changed value if present, otherwise empty
+        const std::string changedVal = change.getCell(headerInfo.name);
+        bool isUkeyAndHasParent = headerInfo.type == headerType::UNIQUE_KEY && change.hasParent();
+        bool editable = edit.whichId == pKeyNum && headerInfo.type != headerType::PRIMARY_KEY && !isUkeyAndHasParent;
+        const CellBoilerPlate cellBoiler = CellBoilerPlate(headerInfo, cursor, &change, width, true, editable, false, false, i);
+        EventTypes fromData = drawCellSC(
+            cellBoiler,
+            [this](const CellBoilerPlate& cellBoiler, const Rect& r, const std::string& v) -> ActionType {
+                return drawDataCell(cellBoiler, r, v, CellType::DATA);
+            },
+            changedVal);
+        if (fromData.mouse != MouseEventType::NONE) {
+            lastEvent.type = fromData;
+            lastEvent.origin = Widgets::DataEvent(tableName, pKey, headerInfo.name);
+        }
+
+        // overlay for insertion (draw over cell)
+        {
+            ImVec2 min = ImVec2(cursor.x + headerPos.start.x + PAD_INNER, cursor.y + headerPos.start.y + PAD_INNER);
+            ImVec2 max = ImVec2(min.x + width - PAD_INNER, min.y + rowHeight - PAD_INNER);
+            Rect cellRect(min, max);
+            drawChangeOverlayIfNeeded(&change, changedVal, headerInfo.name, cellRect, fromData);
+        }
+
+        // last/action column for insertion row
+        if (i + 1 == dbData->headers.at(tableName).data.size()) {
+            handleLastActionIfNeeded(tableName, splitterPoss, i, cursor, &change, pKey);
+        }
+
+        cursor.y += rowHeight;
+        cellIndex++;
+        ImGui::PopID();
+    }
+}
+
 // Draw overlay for inserted/updated cell values for given Change
-void DbTable::drawChangeOverlayIfNeeded(Change* ch, const std::string& headerName, const Rect& r) {
+void DbTable::drawChangeOverlayIfNeeded(
+    Change* ch, const std::string& originalValue, const std::string& headerName, const Rect& r, const EventTypes& event) {
     if (!ch) {
         return;
     }
@@ -226,24 +352,27 @@ void DbTable::drawChangeOverlayIfNeeded(Change* ch, const std::string& headerNam
         yOffset = PAD_INNER_CONTENT;
     }
     ImVec2 textPos(r.start.x + PAD_INNER_CONTENT, r.start.y + yOffset);
-    drawList->AddText(textPos, colSelected.second, val.c_str());
+    if (event.mouse == MouseEventType::HOVER) {
+        drawList->AddRectFilled(r.start, r.end, colHoveredGrey);
+        drawList->AddText(textPos, IM_COL32_WHITE, originalValue.c_str());
+    }
 }
 
-eventTypes DbTable::drawLastColumnEnter(const ImVec2& pos, const std::vector<float>& splitterPoss, const std::size_t columnIndex) {
-    eventTypes actionEvent;
+EventTypes DbTable::drawLastColumnEnter(const ImVec2& pos, const std::vector<float>& splitterPoss, const std::size_t columnIndex) {
+    EventTypes actionEvent;
 
     ImVec2 actionColumnStart = ImVec2(splitterPoss[columnIndex] + 0.5 * SPLITTER_WIDTH, pos.y);
     const CellBoilerPlate cellBoilerStart =
-        CellBoilerPlate("LAST", actionColumnStart, RIGHT_RESERVE, true, false, false, false, INVALID_ID);
+        CellBoilerPlate(tHeaderInfo(), actionColumnStart, nullptr, RIGHT_RESERVE, true, false, false, false, INVALID_ID);
     actionEvent = drawCellSC(cellBoilerStart,
-                             [this](const CellBoilerPlate& cell, const Rect& r) -> ACTION_TYPE { return drawActionColumnENTER(cell, r); });
+                             [this](const CellBoilerPlate& cell, const Rect& r) -> ActionType { return drawActionColumnENTER(cell, r); });
 
     return actionEvent;
 }
 
-eventTypes
+EventTypes
 DbTable::drawActionColumn(const ImVec2& pos, const std::vector<float>& splitterPoss, const std::size_t columnIndex, const Change* change) {
-    eventTypes actionEvent;
+    EventTypes actionEvent;
     bool enableDelete = true;
     bool enableUpdate = true;
     bool showEdit = true;
@@ -251,7 +380,7 @@ DbTable::drawActionColumn(const ImVec2& pos, const std::vector<float>& splitterP
         if (change->hasParent()) {
             enableDelete = false;
         }
-        if (change->getType() == changeType::DELETE_ROW) {
+        if (change->getType() == ChangeType::DELETE_ROW) {
             showEdit = false;
             enableUpdate = false;
         }
@@ -261,19 +390,19 @@ DbTable::drawActionColumn(const ImVec2& pos, const std::vector<float>& splitterP
     ImVec2 actionColumnStart = ImVec2(splitterPoss[columnIndex] + 0.5 * SPLITTER_WIDTH, pos.y);
     ImGui::PushID("ACTIONX");
     const CellBoilerPlate cellBoilerStart =
-        CellBoilerPlate("LAST", actionColumnStart, individualWidth, enableDelete, false, false, false, INVALID_ID);
+        CellBoilerPlate(tHeaderInfo(), actionColumnStart, change, individualWidth, enableDelete, false, false, false, INVALID_ID);
     actionEvent = drawCellSC(cellBoilerStart,
-                             [this](const CellBoilerPlate& cell, const Rect& r) -> ACTION_TYPE { return drawActionColumnXSC(cell, r); });
+                             [this](const CellBoilerPlate& cell, const Rect& r) -> ActionType { return drawActionColumnXSC(cell, r); });
     ImGui::PopID();
 
     if (showEdit) {
         ImVec2 actionColumn2nd = ImVec2(actionColumnStart.x + individualWidth, pos.y);
         ImGui::PushID("ACTIONED");
         const CellBoilerPlate cellBoiler =
-            CellBoilerPlate("LAST", actionColumn2nd, individualWidth, enableUpdate, false, false, false, INVALID_ID);
-        eventTypes editEvent = drawCellSC(
-            cellBoiler, [this](const CellBoilerPlate& cell, const Rect& r) -> ACTION_TYPE { return drawActionColumnEditSC(cell, r); });
-        if (actionEvent.mouse == MOUSE_EVENT_TYPE::NONE) {
+            CellBoilerPlate(tHeaderInfo(), actionColumn2nd, change, individualWidth, enableUpdate, false, false, false, INVALID_ID);
+        EventTypes editEvent = drawCellSC(
+            cellBoiler, [this](const CellBoilerPlate& cell, const Rect& r) -> ActionType { return drawActionColumnEditSC(cell, r); });
+        if (actionEvent.mouse == MouseEventType::NONE) {
             actionEvent = editEvent;
         }
         ImGui::PopID();
@@ -281,8 +410,8 @@ DbTable::drawActionColumn(const ImVec2& pos, const std::vector<float>& splitterP
     return actionEvent;
 }
 
-ACTION_TYPE DbTable::drawDataCell(const CellBoilerPlate& cell, const Rect& r, const std::string& value) {
-    ACTION_TYPE action{ACTION_TYPE::DATA};
+ActionType DbTable::drawDataCell(const CellBoilerPlate& cell, const Rect& r, const std::string& value, CellType cellType) {
+    ActionType action{ActionType::DATA};
     ImU32 colBg = cell.selected ? colSelected.first : colGreyBg;
     drawList->PushClipRect(r.start, r.end, true);
     drawList->AddRectFilled(r.start, r.end, colBg);
@@ -299,58 +428,103 @@ ACTION_TYPE DbTable::drawDataCell(const CellBoilerPlate& cell, const Rect& r, co
         ImGui::SetNextItemWidth(r.end.x - textPos.x - PAD_INNER_CONTENT);
 
         char* dataSource = cell.isInsert ? edit.insertBuffer[cell.headerIndex].data() : edit.editBuffer.data();
-        if (!cell.isInsert) {
+        if (!cell.isInsert && edit.whichId != cell.headerIndex) {
             std::snprintf(dataSource, BUFFER_SIZE, "%s", value.c_str());
         }
 
         bool enterPressed = ImGui::InputText("##edit", dataSource, BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
         if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
             if (cell.isInsert) {
-                insertCells.emplace(cell.headerName, std::string(dataSource));
+                insertCells.emplace(cell.header.name, std::string(dataSource));
             } else {
-                Change::colValMap newChangeColVal{{cell.headerName, std::string(dataSource)}};
+                Change::colValMap newChangeColVal{{cell.header.name, std::string(dataSource)}};
                 lastEvent.cells = std::move(newChangeColVal);
                 edit.whichId = INVALID_ID;
-                action = ACTION_TYPE::EDIT;
+                action = ActionType::EDIT;
             }
         }
         ImGui::PopStyleVar();
     } else {
         ImU32 col = cell.enabled ? IM_COL32_WHITE : IM_COL32(255, 255, 255, 100);
+        drawChangeInCell(cell, r, textPos, col, value);
         drawList->AddText(textPos, col, value.c_str());
+
+        if (cellType == CellType::HEADER) {
+            std::string depth = std::to_string(cell.header.depth);
+            drawList->AddText(ImVec2{r.end.x - ImGui::CalcTextSize(depth.c_str()).x, r.start.y}, col, depth.c_str());
+        }
     }
 
     drawList->PopClipRect();
     return action;
 }
 
-ACTION_TYPE DbTable::drawHeaderCell(const CellBoilerPlate& cell, const Rect& r, const std::string& header) {
-    drawDataCell(cell, r, header);
-    return ACTION_TYPE::HEADER;
+void DbTable::drawChangeInCell(const CellBoilerPlate& cell, const Rect& r, ImVec2 textPos, ImU32 col, const std::string& value) {
+    if (!cell.change || cell.selected) {
+        return;
+    }
+    bool isValid = cell.change->isValid();
+    if (!isValid) {
+        // TODO: Show validity of the specific change cell
+        // nullables, references to valid changes (1 level deep is enough, otherwise performance...)
+        if (cell.header.depth == 0) {
+            isValid = cell.header.nullable || !value.empty();
+        } else {
+            for (const std::size_t key : cell.change->getChildren()) {
+                const Change& child = uiChanges.get()->changes.at(key);
+                if (child.getTable() == cell.header.name) {
+                    isValid = child.isValid();
+                    break;
+                }
+            }
+        }
+    }
+    std::pair<ImU32, ImU32> changeCols = isValid ? colValid : colInvalid;
+    switch (cell.change->getType()) {
+    case ChangeType::DELETE_ROW:
+        drawList->AddRectFilled(r.start, r.end, changeCols.first);
+        drawList->AddRect(r.start, r.end, changeCols.second);
+
+    case ChangeType::UPDATE_CELLS:
+        [[fallthrough]];
+    case ChangeType::INSERT_ROW:
+        if (!cell.change->getCell(cell.header.name).empty() || value.empty()) {
+            drawList->AddRectFilled(r.start, r.end, changeCols.first);
+            drawList->AddRect(r.start, r.end, changeCols.second);
+            drawList->AddText(textPos, col, cell.change->getCell(cell.header.name).c_str());
+        }
+    default:
+        break;
+    }
 }
 
-ACTION_TYPE DbTable::drawActionColumnXSC(const CellBoilerPlate& cell, const Rect& r) {
-    drawDataCell(cell, r, "X");
-    return ACTION_TYPE::REMOVE;
+ActionType DbTable::drawHeaderCell(const CellBoilerPlate& cell, const Rect& r, const std::string& header) {
+    drawDataCell(cell, r, header, CellType::HEADER);
+    return ActionType::HEADER;
 }
 
-ACTION_TYPE DbTable::drawActionColumnENTER(const CellBoilerPlate& cell, const Rect& r) {
-    drawDataCell(cell, r, "ENTER");
-    return ACTION_TYPE::INSERT;
+ActionType DbTable::drawActionColumnXSC(const CellBoilerPlate& cell, const Rect& r) {
+    drawDataCell(cell, r, "X", CellType::ACTION_COLUMN);
+    return ActionType::REMOVE;
 }
 
-ACTION_TYPE DbTable::drawActionColumnEditSC(const CellBoilerPlate& cell, const Rect& r) {
-    drawDataCell(cell, r, "ED");
-    return ACTION_TYPE::REQUEST_EDIT;
+ActionType DbTable::drawActionColumnENTER(const CellBoilerPlate& cell, const Rect& r) {
+    drawDataCell(cell, r, "ENTER", CellType::ACTION_COLUMN);
+    return ActionType::INSERT;
 }
 
-ACTION_TYPE DbTable::drawFirstColumnSC(const CellBoilerPlate& cell, const Rect& r) {
-    drawDataCell(cell, r, "^");
-    return ACTION_TYPE::SELECT;
+ActionType DbTable::drawActionColumnEditSC(const CellBoilerPlate& cell, const Rect& r) {
+    drawDataCell(cell, r, "ED", CellType::ACTION_COLUMN);
+    return ActionType::REQUEST_EDIT;
 }
 
-ACTION_TYPE DbTable::drawInsertionInputField(const CellBoilerPlate& cell, const Rect& r) {
-    return drawDataCell(cell, r, "");
+ActionType DbTable::drawFirstColumnSC(const CellBoilerPlate& cell, const Rect& r) {
+    drawDataCell(cell, r, "^", CellType::SELECTION);
+    return ActionType::SELECT;
+}
+
+ActionType DbTable::drawInsertionInputField(const CellBoilerPlate& cell, const Rect& r) {
+    return drawDataCell(cell, r, "", CellType::DATA);
 }
 
 void DbTable::drawTable(const std::string& tableName) {
@@ -446,11 +620,11 @@ bool ChangeOverviewer::drawChildren(const std::vector<std::size_t>& children, fl
     return clicked;
 }
 
-MOUSE_EVENT_TYPE ChangeOverviewer::drawSingleChangeOverview(const Change& change,
-                                                            std::size_t* visualDepth,
-                                                            const std::size_t parent,
-                                                            bool isChildrenNotLast) {
-    MOUSE_EVENT_TYPE event(MOUSE_EVENT_TYPE::NONE);
+MouseEventType ChangeOverviewer::drawSingleChangeOverview(const Change& change,
+                                                          std::size_t* visualDepth,
+                                                          const std::size_t parent,
+                                                          bool isChildrenNotLast) {
+    MouseEventType event(MouseEventType::NONE);
     const uint32_t rowId = change.getRowId();
     const std::size_t uid = change.getKey();
     // const std::vector<std::size_t> children = change.getChildren();
@@ -459,16 +633,16 @@ MOUSE_EVENT_TYPE ChangeOverviewer::drawSingleChangeOverview(const Change& change
 
     const char* type = "UNKNOWN";
     switch (change.getType()) {
-    case changeType::NONE:
+    case ChangeType::NONE:
         type = "NONE";
         break;
-    case changeType::DELETE_ROW:
+    case ChangeType::DELETE_ROW:
         type = "DELETE";
         break;
-    case changeType::INSERT_ROW:
+    case ChangeType::INSERT_ROW:
         type = "INSERT";
         break;
-    case changeType::UPDATE_CELLS:
+    case ChangeType::UPDATE_CELLS:
         type = "UPDATE";
         break;
     }
@@ -557,7 +731,7 @@ MOUSE_EVENT_TYPE ChangeOverviewer::drawSingleChangeOverview(const Change& change
     // if (clicked && !childClicked) {
     if (clicked) {
         // changeTracker.toggleChangeSelect(imGuiKeyId);
-        event = MOUSE_EVENT_TYPE::CLICK;
+        event = MouseEventType::CLICK;
     }
 
     // Row ID (right aligned)

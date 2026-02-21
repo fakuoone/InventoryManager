@@ -9,7 +9,7 @@
 namespace AutoInv {
 enum class MappingStage { CSV, API };
 
-Widgets::MOUSE_EVENT_TYPE isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness);
+Widgets::MouseEventType isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness);
 
 struct WidgetAnchors {
     MappingIdType largestId = 0;
@@ -307,12 +307,12 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         ImVec2 start = sourceAnchors.anchors.at(mapping.uniqueData.source);
         ImVec2 end = destAnchors.anchors.at(mapping.uniqueData.destination);
 
-        Widgets::MOUSE_EVENT_TYPE event = isMouseOnLine(start, end, mappingDrawingInfo.width * 2);
-        const float thickness = event != Widgets::MOUSE_EVENT_TYPE::NONE ? 6.0f : 2.0f;
-        const ImU32 color = event != Widgets::MOUSE_EVENT_TYPE::NONE ? Widgets::colSelected.first : Widgets::colWhiteSemiOpaque;
+        Widgets::MouseEventType event = isMouseOnLine(start, end, mappingDrawingInfo.width * 2);
+        const float thickness = event != Widgets::MouseEventType::NONE ? 6.0f : 2.0f;
+        const ImU32 color = event != Widgets::MouseEventType::NONE ? Widgets::colSelected.first : Widgets::colWhiteSemiOpaque;
         drawlist->AddLine(start, end, color, thickness);
         mappingDrawingInfo.width = thickness;
-        return event == Widgets::MOUSE_EVENT_TYPE::CLICK;
+        return event == Widgets::MouseEventType::CLICK;
     }
 
     bool hasMappings() {

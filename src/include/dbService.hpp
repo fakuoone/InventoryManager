@@ -98,30 +98,36 @@ class DbService {
         const tHeadersInfo& headers = dbData->headers.at(table);
         const std::string& uKeyName = headers.uKeyName;
         const tColumnDataMap& row = dbData->tableRows.at(table);
-        const tStringVector& pKeyColumn = row.at(uKeyName);
+        const tStringVector& uKeyColumn = row.at(uKeyName);
         IndexPKeyPair result{INVALID_ID, INVALID_ID};
 
         if (!cells.contains(uKeyName)) {
             return result;
         }
 
-        auto itExisting = std::find(pKeyColumn.begin(), pKeyColumn.end(), cells.at(uKeyName));
-        if (itExisting != pKeyColumn.end()) {
+        auto itExisting = std::find(uKeyColumn.begin(), uKeyColumn.end(), cells.at(uKeyName));
+        if (itExisting != uKeyColumn.end()) {
             logger.pushLog(Log{std::format("INFO: Table {} with unique key {}: {} already exists.", table, uKeyName, cells.at(uKeyName))});
-            result.index = itExisting - pKeyColumn.begin();
+            result.index = itExisting - uKeyColumn.begin();
             const std::string& rowId = row.at(headers.pkey).at(result.index);
             result.pkey = static_cast<std::size_t>(std::stoi(rowId));
         }
         return result;
     }
 
-    void updateChangeQuantity(const std::string& table, Change::colValMap& cells, const std::size_t index, QuantityOperation operation) {
-        // TODO: error handling
+    bool hasQuantityColumn(const std::string& table) const {
         const tHeadersInfo& headers = dbData->headers.at(table);
         const std::string& quantityColumn = config.getQuantityColumn();
         auto itHasQuantityHeader =
             std::find_if(headers.data.begin(), headers.data.end(), [&](const tHeaderInfo& h) { return h.name == quantityColumn; });
-        if (itHasQuantityHeader != headers.data.end()) {
+        return itHasQuantityHeader != headers.data.end();
+    }
+
+    void
+    updateChangeQuantity(const std::string& table, Change::colValMap& cells, const std::size_t index, QuantityOperation operation) const {
+        // TODO: error handling
+        const std::string& quantityColumn = config.getQuantityColumn();
+        if (hasQuantityColumn(table)) {
             std::size_t quantityDb = static_cast<std::size_t>(std::stoi(dbData->tableRows.at(table).at(quantityColumn)[index]));
             auto [cell, _] = cells.try_emplace(quantityColumn, std::to_string(quantityDb));
             logger.pushLog(Log{std::format(
@@ -139,7 +145,7 @@ class DbService {
         }
     }
 
-    bool validateCompleteDbData(const completeDbData& data) {
+    bool validateCompleteDbData(const completeDbData& data) const {
         // tablecount matches everywhere
         std::size_t tableCount = data.tables.size();
         if (tableCount != data.headers.size() || tableCount != data.tableRows.size()) {
@@ -171,7 +177,7 @@ class DbService {
         return true;
     }
 
-    bool validateChange(Change& change, bool fromGeneration) {
+    bool validateChange(Change& change, bool fromGeneration) const {
         const tStringVector& tables = dbData->tables;
         auto it = std::find(tables.begin(), tables.end(), change.getTable());
         if (it == tables.end()) {
@@ -181,20 +187,20 @@ class DbService {
         bool allowInvalidChange = change.hasParent() && fromGeneration;
 
         switch (change.getType()) {
-        case changeType::DELETE_ROW:
+        case ChangeType::DELETE_ROW:
             break;
-        case changeType::INSERT_ROW:
+        case ChangeType::INSERT_ROW:
             if (findIndexAndPKeyOfExisting(change.getTable(), change.getCells()).index != INVALID_ID) {
                 return false;
             }
             [[fallthrough]];
-        case changeType::UPDATE_CELLS: {
+        case ChangeType::UPDATE_CELLS: {
             const Change::colValMap& cells = change.getCells();
             const tHeadersInfo& headers = dbData->headers.at(change.getTable());
             // check non-nullable column count
             std::size_t reqColumnCount =
                 std::count_if(headers.data.begin(), headers.data.end(), [](const tHeaderInfo& h) { return !h.nullable; }) - 1;
-            if (reqColumnCount > cells.size() && change.getType() == changeType::INSERT_ROW) {
+            if (reqColumnCount > cells.size() && change.getType() == ChangeType::INSERT_ROW) {
                 setValidity = false;
             }
             if (cells.size() > (headers.data.size() - 1) && !allowInvalidChange) {
@@ -215,7 +221,7 @@ class DbService {
                 } else if (!header.nullable) {
                     // non-nullable column is null
                     if (!cells.contains(header.name)) {
-                        if (change.getType() == changeType::INSERT_ROW) {
+                        if (change.getType() == ChangeType::INSERT_ROW) {
                             if (!allowInvalidChange) {
                                 logger.pushLog(
                                     Log{std::format("ERROR: Header {} is not nullable and no value was provided.", header.name)});
@@ -245,16 +251,27 @@ class DbService {
         return true;
     }
 
-    std::vector<Change> getRequiredChanges(const Change& change, const std::map<std::string, std::size_t>& ids) {
+    std::vector<Change> getRequiredChanges(const Change& change, const std::map<std::string, std::size_t>& ids) const {
         const std::string& table = change.getTable();
         std::vector<Change> changes;
         const tHeadersInfo& headers = dbData->headers.at(table);
         const Change::colValMap& cells = change.getCells();
 
+        // early return if the thing already exists in its entirety -> TODO: might tank performance?,
+        // maybe its wiser to prevent this situation from elsewhere
+        if (cells.contains(headers.uKeyName)) {
+            if (findIndexAndPKeyOfExisting(table, cells).index != INVALID_ID) {
+                return changes;
+            }
+        }
+
         for (const auto& [col, val] : cells) {
             // find foreign key thats required
-            auto it1 = std::ranges::find_if(headers.data,
-                                            [&](const tHeaderInfo& h) { return h.name == col && h.type == headerType::FOREIGN_KEY; });
+            auto it1 = std::ranges::find_if(headers.data, [&](const tHeaderInfo& h) {
+                return h.name == col && (h.type == headerType::FOREIGN_KEY ||
+                                         !h.referencedTable.empty()); // not very clean. If there are more cases where the enum is no
+                                                                      // sufficient, the internal enum design needs to be refactored
+            });
             if (it1 != headers.data.end()) { // && it1->referencedTable != table) {
                 bool alreadyExists = it1->referencedTable == table ? checkReferencedPKeyValue(it1->referencedTable, val)
                                                                    : checkReferencedUKeyValue(it1->referencedTable, it1->nullable, val);
@@ -265,7 +282,7 @@ class DbService {
                     } else {
                         requiredCells.emplace(dbData->headers.at(it1->referencedTable).uKeyName, val);
                     }
-                    Change reqChange{requiredCells, changeType::INSERT_ROW, getTable(it1->referencedTable)};
+                    Change reqChange{requiredCells, ChangeType::INSERT_ROW, getTable(it1->referencedTable)};
                     reqChange.addParent(change.getKey());
                     changes.emplace_back(reqChange);
                 }
@@ -274,7 +291,7 @@ class DbService {
         return changes;
     }
 
-    bool checkReferencedPKeyValue(const std::string& ref, const std::string& val) {
+    bool checkReferencedPKeyValue(const std::string& ref, const std::string& val) const {
         // does pkey-value already exist
         if (val.empty()) {
             return true;
@@ -287,7 +304,7 @@ class DbService {
         return false;
     }
 
-    bool checkReferencedUKeyValue(const std::string& ref, bool nullable, const std::string& val) {
+    bool checkReferencedUKeyValue(const std::string& ref, bool nullable, const std::string& val) const {
         // does ukey-value already exist
         if (val.empty() && nullable) {
             return true;
@@ -300,27 +317,27 @@ class DbService {
         return false;
     }
 
-    void initializeDbInterface(const std::string& configString) { dbInterface.initializeWithConfigString(configString); }
+    void initializeDbInterface(const std::string& configString) const { dbInterface.initializeWithConfigString(configString); }
 
-    std::future<Change::chHashV> requestChangeApplication(std::vector<Change> changes, sqlAction action) {
+    std::future<Change::chHashV> requestChangeApplication(std::vector<Change> changes, SqlAction action) const {
         return pool.submit(
-            [this](auto change, sqlAction act) { return dbInterface.applyChanges(std::move(change), act); }, std::move(changes), action);
+            [this](auto change, SqlAction act) { return dbInterface.applyChanges(std::move(change), act); }, std::move(changes), action);
         //      return pool.submit(&DbInterface::applyChanges, &dbInterface, std::move(change_s),
         //      action);
     }
 
-    imTable getTable(const std::string& tableName) {
+    ImTable getTable(const std::string& tableName) const {
         auto it = std::find(dbData->tables.begin(), dbData->tables.end(), tableName);
-        imTable tableData{tableName, 0};
+        ImTable tableData{tableName, 0};
         if (it != dbData->tables.end()) {
             tableData.id = static_cast<uint16_t>(std::distance(dbData->tables.begin(), it));
         }
         return tableData;
     }
 
-    std::string getTableUKey(const std::string& table) { return dbData->headers.at(table).uKeyName; }
+    std::string getTableUKey(const std::string& table) const { return dbData->headers.at(table).uKeyName; }
 
-    tHeaderInfo getTableHeaderInfo(const std::string& table, const std::string& header) {
+    tHeaderInfo getTableHeaderInfo(const std::string& table, const std::string& header) const {
         const tHeaderVector& headers = dbData->headers.at(table).data;
         auto it = std::find_if(headers.begin(), headers.end(), [&](const tHeaderInfo& h) { return h.name == header; });
         return *it;

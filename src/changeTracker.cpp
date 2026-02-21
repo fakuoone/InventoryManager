@@ -35,7 +35,7 @@ const Change ChangeTracker::getChange(const std::size_t key) {
 }
 
 bool ChangeTracker::isConflicting(const Change& newChange) {
-    if (!newChange.hasRowId() || newChange.getType() == changeType::INSERT_ROW) {
+    if (!newChange.hasRowId() || newChange.getType() == ChangeType::INSERT_ROW) {
         return false;
     }
     const std::string& table = newChange.getTable();
@@ -60,10 +60,10 @@ Change& ChangeTracker::manageConflictL(Change& newChange) {
     const uint32_t rowId = newChange.getRowId();
     Change& existingChange = changes.flatData.at(changes.pKeyMappedData.at(table).at(rowId));
     switch (existingChange.getType()) {
-    case changeType::DELETE_ROW:
+    case ChangeType::DELETE_ROW:
         return existingChange;
-    case changeType::INSERT_ROW:
-    case changeType::UPDATE_CELLS:
+    case ChangeType::INSERT_ROW:
+    case ChangeType::UPDATE_CELLS:
         mergeCellChanges(existingChange, newChange);
         dbService.validateChange(existingChange, false);
         return existingChange;
@@ -116,7 +116,7 @@ ChangeAddResult ChangeTracker::addChange(Change change, std::optional<uint32_t> 
     }
 
     std::vector<Change> allChanges;
-    if (change.getType() == changeType::UPDATE_CELLS) {
+    if (change.getType() == ChangeType::UPDATE_CELLS) {
         assert(existingRowId.has_value());
         change.setRowId(*existingRowId);
     }

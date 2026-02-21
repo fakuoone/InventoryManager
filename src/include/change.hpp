@@ -11,10 +11,10 @@
 
 constexpr const std::size_t INVALID_ID = std::numeric_limits<std::size_t>::max();
 
-enum class changeType : uint8_t { NONE, INSERT_ROW, UPDATE_CELLS, DELETE_ROW };
-enum class sqlAction : uint8_t { PREVIEW, EXECUTE };
+enum class ChangeType : uint8_t { NONE, INSERT_ROW, UPDATE_CELLS, DELETE_ROW };
+enum class SqlAction : uint8_t { PREVIEW, EXECUTE };
 
-struct imTable {
+struct ImTable {
     std::string name;
     uint16_t id;
 };
@@ -43,9 +43,9 @@ class Change {
     std::size_t changeKey;
 
     colValMap changedCells;
-    changeType type{changeType::UPDATE_CELLS};
+    ChangeType type{ChangeType::UPDATE_CELLS};
 
-    imTable tableData;
+    ImTable tableData;
     std::optional<uint32_t> rowId;
 
     std::vector<std::size_t> parentKeys;
@@ -56,14 +56,14 @@ class Change {
     bool valid{false};
 
   public:
-    Change(colValMap cCells, changeType cType, imTable cTable, std::optional<std::size_t> cRowId = std::nullopt)
+    Change(colValMap cCells, ChangeType cType, ImTable cTable, std::optional<std::size_t> cRowId = std::nullopt)
         : changeKey(nextId++), changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) {}
 
     static void setLogger(Logger& l) { logger = &l; }
 
     [[nodiscard]] std::size_t getKey() const { return changeKey; };
 
-    changeType getType() const { return type; }
+    ChangeType getType() const { return type; }
 
     const std::string& getTable() const { return tableData.name; }
 
@@ -101,15 +101,15 @@ class Change {
         return *this;
     }
 
-    std::string toSQLaction(sqlAction action) const {
+    std::string toSQLaction(SqlAction action) const {
         // TODO: INSERT und UPDATE sind anfällig für SQL Injektion. Beheben
         std::string sqlString;
 
         switch (type) {
-        case changeType::DELETE_ROW:
+        case ChangeType::DELETE_ROW:
             sqlString = std::format("DELETE FROM {} WHERE {} = {}", tableData.name, "id", rowId.value());
             break;
-        case changeType::INSERT_ROW: {
+        case ChangeType::INSERT_ROW: {
             std::string columnNames;
             std::string cellValues;
             bool first = true;
@@ -128,7 +128,7 @@ class Change {
             sqlString = std::format("INSERT INTO {} ({}) VALUES ({});", tableData.name, columnNames, cellValues);
             break;
         }
-        case changeType::UPDATE_CELLS: {
+        case ChangeType::UPDATE_CELLS: {
             std::string columnValuePairs;
             bool first = true;
             for (const auto& [col, val] : changedCells) {

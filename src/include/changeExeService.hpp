@@ -55,13 +55,13 @@ class ChangeExeService {
         return successfulChanges;
     }
 
-    void requestChangeApplication(std::size_t changeKey, sqlAction action) {
+    void requestChangeApplication(std::size_t changeKey, SqlAction action) {
         // reqests executiion for 1 changeKey (and its descendants)
         std::vector<std::size_t> keys = {changeKey};
         requestChangeApplication(keys, action);
     }
 
-    void requestChangeApplication(const std::vector<std::size_t> changeKeys, sqlAction action) {
+    void requestChangeApplication(const std::vector<std::size_t> changeKeys, SqlAction action) {
         // requests execution for vector of changeKey
         changeTracker.freeze();
         std::vector<Change> allChanges = collectDescendants(changeKeys);
@@ -69,7 +69,7 @@ class ChangeExeService {
         changeTracker.unfreeze();
     }
 
-    void requestChangeApplication(sqlAction action) {
+    void requestChangeApplication(SqlAction action) {
         // request execution for all changes
         changeTracker.freeze();
         std::vector<Change> allChanges = collectDescendants(changeTracker.getCalcRoots());

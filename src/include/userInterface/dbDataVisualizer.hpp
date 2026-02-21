@@ -47,7 +47,7 @@ class DbVisualizer {
         ImGui::Text("CHANGE OVERVIEW");
         ImGui::BeginDisabled(dataStates.dbData != DataState::DATA_READY);
         if (ImGui::Button("Execute all")) {
-            changeExe.requestChangeApplication(sqlAction::EXECUTE);
+            changeExe.requestChangeApplication(SqlAction::EXECUTE);
         }
 
         for (const std::size_t rootKey : uiChanges->roots) { // TODO segfault when switching tab before db data is ready
@@ -75,7 +75,7 @@ class DbVisualizer {
             isChildrenNotLast = true;
         }
 
-        if (drawChange(key, treeDepth, parent, isChildrenNotLast) == Widgets::MOUSE_EVENT_TYPE::CLICK) {
+        if (drawChange(key, treeDepth, parent, isChildrenNotLast) == Widgets::MouseEventType::CLICK) {
             toggleNode(key);
         }
 
@@ -95,8 +95,7 @@ class DbVisualizer {
         }
     }
 
-    Widgets::MOUSE_EVENT_TYPE
-    drawChange(const std::size_t key, std::size_t* visualDepth, const std::size_t parent, bool isChildrenNotLast) {
+    Widgets::MouseEventType drawChange(const std::size_t key, std::size_t* visualDepth, const std::size_t parent, bool isChildrenNotLast) {
         const Change& change = uiChanges->changes.at(key);
         return changeOverviewer.drawSingleChangeOverview(change, visualDepth, parent, isChildrenNotLast);
     }
@@ -104,7 +103,7 @@ class DbVisualizer {
     void handleTableEvent() {
         const Widgets::Event tableEvent = dbTable.getEvent();
         const bool handleEvent =
-            tableEvent.type.mouse == Widgets::MOUSE_EVENT_TYPE::CLICK || tableEvent.type.action == Widgets::ACTION_TYPE::EDIT;
+            tableEvent.type.mouse == Widgets::MouseEventType::CLICK || tableEvent.type.action == Widgets::ActionType::EDIT;
         if (!handleEvent) {
             return;
         }
@@ -112,7 +111,7 @@ class DbVisualizer {
         if (std::holds_alternative<Widgets::DataEvent>(tableEvent.origin)) { // NO CHANGE EXISTS ON THIS ROW
             const Widgets::DataEvent event = std::get<Widgets::DataEvent>(tableEvent.origin);
             switch (tableEvent.type.action) {
-            case Widgets::ACTION_TYPE::HEADER: {
+            case Widgets::ActionType::HEADER: {
                 const tHeaderVector& header = dbData->headers.at(event.tableName).data;
                 auto it = std::find_if(header.begin(), header.end(), [&](const tHeaderInfo& h) { return h.name == event.headerName; });
                 if (it != header.end()) {
@@ -120,17 +119,17 @@ class DbVisualizer {
                 }
                 break;
             }
-            case Widgets::ACTION_TYPE::REMOVE:
+            case Widgets::ActionType::REMOVE:
                 changeTracker.addChange(Change(Change::colValMap{},
-                                               changeType::DELETE_ROW,
+                                               ChangeType::DELETE_ROW,
                                                dbService.getTable(event.tableName),
                                                static_cast<std::size_t>(std::stoi(event.pKey))));
                 break;
-            case Widgets::ACTION_TYPE::EDIT:
-                changeTracker.addChange(Change(tableEvent.cells, changeType::UPDATE_CELLS, dbService.getTable(event.tableName)),
+            case Widgets::ActionType::EDIT:
+                changeTracker.addChange(Change(tableEvent.cells, ChangeType::UPDATE_CELLS, dbService.getTable(event.tableName)),
                                         static_cast<std::size_t>(std::stoi(event.pKey)));
                 break;
-            case Widgets::ACTION_TYPE::REQUEST_EDIT: {
+            case Widgets::ActionType::REQUEST_EDIT: {
                 const std::size_t pKeyId = static_cast<std::size_t>(std::stoi(event.pKey));
                 if (edit.whichId == pKeyId) {
                     edit.whichId = INVALID_ID;
@@ -139,8 +138,8 @@ class DbVisualizer {
                 }
                 break;
             }
-            case Widgets::ACTION_TYPE::INSERT:
-                changeTracker.addChange(Change(tableEvent.cells, changeType::INSERT_ROW, dbService.getTable(event.tableName)));
+            case Widgets::ActionType::INSERT:
+                changeTracker.addChange(Change(tableEvent.cells, ChangeType::INSERT_ROW, dbService.getTable(event.tableName)));
                 break;
             default:
                 break;
@@ -148,13 +147,13 @@ class DbVisualizer {
         } else { // CHANGE ALREADY EXISTS ON THIS ROW
             const Change change = std::get<Change>(tableEvent.origin);
             switch (tableEvent.type.action) {
-            case Widgets::ACTION_TYPE::REMOVE:
+            case Widgets::ActionType::REMOVE:
                 changeTracker.removeChanges(change.getKey());
                 break;
-            case Widgets::ACTION_TYPE::EDIT:
+            case Widgets::ActionType::EDIT:
                 changeTracker.addChange(change);
                 break;
-            case Widgets::ACTION_TYPE::REQUEST_EDIT: {
+            case Widgets::ActionType::REQUEST_EDIT: {
                 const std::size_t pKeyId = change.getRowId();
                 if (edit.whichId == pKeyId) {
                     edit.whichId = INVALID_ID;
@@ -163,7 +162,7 @@ class DbVisualizer {
                 }
                 break;
             }
-            case Widgets::ACTION_TYPE::SELECT:
+            case Widgets::ActionType::SELECT:
                 changeTracker.toggleChangeSelect(change.getKey());
                 break;
             default:

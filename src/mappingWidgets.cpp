@@ -347,13 +347,13 @@ const std::vector<MappingSource>& MappingDestinationToApi::getFields() const {
     return selectedFields;
 }
 
-Widgets::MOUSE_EVENT_TYPE isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness) {
+Widgets::MouseEventType isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness) {
     ImGuiIO& io = ImGui::GetIO();
     const bool equalPoints = p1.x == p2.x && p1.y == p2.y;
     const bool xOutOfRange = (io.MousePos.x >= p1.x && io.MousePos.x >= p2.x) || (io.MousePos.x <= p1.x && io.MousePos.x <= p2.x);
     const bool yOutOfRange = (io.MousePos.y >= p1.y && io.MousePos.y >= p2.y) || (io.MousePos.y <= p1.y && io.MousePos.y <= p2.y);
     if (thickness == 0 || equalPoints || xOutOfRange || yOutOfRange) {
-        return Widgets::MOUSE_EVENT_TYPE::NONE;
+        return Widgets::MouseEventType::NONE;
     }
 
     float l21 = std::sqrt(std::pow((p2.y - p1.y), 2) + std::pow((p2.x - p1.x), 2));
@@ -361,11 +361,11 @@ Widgets::MOUSE_EVENT_TYPE isMouseOnLine(const ImVec2& p1, const ImVec2& p2, cons
 
     if (area / l21 < thickness) {
         if (io.MouseClicked[ImGuiMouseButton_Left]) {
-            return Widgets::MOUSE_EVENT_TYPE::CLICK;
+            return Widgets::MouseEventType::CLICK;
         }
-        return Widgets::MOUSE_EVENT_TYPE::HOVER;
+        return Widgets::MouseEventType::HOVER;
     }
-    return Widgets::MOUSE_EVENT_TYPE::NONE;
+    return Widgets::MouseEventType::NONE;
 }
 
 std::string getValueFromJsonCell(const nlohmann::json& value) {

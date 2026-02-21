@@ -211,9 +211,6 @@ class DbInterface {
                 } else {
                     logger.pushLog(Log{std::format("WARNING: composite UNIQUE key on table '{}', column '{}' ignored", table, header)});
                 }
-
-                headers.data.push_back(info);
-                continue;
             }
 
             // Foreign key
@@ -235,7 +232,10 @@ class DbInterface {
 
             pqxx::result fkResult = transaction.tx.exec(fkQuery);
             if (!fkResult.empty()) {
-                info.type = headerType::FOREIGN_KEY;
+                // allow foreign key that is also unique key (.referencedTable)
+                if (info.type != headerType::UNIQUE_KEY) {
+                    info.type = headerType::FOREIGN_KEY;
+                }
                 info.referencedTable = fkResult[0]["referenced_table"].c_str();
             }
 
@@ -252,8 +252,8 @@ class DbInterface {
 
         // Base case
         if (header.referencedTable.empty()) {
-            header.depth = 1;
-            return 1;
+            header.depth = 0;
+            return 0;
         }
 
         // self reference
@@ -261,7 +261,8 @@ class DbInterface {
         if (std::find_if(referencedHeaders.data.begin(), referencedHeaders.data.end(), [&](tHeaderInfo& tH) {
                 return tH.referencedTable == header.referencedTable;
             }) != referencedHeaders.data.end()) {
-            return 0;
+            header.depth = 1;
+            return 1;
         }
 
         // go to referenced table
@@ -399,7 +400,7 @@ class DbInterface {
         return completeDbData{tables.data, tableHeaders.data, tableRows.data, std::map<std::string, std::size_t>{}};
     }
 
-    Change::chHashV applyChanges(std::vector<Change> changes, sqlAction action) {
+    Change::chHashV applyChanges(std::vector<Change> changes, SqlAction action) {
         Change::chHashV successfulChanges;
         for (const auto& change : changes) {
             if (applySingleChange(change, action)) {
@@ -409,7 +410,7 @@ class DbInterface {
         return successfulChanges;
     }
 
-    bool applySingleChange(const Change& change, sqlAction action) {
+    bool applySingleChange(const Change& change, SqlAction action) {
         try {
             logger.pushLog(Log{std::format("    Applying change {}", change.getKey())});
             const std::string changeQuery = change.toSQLaction(action);

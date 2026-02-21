@@ -394,12 +394,17 @@ class CsvChangeGenerator {
             if (!cells) {
                 continue;
             }
-            changeType type = changeType::INSERT_ROW;
+            ChangeType type = ChangeType::INSERT_ROW;
             IndexPKeyPair foundIndexes = dbService.findIndexAndPKeyOfExisting(cells->table, cells->cells);
             if (foundIndexes.index != INVALID_ID) {
-                dbService.updateChangeQuantity(cells->table, cells->cells, foundIndexes.index, operation);
-                type = changeType::UPDATE_CELLS;
+                if (dbService.hasQuantityColumn(cells->table)) {
+                    dbService.updateChangeQuantity(cells->table, cells->cells, foundIndexes.index, operation);
+                    type = ChangeType::UPDATE_CELLS;
+                } else {
+                    continue;
+                }
             };
+
             ChangeAddResult result =
                 changeTracker.addChange(Change{cells->cells, type, dbService.getTable(cells->table)}, foundIndexes.pkey);
             if (!ChangeTracker::gotAdded(result)) {
