@@ -17,12 +17,18 @@ struct ApiConfig {
     nlohmann::json dummyJson;
 };
 
+struct ReaderConfig {
+    std::filesystem::path defaultPath;
+};
+
 class Config {
   private:
     std::string quantityColumn;
     std::string dbString;
     std::string fontPath;
     ApiConfig api;
+    ReaderConfig order;
+    ReaderConfig bom;
 
     Logger& logger;
 
@@ -45,12 +51,22 @@ class Config {
             if (j.contains("font")) {
                 fontPath = j.at("font").get<std::string>();
             }
+
+            // API
             api.address = j["api"]["address"].get<std::string>();
             api.key = j["api"]["key"].get<std::string>();
             if (j["api"].contains("dummyJson")) {
                 api.dummyJson = j["api"]["dummyJson"].get<nlohmann::json>();
             }
             api.searchPattern = j["api"]["search"].get<nlohmann::json>().dump();
+
+            // DEFAULT CSV
+            if (j.contains("order")) {
+                order.defaultPath = j["order"]["defaultPath"].get<std::filesystem::path>();
+            }
+            if (j.contains("bom")) {
+                bom.defaultPath = j["bom"]["defaultPath"].get<std::filesystem::path>();
+            }
         } catch (const nlohmann::json::parse_error& e) {
             logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
         }
@@ -106,4 +122,8 @@ class Config {
     const std::string getDummyJson() const { return api.dummyJson.dump(); }
 
     const std::string getSearchPattern() const { return api.searchPattern; }
+
+    const std::filesystem::path getCsvPathOrder() const { return order.defaultPath; }
+
+    const std::filesystem::path getCsvPathBom() const { return bom.defaultPath; }
 };

@@ -322,6 +322,16 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     }
 
     void commitMappings() { reader.setMappingsToDb(mappingsN); }
+
+    void setDefaultPath(const std::filesystem::path& path) {
+        std::string s = path.string();
+        if (s.size() > csvBuffer.max_size()) {
+            logger.pushLog(Log{std::format("ERROR: Path {} is too long.", s)});
+            return;
+        }
+        std::copy(s.begin(), s.end(), csvBuffer.begin());
+        csvBuffer[s.size()] = 0x0;
+    }
 };
 
 class BomVisualizer : public CsvVisualizerImpl<ChangeGeneratorFromBom> {

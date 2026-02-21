@@ -163,6 +163,8 @@ class App {
         std::string dbString = config.setConfigString(std::filesystem::path{}); // OPTIONAL USER SUPPLIED CONFIG PATH
         initFont(config.getFont());
         dbService.initializeDbInterface(dbString);
+        bomVisualizer.setDefaultPath(config.getCsvPathBom());
+        orderVisualizer.setDefaultPath(config.getCsvPathOrder());
     }
 
     void run() {

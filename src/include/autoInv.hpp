@@ -152,10 +152,17 @@ class CsvChangeGenerator {
     std::vector<MappingCsvApi> intermediateApiMappings;
     std::size_t missingParam = 0;
 
-    CsvChangeGenerator(
-        ThreadPool& cThreadPool, ChangeTracker& cChangeTracker, DbService& cDbService, PartApi& cPartApi, Config& cConfig, Logger& cLogger)
+    QuantityOperation operation;
+
+    CsvChangeGenerator(ThreadPool& cThreadPool,
+                       ChangeTracker& cChangeTracker,
+                       DbService& cDbService,
+                       PartApi& cPartApi,
+                       Config& cConfig,
+                       Logger& cLogger,
+                       QuantityOperation cOperation)
         : threadPool(cThreadPool), changeTracker(cChangeTracker), dbService(cDbService), partApi(cPartApi), config(cConfig),
-          logger(cLogger) {}
+          logger(cLogger), operation(cOperation) {}
 
     virtual ~CsvChangeGenerator() = default;
 
@@ -388,8 +395,14 @@ class CsvChangeGenerator {
             if (!cells) {
                 continue;
             }
+            changeType type = changeType::INSERT_ROW;
+            IndexPKeyPair foundIndexes = dbService.findIndexAndPKeyOfExisting(cells->table, cells->cells);
+            if (foundIndexes.index != INVALID_ID) {
+                dbService.updateChangeQuantity(cells->table, cells->cells, foundIndexes.index, operation);
+                type = changeType::UPDATE_CELLS;
+            };
             ChangeAddResult result =
-                changeTracker.addChange(Change{cells->cells, changeType::INSERT_ROW, dbService.getTable(cells->table)});
+                changeTracker.addChange(Change{cells->cells, type, dbService.getTable(cells->table)}, foundIndexes.pkey);
             if (!ChangeTracker::gotAdded(result)) {
                 logger.pushLog(Log{std::format("ERROR: Adding change from mapping failed.")});
                 return;
@@ -486,7 +499,7 @@ class ChangeGeneratorFromBom : public CsvChangeGenerator {
   public:
     ChangeGeneratorFromBom(
         ThreadPool& cPool, ChangeTracker& cChangeTracker, DbService& cDbService, PartApi& cPartApi, Config& cConfig, Logger& cLogger)
-        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cPartApi, cConfig, cLogger) {}
+        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cPartApi, cConfig, cLogger, QuantityOperation::SUB) {}
 };
 
 class ChangeGeneratorFromOrder : public CsvChangeGenerator {
@@ -494,6 +507,6 @@ class ChangeGeneratorFromOrder : public CsvChangeGenerator {
   public:
     ChangeGeneratorFromOrder(
         ThreadPool& cPool, ChangeTracker& cChangeTracker, DbService& cDbService, PartApi& cPartApi, Config& cConfig, Logger& cLogger)
-        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cPartApi, cConfig, cLogger) {}
+        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cPartApi, cConfig, cLogger, QuantityOperation::ADD) {}
 };
 }; // namespace AutoInv

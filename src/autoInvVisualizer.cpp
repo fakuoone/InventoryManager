@@ -8,6 +8,7 @@ void CsvMappingVisualizer::setData(std::shared_ptr<const completeDbData> newData
     destAnchors = WidgetAnchors();
     sourceAnchors = WidgetAnchors();
     csvHeaderWidgets.clear();
+    dbHeaderWidgets.clear();
     mappingsN.clear();
     // mappingsSToDb.clear();
     mappingsToApiWidgets.clear();
