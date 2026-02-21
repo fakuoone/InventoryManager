@@ -10,8 +10,6 @@ Next step is to clean up the display of changes in the UI, general usability imp
 - libpqxx
 - imgui
 - C++23
-The imgui dx11 implementation is used, which requires at least:\
-- windows
 - dx11
 
 ```c++
@@ -39,7 +37,8 @@ while (running) {
 
 ## Visual Examples
 Mapping view: 
-![Mapping](docs/mapping.png)
+![Mapping](docs/mappingview.png)
+
 Database view:
-![Database](docs/database.png)
+![Database](docs/databaseview.png)
 
