@@ -39,7 +39,7 @@ while (running) {
 
 ## Visual Examples
 Mapping view: 
-![Mapping](doc/mapping.png)
+![Mapping](docs/mapping.png)
 Database view:
-![Database](doc/database.png)
+![Database](docs/database.png)
 
