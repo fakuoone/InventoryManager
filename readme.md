@@ -1,17 +1,19 @@
 # Inventory Manager
-An inventory manager with ui that is based on a local postgresql database. 
+An inventory manager with UI that is based on a local postgresql database. 
 
 ## Current Stage
-Finetuning of rudimentary change tracking / change visualization.\
-NEXT: Actually executing the changes in the DB.
+CSV-files can now be used to generate changes which then can be executed and sent to the local database.
+Next step is to clean up the display of changes in the UI, general usability improvementes and rigorous testing.
 
 ## Dependencies
-
-libpqxx (depends on libpq)\
-imgui\
+- libcurl
+- libpqxx
+- imgui
+- C++23
 The imgui dx11 implementation is used, which requires at least:\
-windows\
-dx11
+- windows
+- dx11
+
 ```c++
 class App {
    private:
@@ -22,14 +24,22 @@ The only interface to the dx11-backed is through these three functions:
 ```c++
 while (running) {
     if (!imguiCtx.pollEvents()) { // POLL EVENTS
-        appState = AppState::ENDING;
-        break;
+        /*
+        ...
+        */
     }
 
     if (!imguiCtx.beginFrame()) { continue; } // BEGIN FRAME
-
-    running = handleAppState();
-    drawFpsOverlay();
+    /*
+    ...
+    */
     imguiCtx.endFrame(); // END FRAME
 }
 ```
+
+## Visual Examples
+Mapping view: 
+![Mapping](doc/mapping.png)
+Database view:
+![Database](doc/database.png)
+

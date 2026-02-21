@@ -95,6 +95,8 @@ void ChangeTracker::propagateValidity(Change& change) {
 }
 
 ChangeAddResult ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRowId) {
+    // TODO: (when generating from csv) Adds children changes for "parts" that already exist as dbEntries and shouldnt be collected as
+    // required from dbService.
     logDetail(std::format("Attempting to add change to table {}.", change.getTable()));
     {
         std::lock_guard<std::mutex> lg(changes.mtx);

@@ -390,7 +390,6 @@ class CsvChangeGenerator {
     }
 
     void addChangesFromMapping(ChangeConvertedMapping& mapped) {
-        // TODO: decide wether insert, update, delete, add / subtract instead of set
         for (TableCells* cells : mapped.orderedCells) {
             if (!cells) {
                 continue;
