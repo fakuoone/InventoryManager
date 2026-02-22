@@ -1,8 +1,8 @@
 #pragma once
 
 #include "autoInv.hpp"
+#include "dataTypes.hpp"
 #include "dbService.hpp"
-#include "userInterface/uiTypes.hpp"
 #include "userInterface/widgets.hpp"
 
 #include <filesystem>
@@ -15,7 +15,14 @@ static constexpr float INNER_PADDING = 3.0f;
 static constexpr float INNER_TEXT_PADDING = 2.0f;
 static constexpr float OUTER_PADDING = 3.0f;
 
-enum class mappingTypes { HEADER_HEADER, HEADER_API, API_HEADER };
+enum class MappingTypes { HEADER_HEADER, HEADER_API, API_HEADER };
+
+enum class DragResult { ALLOWED, SUCCESS, WRONG_TYPE, EXISTING, NOT_MAPPABLE, OTHER };
+
+struct DragState {
+    DragResult result;
+    bool hovered;
+};
 
 static constexpr std::string_view imguiMappingDragString = "MAPPING";
 
@@ -25,7 +32,7 @@ struct MappingDrawing {
 
 struct DbDestinationDetail {
     std::string table;
-    tHeaderInfo header;
+    HeaderInfo header;
     MappingIdType id;
     bool mappable = false;
 };
@@ -35,6 +42,7 @@ struct ApiDestinationDetail {
     MappingIdType id;
     std::string example;
     std::string attribute;
+    DB::TypeCategory dataCategory;
 };
 
 struct SourceDetail {
@@ -42,6 +50,7 @@ struct SourceDetail {
     std::string apiSelector;  // for api selector
     std::string example;
     MappingIdType id;
+    DB::TypeCategory dataCategory;
 };
 
 class MappingSource {
@@ -51,7 +60,7 @@ class MappingSource {
     float singleAttributeHeight;
 
   public:
-    MappingSource(const std::string& cPrimary, const std::string& cApiSelector, const std::string& cExample);
+    MappingSource(const std::string& cPrimary, const std::string& cApiSelector, const std::string& cExample, DB::TypeCategory cDataType);
     ~MappingSource();
     static void setInteractionHandler(CsvMappingVisualizer* handler);
     const std::string& getAttribute() const;
@@ -82,7 +91,7 @@ class MappingDestinationDb : public MappingDestination {
         : MappingDestination(cMappable), table(cTable), headers(cHeaders) {}
 
     void draw(float width) override;
-    bool handleDrag(DbDestinationDetail& headerInfo);
+    DragState handleDrag(DbDestinationDetail& headerInfo);
 };
 
 class MappingDestinationToApi : public MappingDestination {
@@ -91,12 +100,12 @@ class MappingDestinationToApi : public MappingDestination {
     ApiDestinationDetail data;
     std::vector<MappingSource> selectedFields;
     void drawPreview(ImVec2 startUp);
-    bool handleDrag(ApiDestinationDetail& detail);
+    DragState handleDrag(ApiDestinationDetail& detail);
     bool beginDrag();
 
   public:
-    ApiPreviewState* previewData;
-    MappingDestinationToApi(ApiDestinationDetail cData, ApiPreviewState* cPreviewData, bool cMappable)
+    UI::ApiPreviewState* previewData;
+    MappingDestinationToApi(ApiDestinationDetail cData, UI::ApiPreviewState* cPreviewData, bool cMappable)
         : MappingDestination(cMappable), data(cData), previewData(cPreviewData) {}
 
     void draw(float width) override;

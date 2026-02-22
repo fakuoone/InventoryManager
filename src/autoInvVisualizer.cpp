@@ -3,24 +3,22 @@
 
 namespace AutoInv {
 
-void CsvMappingVisualizer::setData(std::shared_ptr<const completeDbData> newData) {
+void CsvMappingVisualizer::setData(std::shared_ptr<const CompleteDbData> newData) {
     dbData = newData;
     destAnchors = WidgetAnchors();
     sourceAnchors = WidgetAnchors();
     csvHeaderWidgets.clear();
     dbHeaderWidgets.clear();
     mappingsN.clear();
-    // mappingsSToDb.clear();
     mappingsToApiWidgets.clear();
     mappingsToApiWidgets.clear();
     mappingsDrawingInfo.clear();
-    // TODO: Reset old mappings etc
 
     MappingIdType id = 0;
     for (const std::string& s : dbData->tables) {
         std::vector<DbDestinationDetail> destDetails;
-        for (const tHeaderInfo& header : dbData->headers.at(s).data) {
-            destDetails.push_back(DbDestinationDetail(s, header, id, header.type != headerType::PRIMARY_KEY));
+        for (const HeaderInfo& header : dbData->headers.at(s).data) {
+            destDetails.push_back(DbDestinationDetail(s, header, id, header.type != DB::HeaderTypes::PRIMARY_KEY));
             destAnchors.anchors[id] = ImVec2();
             id++;
         }
@@ -48,9 +46,7 @@ MappingIdType CsvMappingVisualizer::getNextIdDest() {
 }
 
 void CsvMappingVisualizer::removeSourceAnchor(MappingIdType id) {
-    if (sourceAnchors.largestId == id) {
-        sourceAnchors.largestId--;
-    }
+    if (sourceAnchors.largestId == id) { sourceAnchors.largestId--; }
     sourceAnchors.anchors.erase(id);
 }
 
@@ -59,39 +55,42 @@ void CsvMappingVisualizer::handleApiClick(MappingDestinationToApi& destination) 
     api.fetchExample(destination.getExample(), *destination.previewData);
 }
 
-bool CsvMappingVisualizer::handleDrag(ApiDestinationDetail& destination, const ImGuiPayload* payload) {
-    // TODO: complete function
+DragResult CsvMappingVisualizer::handleDrag(ApiDestinationDetail& destination, const ImGuiPayload* payload) {
     if (payload) {
+        if (!payload->Data) { return DragResult::OTHER; }
+        if (std::string_view(payload->DataType) != imguiMappingDragString) { return DragResult::OTHER; }
         const SourceDetail source = *static_cast<const SourceDetail*>(payload->Data);
-        if (hasMapping(source, destination.id)) {
-            return false;
+        if (hasMapping(source, destination.id)) { return DragResult::EXISTING; }
+        if (source.dataCategory != destination.dataCategory && destination.dataCategory != DB::TypeCategory::ANY) {
+            return DragResult::WRONG_TYPE;
         }
-        if (std::string_view(payload->DataType) != imguiMappingDragString) {
-            return false;
-        }
+        // SUCCESS PATH
         if (payload->IsDelivery()) {
+            logger.pushLog(Log{"PAYLOAD DELIVERED"});
             createMappingToApi(source, destination);
+            return DragResult::SUCCESS;
         }
-        return true;
+        return DragResult::ALLOWED;
     }
-    return false;
+    return DragResult::OTHER;
 }
 
-bool CsvMappingVisualizer::handleDrag(DbDestinationDetail& destination, const ImGuiPayload* payload) {
+DragResult CsvMappingVisualizer::handleDrag(DbDestinationDetail& destination, const ImGuiPayload* payload) {
     if (payload) {
+        if (!payload->Data) { return DragResult::OTHER; }
+        if (std::string_view(payload->DataType) != imguiMappingDragString) { return DragResult::OTHER; }
         const SourceDetail source = *static_cast<const SourceDetail*>(payload->Data);
-        if (hasMapping(source, destination.id)) {
-            return false;
-        }
-        if (std::string_view(payload->DataType) != imguiMappingDragString) {
-            return false;
-        }
+        if (hasMapping(source, destination.id)) { return DragResult::EXISTING; }
+        if (source.dataCategory != DB::getCategory(destination.header.dataType)) { return DragResult::WRONG_TYPE; }
+        // SUCCESS PATH
         if (payload->IsDelivery()) {
+            logger.pushLog(Log{"PAYLOAD DELIVERED"});
             createMappingToDb(source, destination);
+            return DragResult::SUCCESS;
         }
-        return true;
+        return DragResult::ALLOWED;
     }
-    return false;
+    return DragResult::OTHER;
 }
 
 } // namespace AutoInv

@@ -9,7 +9,7 @@
 
 #include "logger.hpp"
 
-#include "userInterface/uiTypes.hpp"
+#include "dataTypes.hpp"
 #include "userInterface/widgets.hpp"
 
 #include <array>
@@ -29,9 +29,9 @@ class DbVisualizer {
     ChangeExeService& changeExe;
     Logger& logger;
 
-    DataStates& dataStates;
+    UI::DataStates& dataStates;
 
-    std::shared_ptr<const completeDbData> dbData;
+    std::shared_ptr<const CompleteDbData> dbData;
 
     std::shared_ptr<uiChangeInfo> uiChanges;
     editingData edit;
@@ -45,7 +45,7 @@ class DbVisualizer {
 
     void drawChangeOverview() {
         ImGui::Text("CHANGE OVERVIEW");
-        ImGui::BeginDisabled(dataStates.dbData != DataState::DATA_READY);
+        ImGui::BeginDisabled(dataStates.dbData != UI::DataState::DATA_READY);
         if (ImGui::Button("Execute all")) {
             changeExe.requestChangeApplication(SqlAction::EXECUTE);
         }
@@ -112,8 +112,8 @@ class DbVisualizer {
             const Widgets::DataEvent event = std::get<Widgets::DataEvent>(tableEvent.origin);
             switch (tableEvent.type.action) {
             case Widgets::ActionType::HEADER: {
-                const tHeaderVector& header = dbData->headers.at(event.tableName).data;
-                auto it = std::find_if(header.begin(), header.end(), [&](const tHeaderInfo& h) { return h.name == event.headerName; });
+                const HeaderVector& header = dbData->headers.at(event.tableName).data;
+                auto it = std::find_if(header.begin(), header.end(), [&](const HeaderInfo& h) { return h.name == event.headerName; });
                 if (it != header.end()) {
                     selectedTable = it->referencedTable;
                 }
@@ -174,10 +174,10 @@ class DbVisualizer {
 
   public:
     DbVisualizer(
-        DbService& cDbService, ChangeTracker& cChangeTracker, ChangeExeService& cChangeExe, Logger& cLogger, DataStates& cDataStates)
+        DbService& cDbService, ChangeTracker& cChangeTracker, ChangeExeService& cChangeExe, Logger& cLogger, UI::DataStates& cDataStates)
         : dbService(cDbService), changeTracker(cChangeTracker), changeExe(cChangeExe), logger(cLogger), dataStates(cDataStates) {}
 
-    void setData(std::shared_ptr<const completeDbData> newData) {
+    void setData(std::shared_ptr<const CompleteDbData> newData) {
         dbData = newData;
         dbTable.setData(newData);
     }
@@ -196,7 +196,7 @@ class DbVisualizer {
             };
             if (ImGui::BeginTabItem("Tables", nullptr, flags)) {
                 if (ImGui::BeginTabBar("MainTabs")) {
-                    if (dataStates.dbData == DataState::DATA_OUTDATED || dataStates.dbData == DataState::DATA_READY) {
+                    if (dataStates.dbData == UI::DataState::DATA_OUTDATED || dataStates.dbData == UI::DataState::DATA_READY) {
                         for (const auto& [table, data] : dbData->headers) {
                             ImGuiTabItemFlags flagsHeader = ImGuiTabItemFlags_None;
                             if (selectedTable == table) {
@@ -204,7 +204,7 @@ class DbVisualizer {
                                 flagsHeader |= ImGuiTabItemFlags_SetSelected;
                             }
                             if (ImGui::BeginTabItem(table.c_str(), nullptr, flagsHeader)) {
-                                ImGui::BeginDisabled(dataStates.dbData != DataState::DATA_READY);
+                                ImGui::BeginDisabled(dataStates.dbData != UI::DataState::DATA_READY);
                                 dbTable.drawTable(table);
                                 handleTableEvent();
                                 ImGui::EndDisabled();

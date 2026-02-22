@@ -54,7 +54,7 @@ struct Event {
 };
 
 struct CellBoilerPlate {
-    const tHeaderInfo header;
+    const HeaderInfo header;
     const ImVec2& pos;
     const Change* change;
     float width;
@@ -70,7 +70,7 @@ concept drawFunction = std::invocable<F, const CellBoilerPlate&, const Rect&, Ar
 
 class DbTable {
   private:
-    std::shared_ptr<const completeDbData> dbData;
+    std::shared_ptr<const CompleteDbData> dbData;
     std::shared_ptr<uiChangeInfo> uiChanges;
     std::unique_ptr<Change> rowChange;
 
@@ -103,7 +103,7 @@ class DbTable {
     void drawSplitterSC(const std::string& tableName, std::size_t index, float rightEdgeAbs);
     void drawColumns(const std::string& tableName);
     void drawUserInputRowFields(const std::string& tableName,
-                                const tHeaderVector& headers,
+                                const HeaderVector& headers,
                                 const std::vector<float>& splitterPoss,
                                 ImVec2& cursor);
     // Draw one column (all cells). The passed `cellDrawer` is invoked for each data cell.
@@ -112,7 +112,7 @@ class DbTable {
     // Helper: draw the first column cell (left reserved area) for the current row and update
     // lastEvent
     EventTypes handleFirstColumnIfNeeded(
-        const std::string& tableName, const tHeaderInfo& headerName, const std::string& pKey, ImVec2& cursor, const Change* change);
+        const std::string& tableName, const HeaderInfo& headerName, const std::string& pKey, ImVec2& cursor, const Change* change);
 
     // Helper: draw the last/action column(s) for the current row and update lastEvent
     EventTypes handleLastActionIfNeeded(const std::string& tableName,
@@ -127,7 +127,7 @@ class DbTable {
 
     // Render insertion changes for the given column (draws rows that are INSERT_ROW)
     void drawInsertionCellsOfColumn(const std::string& tableName,
-                                    const tHeaderInfo& headerInfo,
+                                    const HeaderInfo& headerInfo,
                                     const std::size_t i,
                                     const std::vector<float>& splitterPoss,
                                     ImVec2& cursor,
@@ -198,7 +198,7 @@ class DbTable {
         : edit(cEdit), selectedTable(cSelectedTable), changeHighlight(cChangeHighlight), logger(cLogger) {}
 
     void drawTable(const std::string& tableName);
-    void setData(std::shared_ptr<const completeDbData> newData);
+    void setData(std::shared_ptr<const CompleteDbData> newData);
     void setChangeData(std::shared_ptr<uiChangeInfo> changeData);
     Event getEvent() const;
     void popEvent();

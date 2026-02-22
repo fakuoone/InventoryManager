@@ -3,8 +3,11 @@
 
 namespace AutoInv {
 
-MappingSource::MappingSource(const std::string& cSelectedField, const std::string& cHeader, const std::string& cExample)
-    : data(cSelectedField, cHeader, cExample, parentVisualizer->getNextIdSource()) {}
+MappingSource::MappingSource(const std::string& cSelectedField,
+                             const std::string& cHeader,
+                             const std::string& cExample,
+                             DB::TypeCategory cDataType)
+    : data(cSelectedField, cHeader, cExample, parentVisualizer->getNextIdSource(), cDataType) {}
 MappingSource::~MappingSource() {
     parentVisualizer->removeSourceAnchor(data.id);
     parentVisualizer->removeMappingToDbFromSource(data.id);
@@ -106,9 +109,7 @@ void MappingDestination::setInteractionHandler(CsvMappingVisualizer* handler) {
 }
 
 void MappingDestinationDb::draw(float width) {
-    if (headers.size() == 0) {
-        return;
-    }
+    if (headers.size() == 0) { return; }
     ImGui::PushID(this);
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -144,21 +145,37 @@ void MappingDestinationDb::draw(float width) {
     for (auto& header : headers) {
         // draw anchor
         const ImVec2 anchorCenter = ImVec2(cursor.x + INNER_PADDING + anchorRadius, cursor.y + headerHeight / 2);
-        if (header.mappable) {
-            drawList->AddCircleFilled(anchorCenter, anchorRadius, Widgets::colHoveredGrey);
-        }
 
         // draw headers
         const float cellWidth = widthPadded / 2 - INNER_PADDING;
         ImGui::SetCursorScreenPos(cursor);
         ImGui::InvisibleButton(header.header.name.c_str(), ImVec2(cellWidth, headerHeight));
         bool hovered = ImGui::IsItemHovered();
-        bool draggedTo = handleDrag(header);
-        if ((hovered || draggedTo) && header.mappable) {
-            ImU32 colBg = draggedTo ? Widgets::colSelected.first : Widgets::colGreyBg;
-            ImU32 colBorder = draggedTo ? Widgets::colSelected.second : Widgets::colHoveredGrey;
 
-            drawList->AddRectFilled(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + headerHeight), colBg, 0.0f);
+        DragState dragState = handleDrag(header);
+        hovered = hovered || dragState.hovered;
+
+        if (!header.mappable) { dragState.result = DragResult::NOT_MAPPABLE; }
+
+        ImU32 colBorder = Widgets::colHoveredGrey;
+        ImU32 colBg = Widgets::colGreyBg;
+        bool showBorder = false;
+        switch (dragState.result) {
+        case DragResult::SUCCESS:
+            colBg = Widgets::colSelected.first;
+            colBorder = Widgets::colSelected.second;
+            [[fallthrough]];
+        case DragResult::ALLOWED:
+            colBg = hovered ? Widgets::colSelected.first : 0x0;
+            colBorder = Widgets::colSelected.second;
+            showBorder = true;
+            break;
+        default:
+            break;
+        }
+
+        drawList->AddRectFilled(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + headerHeight), colBg, 0.0f);
+        if (hovered || showBorder) {
             drawList->AddRect(cursor, ImVec2(cursor.x + widthPadded / 2 - 2 * INNER_PADDING, cursor.y + headerHeight), colBorder, 0.0f);
         }
 
@@ -166,7 +183,8 @@ void MappingDestinationDb::draw(float width) {
                           hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
                           header.header.name.c_str());
 
-        // store anchor in parent
+        // Anchor
+        if (header.mappable) { drawList->AddCircleFilled(anchorCenter, anchorRadius, Widgets::colHoveredGrey); }
         parentVisualizer->storeAnchorDest(header.id, anchorCenter);
 
         cursor.y += headerHeight;
@@ -188,26 +206,22 @@ void MappingDestinationDb::draw(float width) {
     ImGui::PopID();
 }
 
-template <typename T> bool handleDragInternal(CsvMappingVisualizer* parentVisualizer, const mappingTypes mapType, T& destination) {
-    bool success = false;
-    if (ImGui::BeginDragDropTarget()) {
-        const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
-            imguiMappingDragString.data(), ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
-        success = parentVisualizer->handleDrag(destination, payload);
-        ImGui::EndDragDropTarget();
-    }
-    return success;
+// TODO: Who does this function belong to?
+template <typename T> DragState handleDragInternal(CsvMappingVisualizer* parentVisualizer, const MappingTypes mapType, T& destination) {
+    bool beginTarget = ImGui::BeginDragDropTarget();
+    const ImGuiPayload* payload =
+        beginTarget ? ImGui::AcceptDragDropPayload(imguiMappingDragString.data(),
+                                                   ImGuiDragDropFlags_AcceptBeforeDelivery | ImGuiDragDropFlags_AcceptNoDrawDefaultRect)
+                    : ImGui::GetDragDropPayload();
+
+    DragResult result = parentVisualizer->handleDrag(destination, payload);
+    if (beginTarget) { ImGui::EndDragDropTarget(); }
+    return DragState{result, beginTarget};
 }
 
-bool MappingDestinationDb::handleDrag(DbDestinationDetail& header) {
-    // TODO types need to match
-    if (header.header.type == headerType::PRIMARY_KEY) {
-        return false;
-    }
-    if (!parentVisualizer) {
-        return false;
-    }
-    return handleDragInternal<DbDestinationDetail>(parentVisualizer, mappingTypes::HEADER_HEADER, header);
+DragState MappingDestinationDb::handleDrag(DbDestinationDetail& header) {
+    if (!parentVisualizer) { return DragState{DragResult::OTHER, false}; }
+    return handleDragInternal<DbDestinationDetail>(parentVisualizer, MappingTypes::HEADER_HEADER, header);
 }
 
 bool MappingDestinationToApi::beginDrag() {
@@ -228,9 +242,7 @@ void MappingDestinationToApi::draw(float width) {
     // Calc Height
     float dataPointHeight = ImGui::CalcTextSize(data.example.c_str()).y + 2 * INNER_TEXT_PADDING;
     float dataHeight = dataPointHeight;
-    if (!selectedFields.empty()) {
-        dataHeight = std::max(selectedFields[0].getTotalHeight() * selectedFields.size(), dataHeight);
-    }
+    if (!selectedFields.empty()) { dataHeight = std::max(selectedFields[0].getTotalHeight() * selectedFields.size(), dataHeight); }
 
     ImVec2 begin = ImGui::GetCursorScreenPos();
     begin.x += OUTER_PADDING;
@@ -251,10 +263,6 @@ void MappingDestinationToApi::draw(float width) {
     const float cellWidthLeft = (widthPadded * 0.4) - INNER_PADDING;
     const float cellWidthRight = (widthPadded * 0.6) - INNER_PADDING;
     {
-        // LEFT side drag destination
-        if (data.mappable) {
-            drawList->AddCircleFilled(anchorCenterLeft, anchorRadius, Widgets::colHoveredGrey);
-        }
 
         ImGui::SetCursorScreenPos(cursor);
         ImGui::InvisibleButton(data.example.c_str(), ImVec2(cellWidthLeft, dataHeight));
@@ -273,13 +281,30 @@ void MappingDestinationToApi::draw(float width) {
         ImVec2 previewPos = ImGui::GetWindowPos();
         drawPreview(ImVec2(previewPos.x + OUTER_PADDING, previewPos.y + OUTER_PADDING + dataHeight));
 
-        bool draggedTo = handleDrag(data);
+        DragState dragState = handleDrag(data);
+        hovered = hovered || dragState.hovered;
 
-        if ((hovered || draggedTo) && data.mappable) {
-            ImU32 colBg = draggedTo ? Widgets::colSelected.first : Widgets::colGreyBg;
-            ImU32 colBorder = draggedTo ? Widgets::colSelected.second : Widgets::colHoveredGrey;
+        if (!data.mappable) { dragState.result = DragResult::NOT_MAPPABLE; }
 
-            drawList->AddRectFilled(cursor, ImVec2(cursor.x + cellWidthLeft - 2 * INNER_PADDING, cursor.y + dataHeight), colBg, 0.0f);
+        ImU32 colBorder = Widgets::colHoveredGrey;
+        ImU32 colBg = Widgets::colGreyBg;
+        bool showBorder = false;
+        switch (dragState.result) {
+        case DragResult::SUCCESS:
+            colBg = Widgets::colSelected.first;
+            colBorder = Widgets::colSelected.second;
+            [[fallthrough]];
+        case DragResult::ALLOWED:
+            colBg = hovered ? Widgets::colSelected.first : 0x0;
+            colBorder = Widgets::colSelected.second;
+            showBorder = true;
+            break;
+        default:
+            break;
+        }
+
+        drawList->AddRectFilled(cursor, ImVec2(cursor.x + cellWidthLeft - 2 * INNER_PADDING, cursor.y + dataHeight), colBg, 0.0f);
+        if (hovered || showBorder) {
             drawList->AddRect(cursor, ImVec2(cursor.x + cellWidthLeft - 2 * INNER_PADDING, cursor.y + dataHeight), colBorder, 0.0f);
         }
 
@@ -288,7 +313,8 @@ void MappingDestinationToApi::draw(float width) {
                           hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
                           data.example.c_str());
 
-        // store anchor in parent
+        // LEFT side drag destination
+        if (data.mappable) { drawList->AddCircleFilled(anchorCenterLeft, anchorRadius, Widgets::colHoveredGrey); }
         parentVisualizer->storeAnchorDest(data.id, anchorCenterLeft);
     }
 
@@ -316,11 +342,9 @@ void MappingDestinationToApi::drawPreview(ImVec2 startUp) {
     }
 }
 
-bool MappingDestinationToApi::handleDrag(ApiDestinationDetail& detail) {
-    if (!parentVisualizer) {
-        return false;
-    }
-    return handleDragInternal<ApiDestinationDetail>(parentVisualizer, mappingTypes::HEADER_API, detail);
+DragState MappingDestinationToApi::handleDrag(ApiDestinationDetail& detail) {
+    if (!parentVisualizer) { return DragState{DragResult::OTHER, false}; }
+    return handleDragInternal<ApiDestinationDetail>(parentVisualizer, MappingTypes::HEADER_API, detail);
 }
 
 const std::string& MappingDestinationToApi::getExample() const {
@@ -352,17 +376,13 @@ Widgets::MouseEventType isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const 
     const bool equalPoints = p1.x == p2.x && p1.y == p2.y;
     const bool xOutOfRange = (io.MousePos.x >= p1.x && io.MousePos.x >= p2.x) || (io.MousePos.x <= p1.x && io.MousePos.x <= p2.x);
     const bool yOutOfRange = (io.MousePos.y >= p1.y && io.MousePos.y >= p2.y) || (io.MousePos.y <= p1.y && io.MousePos.y <= p2.y);
-    if (thickness == 0 || equalPoints || xOutOfRange || yOutOfRange) {
-        return Widgets::MouseEventType::NONE;
-    }
+    if (thickness == 0 || equalPoints || xOutOfRange || yOutOfRange) { return Widgets::MouseEventType::NONE; }
 
     float l21 = std::sqrt(std::pow((p2.y - p1.y), 2) + std::pow((p2.x - p1.x), 2));
     float area = std::abs((p2.y - p1.y) * io.MousePos.x - (p2.x - p1.x) * io.MousePos.y + p2.x * p1.y - p2.y * p1.x);
 
     if (area / l21 < thickness) {
-        if (io.MouseClicked[ImGuiMouseButton_Left]) {
-            return Widgets::MouseEventType::CLICK;
-        }
+        if (io.MouseClicked[ImGuiMouseButton_Left]) { return Widgets::MouseEventType::CLICK; }
         return Widgets::MouseEventType::HOVER;
     }
     return Widgets::MouseEventType::NONE;
@@ -391,9 +411,7 @@ void handleEntry(const nlohmann::json& value,
         bool isSelected = false;
         if (selected) {
             auto it = std::find_if(selected->begin(), selected->end(), [&](const MappingSource& s) { return s.getAttribute() == path; });
-            if (it != selected->end()) {
-                isSelected = true;
-            }
+            if (it != selected->end()) { isSelected = true; }
         }
         if (ImGui::Selectable(label.c_str(), isSelected)) {
             if (selected) {
@@ -402,7 +420,7 @@ void handleEntry(const nlohmann::json& value,
                 if (it != selected->end()) {
                     selected->erase(it);
                 } else {
-                    selected->emplace_back(source, path, valueStr);
+                    selected->emplace_back(source, path, valueStr, DB::getCategory(DB::toDbType(valueStr)));
                 }
             }
         }

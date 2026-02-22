@@ -52,6 +52,29 @@ struct MappingHash {
     }
 };
 
+struct TableCells {
+    std::string table;
+    Change::colValMap cells;
+};
+
+struct PreciseMapLocationCombined {
+    // helper for differentiating api and csv
+    PreciseMapLocation locations;
+    SourceType source;
+};
+
+struct TargetData {
+    std::vector<PreciseMapLocationCombined> dbHeaders;
+};
+
+struct ChangeConvertedMapping {
+    std::vector<std::size_t> columnIndexes;                     // csv columns that actually have a mapping
+    std::unordered_map<std::size_t, TargetData> preciseHeaders; // column-index -> [dbHeaders]
+    std::map<std::string, TableCells> cells;                    // storage for change-cels
+    std::vector<TableCells*> orderedCells;                      // ordered version for optimal change execution
+};
+
+using ApiResultType = std::vector<std::unordered_map<std::string, Change::colValMap>>;
 inline std::vector<std::string> parseLine(const std::string& line) {
     // https://stackoverflow.com/users/25450/sastanin
     enum class csvState { UNQUOTED_FIELD, QUOTED_FIELD, QUOTED_QUOTE };
@@ -106,7 +129,8 @@ inline std::vector<std::string> parseLine(const std::string& line) {
     return fields;
 }
 
-inline std::vector<std::vector<std::string>> readData(std::filesystem::path csv, Logger& logger) {
+inline CSV::Data readData(std::filesystem::path csv, Logger& logger) {
+    // TODO: error handling
     std::ifstream file(csv);
     std::string line;
     std::pair<std::size_t, std::size_t> colCounts = {0, 0};
@@ -120,14 +144,15 @@ inline std::vector<std::vector<std::string>> readData(std::filesystem::path csv,
         if (i > 0) {
             if (colCounts.first != colCounts.second) {
                 logger.pushLog(Log{std::format("ERROR: Parsing csv failed: Row {} has different length.", i)});
-                return std::vector<std::vector<std::string>>{};
+                return CSV::Data{};
             }
         }
         colCounts.second = colCounts.first;
         colCounts.first = 0;
         i++;
     }
-    return rows;
+    std::vector<DB::TypeCategory> types = CSV::determineTypes(rows);
+    return CSV::Data{std::move(rows), std::move(types)};
 }
 
 class CsvChangeGenerator {
@@ -139,9 +164,8 @@ class CsvChangeGenerator {
     Config& config;
     Logger& logger;
 
-    std::shared_ptr<const completeDbData> dbData;
-
-    std::vector<std::vector<std::string>> csvData;
+    std::shared_ptr<const CompleteDbData> dbData;
+    CSV::Data csvData;
     std::future<bool> fRead;
     std::future<void> fExecMappings;
 
@@ -168,38 +192,14 @@ class CsvChangeGenerator {
 
     bool run(std::filesystem::path csv) {
         csvData = readData(csv, logger);
-        return !csvData.empty();
+        return !csvData.rows.empty();
     }
-
-    struct TableCells {
-        std::string table;
-        Change::colValMap cells;
-    };
-
-    struct PreciseMapLocationCombined {
-        // helper for differentiating api and csv
-        PreciseMapLocation locations;
-        SourceType source;
-    };
-
-    struct TargetData {
-        std::vector<PreciseMapLocationCombined> dbHeaders;
-    };
-
-    struct ChangeConvertedMapping {
-        std::vector<std::size_t> columnIndexes;                     // csv columns that actually have a mapping
-        std::unordered_map<std::size_t, TargetData> preciseHeaders; // column-index -> [dbHeaders]
-        std::map<std::string, TableCells> cells;                    // storage for change-cels
-        std::vector<TableCells*> orderedCells;                      // ordered version for optimal change execution
-    };
-
-    using ApiResultType = std::vector<std::unordered_map<std::string, Change::colValMap>>;
 
     void convertMappings(ChangeConvertedMapping& convertedMapping,
                          std::unordered_set<std::string>& foundTables,
                          const std::vector<MappingCsvToDb>& mappings,
                          SourceType source) {
-        const std::vector<std::string>& csvHeader = csvData[0];
+        const std::vector<std::string>& csvHeader = csvData.rows[0];
 
         for (const MappingCsvToDb& mapping : mappings) {
             // check legality of mapping
@@ -275,7 +275,7 @@ class CsvChangeGenerator {
             return;
         }
 
-        std::unordered_map<std::string, nlohmann::json> responses; // TODO: potentially class member with lock
+        std::unordered_map<std::string, nlohmann::json> responses;
         for (std::size_t j = 0; j < chunk.size(); ++j) {
             resultChunk[j] = std::unordered_map<std::string, Change::colValMap>{};
             const std::vector<std::string>& row = chunk[j];
@@ -293,9 +293,8 @@ class CsvChangeGenerator {
         }
     }
 
-    ApiResultType fetchApiData(ChangeConvertedMapping& mapped) {
-        // TODO: Enter api data into mapped
-        std::size_t totalRows = csvData.size();
+    ApiResultType fetchApiData() {
+        std::size_t totalRows = csvData.rows.size();
         if (totalRows <= 1) {
             return ApiResultType{};
         }
@@ -315,7 +314,7 @@ class CsvChangeGenerator {
 
         for (std::size_t i = 0; i < threadCount; ++i) {
             std::size_t currentChunkSize = baseChunkSize + (i < remainder ? 1 : 0);
-            std::span<std::vector<std::string>> chunk = std::span(csvData).subspan(chunkStart == 0 ? 1 : chunkStart, currentChunkSize);
+            std::span<std::vector<std::string>> chunk = std::span(csvData.rows).subspan(chunkStart == 0 ? 1 : chunkStart, currentChunkSize);
             std::span<std::unordered_map<std::string, Change::colValMap>> resultChunk =
                 std::span(results).subspan(chunkStart, currentChunkSize);
             chunkStart += currentChunkSize;
@@ -367,7 +366,7 @@ class CsvChangeGenerator {
                 visitedTables.insert(preciseHeader.locations.outerIdentifier);
                 for (const auto& header : dbData->headers.at(preciseHeader.locations.outerIdentifier).data) {
                     if (mapped.cells[preciseHeader.locations.outerIdentifier].cells.contains(header.name) || header.nullable ||
-                        header.type == headerType::PRIMARY_KEY) {
+                        header.type == DB::HeaderTypes::PRIMARY_KEY) {
                         continue;
                     }
                     mapped.cells[preciseHeader.locations.outerIdentifier].cells.emplace(header.name, std::format("TODO{}", missingParam++));
@@ -420,8 +419,8 @@ class CsvChangeGenerator {
         ChangeConvertedMapping mapped = convertMapping();
 
         std::vector<Change> changes;
-        ApiResultType results = fetchApiData(mapped);
-        for (const auto& row : csvData) {
+        ApiResultType results = fetchApiData();
+        for (const auto& row : csvData.rows) {
             if (i == 0) {
                 i++;
                 continue;
@@ -435,7 +434,7 @@ class CsvChangeGenerator {
     }
 
   public:
-    void setData(std::shared_ptr<const completeDbData> newData) { dbData = newData; }
+    void setData(std::shared_ptr<const CompleteDbData> newData) { dbData = newData; }
 
     bool dataValid(bool once) {
         if (!dbData) {
@@ -455,12 +454,13 @@ class CsvChangeGenerator {
 
     void read(std::filesystem::path csv) { fRead = threadPool.submit(&CsvChangeGenerator::run, this, csv); }
 
-    const std::vector<std::string>& getHeader() { return csvData.front(); }
+    const std::vector<std::string>& getHeader() { return csvData.rows.front(); }
 
-    const std::vector<std::string>& getFirstRow() { return *(csvData.begin() + 1); }
+    const std::vector<DB::TypeCategory>& getHeaderTypes() { return csvData.columnTypes; }
+
+    const std::vector<std::string>& getFirstRow() { return *(csvData.rows.begin() + 1); }
 
     void setMappingsToDb(const std::vector<MappingNumber> mappings) {
-        // TODO: Get actual names instead of ids
         std::vector<MappingCsvToDb> mappingsFromCsv;
         std::vector<MappingCsvToDb> mappingsFromApi;
         mappingsFromCsv.reserve(mappings.size());

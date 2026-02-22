@@ -31,8 +31,9 @@ IndentPPDirectives: None
 
 # Function formatting
 AllowShortFunctionsOnASingleLine: Inline
-AllowShortIfStatementsOnASingleLine: Never
+AllowShortIfStatementsOnASingleLine: OnlyFirstIf
 AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: true
 
 # Argument & parameter breaking
 BinPackArguments: false
@@ -57,7 +58,7 @@ IncludeBlocks: Preserve
 
 # Comments
 ReflowComments: true
-CommentPragmas: '^ IWYU pragma:'
+CommentPragmas: "^ IWYU pragma:"
 
 # Language
 Language: Cpp

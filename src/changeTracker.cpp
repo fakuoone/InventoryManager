@@ -63,6 +63,7 @@ Change& ChangeTracker::manageConflictL(Change& newChange) {
     case ChangeType::DELETE_ROW:
         return existingChange;
     case ChangeType::INSERT_ROW:
+        [[fallthrough]];
     case ChangeType::UPDATE_CELLS:
         mergeCellChanges(existingChange, newChange);
         dbService.validateChange(existingChange, false);
@@ -95,8 +96,6 @@ void ChangeTracker::propagateValidity(Change& change) {
 }
 
 ChangeAddResult ChangeTracker::addChange(Change change, std::optional<uint32_t> existingRowId) {
-    // TODO: (when generating from csv) Adds children changes for "parts" that already exist as dbEntries and shouldnt be collected as
-    // required from dbService.
     logDetail(std::format("Attempting to add change to table {}.", change.getTable()));
     {
         std::lock_guard<std::mutex> lg(changes.mtx);
@@ -235,7 +234,7 @@ bool ChangeTracker::releaseDependancy(Change& change, const Change& rC) {
 
     // find new equivalent value corresponding to the old ukey-value of rC
     for (const auto& [col, val] : change.getCells()) {
-        tHeaderInfo headerInfoChange = dbService.getTableHeaderInfo(change.getTable(), col);
+        HeaderInfo headerInfoChange = dbService.getTableHeaderInfo(change.getTable(), col);
         if (headerInfoChange.referencedTable == rCTableName) {
             newRValue = val;
             break;

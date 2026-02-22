@@ -23,18 +23,18 @@ class DbService {
     Config& config;
     Logger& logger;
 
-    std::future<completeDbData> fCompleteDbData;
-    std::shared_ptr<const completeDbData> dbData;
-    std::unique_ptr<completeDbData> pendingData;
+    std::future<CompleteDbData> fCompleteDbData;
+    std::shared_ptr<const CompleteDbData> dbData;
+    std::unique_ptr<CompleteDbData> pendingData;
     std::future<std::map<std::string, std::size_t>> fMaxPKeys;
 
     std::atomic<bool> dataAvailable{false};
 
-    std::map<std::string, std::size_t> calcMaxPKeys(completeDbData data) {
+    std::map<std::string, std::size_t> calcMaxPKeys(CompleteDbData data) {
         std::map<std::string, std::size_t> maxPKeys;
         for (const auto& table : data.tables) {
             // Get max index of pkeys
-            const tStringVector& keyVector = data.tableRows.at(table).at(data.headers.at(table).pkey);
+            const StringVector& keyVector = data.tableRows.at(table).at(data.headers.at(table).pkey);
             auto it2 = std::max_element(keyVector.begin(), keyVector.end(), [](const std::string& key1, const std::string& key2) {
                 return std::stoll(key1) < std::stoll(key2);
             });
@@ -54,7 +54,7 @@ class DbService {
             if (!validateCompleteDbData(data)) {
                 return false;
             }
-            pendingData = std::make_unique<completeDbData>(std::move(data));
+            pendingData = std::make_unique<CompleteDbData>(std::move(data));
             fMaxPKeys = pool.submit(&DbService::calcMaxPKeys, this, std::cref(*pendingData));
         }
 
@@ -86,7 +86,7 @@ class DbService {
         fCompleteDbData = pool.submit(&DbInterface::acquireAllTablesRows, &dbInterface);
     }
 
-    std::expected<std::shared_ptr<const completeDbData>, bool> getCompleteData() {
+    std::expected<std::shared_ptr<const CompleteDbData>, bool> getCompleteData() {
         if (isDataReady()) {
             return dbData;
         } else {
@@ -95,10 +95,10 @@ class DbService {
     }
 
     IndexPKeyPair findIndexAndPKeyOfExisting(const std::string& table, const Change::colValMap& cells) const {
-        const tHeadersInfo& headers = dbData->headers.at(table);
+        const HeadersInfo& headers = dbData->headers.at(table);
         const std::string& uKeyName = headers.uKeyName;
-        const tColumnDataMap& row = dbData->tableRows.at(table);
-        const tStringVector& uKeyColumn = row.at(uKeyName);
+        const ColumnDataMap& row = dbData->tableRows.at(table);
+        const StringVector& uKeyColumn = row.at(uKeyName);
         IndexPKeyPair result{INVALID_ID, INVALID_ID};
 
         if (!cells.contains(uKeyName)) {
@@ -116,10 +116,10 @@ class DbService {
     }
 
     bool hasQuantityColumn(const std::string& table) const {
-        const tHeadersInfo& headers = dbData->headers.at(table);
+        const HeadersInfo& headers = dbData->headers.at(table);
         const std::string& quantityColumn = config.getQuantityColumn();
         auto itHasQuantityHeader =
-            std::find_if(headers.data.begin(), headers.data.end(), [&](const tHeaderInfo& h) { return h.name == quantityColumn; });
+            std::find_if(headers.data.begin(), headers.data.end(), [&](const HeaderInfo& h) { return h.name == quantityColumn; });
         return itHasQuantityHeader != headers.data.end();
     }
 
@@ -145,7 +145,7 @@ class DbService {
         }
     }
 
-    bool validateCompleteDbData(const completeDbData& data) const {
+    bool validateCompleteDbData(const CompleteDbData& data) const {
         // tablecount matches everywhere
         std::size_t tableCount = data.tables.size();
         if (tableCount != data.headers.size() || tableCount != data.tableRows.size()) {
@@ -161,7 +161,7 @@ class DbService {
             // columns have the same values as rows have keys
             bool pKeyFound{false};
             for (const auto& header : data.headers.at(table).data) {
-                if (header.type == headerType::PRIMARY_KEY) {
+                if (header.type == DB::HeaderTypes::PRIMARY_KEY) {
                     pKeyFound = true;
                 };
                 if (!data.tableRows.at(table).contains(header.name)) {
@@ -178,7 +178,7 @@ class DbService {
     }
 
     bool validateChange(Change& change, bool fromGeneration) const {
-        const tStringVector& tables = dbData->tables;
+        const StringVector& tables = dbData->tables;
         auto it = std::find(tables.begin(), tables.end(), change.getTable());
         if (it == tables.end()) {
             return false;
@@ -196,10 +196,10 @@ class DbService {
             [[fallthrough]];
         case ChangeType::UPDATE_CELLS: {
             const Change::colValMap& cells = change.getCells();
-            const tHeadersInfo& headers = dbData->headers.at(change.getTable());
+            const HeadersInfo& headers = dbData->headers.at(change.getTable());
             // check non-nullable column count
             std::size_t reqColumnCount =
-                std::count_if(headers.data.begin(), headers.data.end(), [](const tHeaderInfo& h) { return !h.nullable; }) - 1;
+                std::count_if(headers.data.begin(), headers.data.end(), [](const HeaderInfo& h) { return !h.nullable; }) - 1;
             if (reqColumnCount > cells.size() && change.getType() == ChangeType::INSERT_ROW) {
                 setValidity = false;
             }
@@ -211,7 +211,7 @@ class DbService {
             }
 
             for (const auto& header : headers.data) {
-                if (header.type == headerType::PRIMARY_KEY) {
+                if (header.type == DB::HeaderTypes::PRIMARY_KEY) {
                     if (cells.contains(header.name)) {
                         logger.pushLog(Log{std::format("ERROR: Change is not allowed to provide the primary key.")});
                         change.setLocalValidity(false);
@@ -254,7 +254,7 @@ class DbService {
     std::vector<Change> getRequiredChanges(const Change& change, const std::map<std::string, std::size_t>& ids) const {
         const std::string& table = change.getTable();
         std::vector<Change> changes;
-        const tHeadersInfo& headers = dbData->headers.at(table);
+        const HeadersInfo& headers = dbData->headers.at(table);
         const Change::colValMap& cells = change.getCells();
 
         // early return if the thing already exists in its entirety -> TODO: might tank performance?,
@@ -267,8 +267,8 @@ class DbService {
 
         for (const auto& [col, val] : cells) {
             // find foreign key thats required
-            auto it1 = std::ranges::find_if(headers.data, [&](const tHeaderInfo& h) {
-                return h.name == col && (h.type == headerType::FOREIGN_KEY ||
+            auto it1 = std::ranges::find_if(headers.data, [&](const HeaderInfo& h) {
+                return h.name == col && (h.type == DB::HeaderTypes::FOREIGN_KEY ||
                                          !h.referencedTable.empty()); // not very clean. If there are more cases where the enum is no
                                                                       // sufficient, the internal enum design needs to be refactored
             });
@@ -337,9 +337,9 @@ class DbService {
 
     std::string getTableUKey(const std::string& table) const { return dbData->headers.at(table).uKeyName; }
 
-    tHeaderInfo getTableHeaderInfo(const std::string& table, const std::string& header) const {
-        const tHeaderVector& headers = dbData->headers.at(table).data;
-        auto it = std::find_if(headers.begin(), headers.end(), [&](const tHeaderInfo& h) { return h.name == header; });
+    HeaderInfo getTableHeaderInfo(const std::string& table, const std::string& header) const {
+        const HeaderVector& headers = dbData->headers.at(table).data;
+        auto it = std::find_if(headers.begin(), headers.end(), [&](const HeaderInfo& h) { return h.name == header; });
         return *it;
     }
 };

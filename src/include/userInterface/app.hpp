@@ -9,10 +9,10 @@
 #include "dbService.hpp"
 #include "logger.hpp"
 
+#include "dataTypes.hpp"
 #include "userInterface/autoInvVisualizer.hpp"
 #include "userInterface/dbDataVisualizer.hpp"
 #include "userInterface/imGuiDX11Context.hpp"
-#include "userInterface/uiTypes.hpp"
 
 class App {
   private:
@@ -27,7 +27,7 @@ class App {
     AutoInv::ChangeGeneratorFromOrder& orderReader;
     Logger& logger;
 
-    DataStates dataStates;
+    UI::DataStates dataStates;
 
     ChangeExeService changeExe{dbService, changeTracker, logger};
     DbVisualizer dbVisualizer{dbService, changeTracker, changeExe, logger, dataStates};
@@ -35,11 +35,11 @@ class App {
     AutoInv::BomVisualizer bomVisualizer{dbService, bomReader, api, logger, dataStates};
     AutoInv::OrderVisualizer orderVisualizer{dbService, orderReader, api, logger, dataStates};
 
-    std::shared_ptr<const completeDbData> dbData;
+    std::shared_ptr<const CompleteDbData> dbData;
     std::shared_ptr<uiChangeInfo> uiChanges;
 
     bool waitForDbData() {
-        if (dataStates.dbData == DataState::DATA_READY) {
+        if (dataStates.dbData == UI::DataState::DATA_READY) {
             return false;
         }
 
@@ -87,28 +87,28 @@ class App {
 
     void handleDataState() {
         switch (dataStates.dbData) {
-        case DataState::INIT:
+        case UI::DataState::INIT:
             dbService.startUp();
-            dataStates.dbData = DataState::WAITING_FOR_DATA;
+            dataStates.dbData = UI::DataState::WAITING_FOR_DATA;
             break;
-        case DataState::DATA_OUTDATED: {
+        case UI::DataState::DATA_OUTDATED: {
             dbService.refetch();
             uiChanges = std::make_shared<uiChangeInfo>(changeTracker.getSnapShot());
             dbVisualizer.setChangeData(uiChanges);
-            dataStates.dbData = DataState::WAITING_FOR_DATA;
+            dataStates.dbData = UI::DataState::WAITING_FOR_DATA;
             break;
         }
-        case DataState::WAITING_FOR_DATA:
+        case UI::DataState::WAITING_FOR_DATA:
             if (waitForDbData()) {
-                dataStates.dbData = DataState::DATA_READY;
+                dataStates.dbData = UI::DataState::DATA_READY;
             }
             break;
-        case DataState::DATA_READY:
+        case UI::DataState::DATA_READY:
             uiChanges = std::make_shared<uiChangeInfo>(changeTracker.getSnapShot());
             dbVisualizer.setChangeData(uiChanges);
             if (changeExe.isChangeApplicationDone()) {
                 changeExe.getSuccessfulChanges();
-                dataStates.dbData = DataState::DATA_OUTDATED;
+                dataStates.dbData = UI::DataState::DATA_OUTDATED;
             }
             break;
         default:
@@ -134,7 +134,7 @@ class App {
         // Top-right corner of the content region
         ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - buttonSize.x - padding.x, padding.y));
         if (ImGui::Button("REFETCH")) {
-            dataStates.dbData = DataState::DATA_OUTDATED;
+            dataStates.dbData = UI::DataState::DATA_OUTDATED;
         }
     }
 

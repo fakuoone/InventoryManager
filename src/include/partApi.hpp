@@ -1,9 +1,9 @@
 #pragma once
 
 #include "config.hpp"
+#include "dataTypes.hpp"
 #include "logger.hpp"
 #include "threadPool.hpp"
-#include "userInterface/uiTypes.hpp"
 
 #include <curl/curl.h>
 #include <nlohmann/json.hpp>
@@ -123,7 +123,7 @@ class PartApi {
         return config.getApiConfig().dummyJson;
     }
 
-    void fetchExample(const std::string& dataPoint, ApiPreviewState& state) {
+    void fetchExample(const std::string& dataPoint, UI::ApiPreviewState& state) {
         // TODO: make a threaded wrapper around a "fetchInternal-function"
         if (!init()) {
             return;

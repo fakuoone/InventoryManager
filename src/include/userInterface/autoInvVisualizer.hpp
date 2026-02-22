@@ -1,9 +1,9 @@
 #pragma once
 
 #include "autoInv.hpp"
+#include "dataTypes.hpp"
 #include "partApi.hpp"
 #include "userInterface/mappingWidgets.hpp"
-#include "userInterface/uiTypes.hpp"
 #include "userInterface/widgets.hpp"
 
 namespace AutoInv {
@@ -21,12 +21,14 @@ class CsvMappingVisualizer {
     DbService& dbService;
     PartApi& api;
     Logger& logger;
-    std::shared_ptr<const completeDbData> dbData;
-    DataStates& dataStates;
+    std::shared_ptr<const CompleteDbData> dbData;
+    UI::DataStates& dataStates;
 
     MappingStage stage = MappingStage::CSV;
 
     std::vector<std::string> headers;
+    std::vector<DB::TypeCategory> headerTypes;
+
     std::vector<std::string> firstRow;
     std::vector<MappingDestinationDb> dbHeaderWidgets;
     std::vector<MappingSource> csvHeaderWidgets;
@@ -34,7 +36,7 @@ class CsvMappingVisualizer {
     std::vector<MappingNumber> mappingsN;
 
     std::vector<MappingDestinationToApi> mappingsToApiWidgets;
-    std::unordered_map<MappingIdType, ApiPreviewState> apiPreviewCache;
+    std::unordered_map<MappingIdType, UI::ApiPreviewState> apiPreviewCache;
 
     WidgetAnchors sourceAnchors;
     WidgetAnchors destAnchors;
@@ -42,7 +44,7 @@ class CsvMappingVisualizer {
 
     std::array<char, 256> csvBuffer;
 
-    CsvMappingVisualizer(DbService& cDbService, PartApi& cApi, Logger& cLogger, DataStates& cDataStates)
+    CsvMappingVisualizer(DbService& cDbService, PartApi& cApi, Logger& cLogger, UI::DataStates& cDataStates)
         : dbService(cDbService), api(cApi), logger(cLogger), dataStates(cDataStates) {}
 
   public:
@@ -60,12 +62,12 @@ class CsvMappingVisualizer {
     MappingIdType getNextIdDest();
     void removeSourceAnchor(MappingIdType id);
 
-    void setData(std::shared_ptr<const completeDbData> newData);
+    void setData(std::shared_ptr<const CompleteDbData> newData);
 
     void handleApiClick(MappingDestinationToApi& destination);
 
-    bool handleDrag(DbDestinationDetail& destination, const ImGuiPayload* payload);
-    bool handleDrag(ApiDestinationDetail& destination, const ImGuiPayload* payload);
+    DragResult handleDrag(DbDestinationDetail& destination, const ImGuiPayload* payload);
+    DragResult handleDrag(ApiDestinationDetail& destination, const ImGuiPayload* payload);
 };
 
 template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer {
@@ -95,9 +97,11 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         const char* btnLabel = "ADD API STAGE";
         if (ImGui::Button(btnLabel)) {
             const std::size_t newIndex = ++destAnchors.largestId;
-            apiPreviewCache.insert_or_assign(newIndex, ApiPreviewState{});
-            mappingsToApiWidgets.emplace_back(MappingDestinationToApi(
-                ApiDestinationDetail(true, ++destAnchors.largestId, "NONE", "API"), &apiPreviewCache.at(newIndex), true));
+            apiPreviewCache.insert_or_assign(newIndex, UI::ApiPreviewState{});
+            mappingsToApiWidgets.emplace_back(
+                MappingDestinationToApi(ApiDestinationDetail(true, ++destAnchors.largestId, "NONE", "API", DB::TypeCategory::ANY),
+                                        &apiPreviewCache.at(newIndex),
+                                        true));
         };
 
         // Stage selector
@@ -130,7 +134,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
   protected:
     Reader& reader;
 
-    CsvVisualizerImpl(DbService& cDbService, Reader& cReader, PartApi& cApi, Logger& cLogger, DataStates& cDataStates)
+    CsvVisualizerImpl(DbService& cDbService, Reader& cReader, PartApi& cApi, Logger& cLogger, UI::DataStates& cDataStates)
         : CsvMappingVisualizer(cDbService, cApi, cLogger, cDataStates), reader(cReader) {
         MappingSource::setInteractionHandler(static_cast<CsvMappingVisualizer*>(this));
         MappingDestinationDb::setInteractionHandler(static_cast<CsvMappingVisualizer*>(this));
@@ -141,7 +145,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         drawHead();
 
         ImGui::BeginChild("READER");
-        if (dataStates.dbData != DataState::DATA_READY) {
+        if (dataStates.dbData != UI::DataState::DATA_READY) {
             return;
         }
 
@@ -211,12 +215,12 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
 
     void checkNewData() {
         if (reader.dataValid(true)) {
-            // TODO clear old data
             headers = reader.getHeader();
+            headerTypes = reader.getHeaderTypes();
             firstRow = reader.getFirstRow();
             csvHeaderWidgets.clear();
             for (std::size_t i = 0; i < headers.size(); ++i) {
-                csvHeaderWidgets.emplace_back(headers[i], std::string{}, firstRow[i]);
+                csvHeaderWidgets.emplace_back(headers[i], std::string{}, firstRow[i], headerTypes[i]);
             }
         }
     }
@@ -336,13 +340,13 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
 
 class BomVisualizer : public CsvVisualizerImpl<ChangeGeneratorFromBom> {
   public:
-    BomVisualizer(DbService& cDbService, ChangeGeneratorFromBom& cReader, PartApi& cApi, Logger& cLogger, DataStates& cDataStates)
+    BomVisualizer(DbService& cDbService, ChangeGeneratorFromBom& cReader, PartApi& cApi, Logger& cLogger, UI::DataStates& cDataStates)
         : CsvVisualizerImpl(cDbService, cReader, cApi, cLogger, cDataStates) {}
 };
 
 class OrderVisualizer : public CsvVisualizerImpl<ChangeGeneratorFromOrder> {
   public:
-    OrderVisualizer(DbService& cDbService, ChangeGeneratorFromOrder& cReader, PartApi& cApi, Logger& cLogger, DataStates& cDataStates)
+    OrderVisualizer(DbService& cDbService, ChangeGeneratorFromOrder& cReader, PartApi& cApi, Logger& cLogger, UI::DataStates& cDataStates)
         : CsvVisualizerImpl(cDbService, cReader, cApi, cLogger, cDataStates) {}
 };
 
