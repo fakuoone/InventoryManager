@@ -52,7 +52,7 @@ class CsvMappingVisualizer {
     virtual void run() = 0;
     virtual void createMappingToDb(const SourceDetail& source, const DbDestinationDetail& dest) = 0;
     virtual void createMappingToApi(const SourceDetail& source, ApiDestinationDetail& dest) = 0;
-    virtual bool hasMapping(const SourceDetail& source, MappingIdType dest) = 0;
+    virtual bool hasMapping(MappingIdType dest, const std::optional<SourceDetail>& source = std::nullopt) = 0;
     virtual void removeMappingToDb(const MappingNumber& mapping) = 0;
     virtual void removeMappingToDbFromSource(const MappingIdType mapping) = 0;
 
@@ -87,9 +87,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
             try {
                 reader.read(std::filesystem::path(std::string(csvBuffer.data())));
-            } catch (const std::exception& e) {
-                logger.pushLog(Log{std::format("ERROR reading order: {}", e.what())});
-            }
+            } catch (const std::exception& e) { logger.pushLog(Log{std::format("ERROR reading order: {}", e.what())}); }
         }
 
         // add api intermediate stage
@@ -119,9 +117,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
 
         // TODO: Validate mappings
         ImGui::BeginDisabled(!hasMappings());
-        if (ImGui::Button("Commit Mapping")) {
-            commitMappings();
-        }
+        if (ImGui::Button("Commit Mapping")) { commitMappings(); }
         ImGui::EndDisabled();
     }
 
@@ -145,9 +141,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         drawHead();
 
         ImGui::BeginChild("READER");
-        if (dataStates.dbData != UI::DataState::DATA_READY) {
-            return;
-        }
+        if (dataStates.dbData != UI::DataState::DATA_READY) { return; }
 
         checkNewData();
 
@@ -200,15 +194,11 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
             ImDrawList* drawlist = ImGui::GetWindowDrawList();
             drawlist->PushClipRect(clipMin, clipMax, true);
             for (const MappingNumber& mapping : mappingsN) {
-                if (drawMapping(mapping, drawlist, mappingsDrawingInfo.at(mapping))) {
-                    toRemove = &mapping;
-                }
+                if (drawMapping(mapping, drawlist, mappingsDrawingInfo.at(mapping))) { toRemove = &mapping; }
             }
             drawlist->PopClipRect();
 
-            if (toRemove) {
-                removeMappingToDb(*toRemove);
-            }
+            if (toRemove) { removeMappingToDb(*toRemove); }
         }
         ImGui::EndChild();
     }
@@ -226,9 +216,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     }
 
     void createMappingToDb(const SourceDetail& source, const DbDestinationDetail& dest) override {
-        if (hasMapping(source, dest.id)) {
-            return;
-        }
+        if (hasMapping(dest.id)) { return; }
         MappingCsvToDb newMappingS =
             MappingCsvToDb(PreciseMapLocation(source.primaryField, source.apiSelector), PreciseMapLocation(dest.table, dest.header.name));
         SourceType sourceType = source.apiSelector.empty() ? SourceType::CSV : SourceType::API; // not very clean, but gets the job done
@@ -239,9 +227,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     }
 
     void createMappingToApi(const SourceDetail& source, ApiDestinationDetail& dest) override {
-        if (hasMapping(source, dest.id)) {
-            return;
-        }
+        if (hasMapping(dest.id)) { return; }
         dest.example = source.example;
         dest.attribute = source.primaryField;
         MappingCsvApi newMappingS = MappingCsvApi(source.apiSelector, dest.id);
@@ -251,20 +237,20 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         // mappingsSToApi.emplace_back(std::move(newMappingS));
     }
 
-    bool hasMapping(const SourceDetail& source, MappingIdType dest) override {
-        if (std::find_if(mappingsN.begin(), mappingsN.end(), [&](const MappingNumber& m) {
-                return m.uniqueData == MappingNumberInternal(source.id, dest);
-            }) != mappingsN.end()) {
-            return true;
+    bool hasMapping(MappingIdType dest, const std::optional<SourceDetail>& source = std::nullopt) override {
+        if (source.has_value()) {
+            return std::find_if(mappingsN.begin(), mappingsN.end(), [&](const MappingNumber& m) {
+                       return m.uniqueData == MappingNumberInternal(source->id, dest);
+                   }) != mappingsN.end();
         }
-        return false;
+
+        return std::find_if(mappingsN.begin(), mappingsN.end(), [&](const MappingNumber& m) { return m.uniqueData.destination == dest; }) !=
+               mappingsN.end();
     }
 
     void removeMappingToDbFromSource(const MappingIdType sourceId) override {
         auto it = std::find_if(mappingsN.begin(), mappingsN.end(), [&](const MappingNumber& m) { return m.uniqueData.source == sourceId; });
-        if (it == mappingsN.end()) {
-            return;
-        }
+        if (it == mappingsN.end()) { return; }
 
         removeMappingToDb(*it);
     }

@@ -20,54 +20,23 @@ struct ApiPreviewState {
 } // namespace UI
 
 namespace DB {
-enum class DataType { INT16, INT32, INT64, FLOAT, DOUBLE, NUMERIC, BOOL, STRING, TEXT, UUID, JSON, TIMESTAMP, DATE, BINARY, UNKNOWN };
-enum class TypeCategory { INTEGER, FLOATING, NUMERIC, BOOLEAN, TEXT, DATETIME, BINARY, JSON, ANY, OTHER };
+enum class DataType { INT16, INT32, INT64, FLOAT, DOUBLE, BOOL, STRING, TEXT, JSON, UNKNOWN };
+enum class TypeCategory { INTEGER, FLOATING, BOOLEAN, TEXT, JSON, ANY, OTHER };
 
 inline DataType toDbType(const std::string& pgTypeRaw) {
     std::string pgType = pgTypeRaw;
     std::transform(pgType.begin(), pgType.end(), pgType.begin(), [](unsigned char c) { return std::tolower(c); });
-    if (pgType == "smallint") {
-        return DataType::INT16;
-    }
-    if (pgType == "integer" || pgType == "int") {
-        return DataType::INT32;
-    }
-    if (pgType == "bigint") {
-        return DataType::INT64;
-    }
-    if (pgType == "real") {
-        return DataType::FLOAT;
-    }
-    if (pgType == "double precision") {
-        return DataType::DOUBLE;
-    }
-    if (pgType.starts_with("numeric") || pgType.starts_with("decimal")) {
-        return DataType::NUMERIC;
-    }
-    if (pgType == "boolean") {
-        return DataType::BOOL;
-    }
-    if (pgType == "text") {
-        return DataType::TEXT;
-    }
+    if (pgType == "smallint") { return DataType::INT16; }
+    if (pgType == "integer" || pgType == "int") { return DataType::INT32; }
+    if (pgType == "bigint") { return DataType::INT64; }
+    if (pgType == "real") { return DataType::FLOAT; }
+    if (pgType == "double precision") { return DataType::DOUBLE; }
+    if (pgType == "boolean") { return DataType::BOOL; }
+    if (pgType == "text") { return DataType::TEXT; }
     if (pgType.starts_with("character varying") || pgType.starts_with("varchar") || pgType.starts_with("character")) {
         return DataType::STRING;
     }
-    if (pgType == "uuid") {
-        return DataType::UUID;
-    }
-    if (pgType.starts_with("timestamp")) {
-        return DataType::TIMESTAMP;
-    }
-    if (pgType == "date") {
-        return DataType::DATE;
-    }
-    if (pgType == "json" || pgType == "jsonb") {
-        return DataType::JSON;
-    }
-    if (pgType == "bytea") {
-        return DataType::BINARY;
-    }
+    if (pgType == "json" || pgType == "jsonb") { return DataType::JSON; }
     return DataType::UNKNOWN;
 }
 
@@ -80,19 +49,11 @@ inline TypeCategory getCategory(DataType type) {
     case DataType::FLOAT:
     case DataType::DOUBLE:
         return TypeCategory::FLOATING;
-    case DataType::NUMERIC:
-        return TypeCategory::NUMERIC;
     case DataType::BOOL:
         return TypeCategory::BOOLEAN;
     case DataType::STRING:
     case DataType::TEXT:
-    case DataType::UUID:
         return TypeCategory::TEXT;
-    case DataType::TIMESTAMP:
-    case DataType::DATE:
-        return TypeCategory::DATETIME;
-    case DataType::BINARY:
-        return TypeCategory::BINARY;
     case DataType::JSON:
         return TypeCategory::JSON;
     default:
@@ -109,52 +70,104 @@ struct Data {
     std::vector<DB::TypeCategory> columnTypes;
 };
 
-inline DB::TypeCategory widenType(DB::TypeCategory a, DB::TypeCategory b) {
-    // TODO: Handle all relevant cases
-    if (a == b) {
-        return a;
+inline bool isInteger(const std::string& s) {
+    if (s.empty()) { return false; }
+
+    size_t i = 0;
+    if (s[0] == '+' || s[0] == '-') {
+        if (s.size() == 1) { return false; }
+        i = 1;
     }
-    if (a == DB::TypeCategory::TEXT || b == DB::TypeCategory::TEXT) {
-        return DB::TypeCategory::TEXT;
+
+    for (; i < s.size(); ++i) {
+        if (!std::isdigit(static_cast<unsigned char>(s[i]))) { return false; }
     }
+
+    return true;
+}
+
+inline bool isFloating(const std::string& s) {
+    if (s.empty()) { return false; }
+
+    bool seenDot = false;
+    bool seenDigit = false;
+    size_t i = 0;
+
+    if (s[0] == '+' || s[0] == '-') {
+        if (s.size() == 1) { return false; }
+        i = 1;
+    }
+
+    for (; i < s.size(); ++i) {
+        char c = s[i];
+        if (std::isdigit(static_cast<unsigned char>(c))) {
+            seenDigit = true;
+            continue;
+        }
+
+        if (c == '.') {
+            if (seenDot) { return false; }
+            seenDot = true;
+            continue;
+        }
+
+        if (c == 'e' || c == 'E') {
+            if (!seenDigit) return false;
+            ++i;
+            if (i < s.size() && (s[i] == '+' || s[i] == '-')) ++i;
+            if (i == s.size()) return false;
+            for (; i < s.size(); ++i) {
+                if (!std::isdigit(static_cast<unsigned char>(s[i]))) return false;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    return seenDigit && seenDot;
+}
+
+inline bool isBoolean(std::string s) {
+    for (auto& c : s) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return (s == "true" || s == "false");
+}
+
+inline bool looksLikeJson(const std::string& s) {
+    if (s.size() < 2) { return false; }
+    char first = s.front();
+    char last = s.back();
+    return (first == '{' && last == '}') || (first == '[' && last == ']');
+}
+
+inline DB::TypeCategory detectTypeCategory(const std::string& value) {
+    if (value.empty()) return DB::TypeCategory::OTHER;
+    if (isBoolean(value)) return DB::TypeCategory::BOOLEAN;
+    if (isInteger(value)) return DB::TypeCategory::INTEGER;
+    if (isFloating(value)) return DB::TypeCategory::FLOATING;
+    if (looksLikeJson(value)) return DB::TypeCategory::JSON;
+
     return DB::TypeCategory::TEXT;
 }
 
-inline DB::TypeCategory detectCsvCategory(const std::string& value) {
-    if (value.empty()) {
-        return DB::TypeCategory::OTHER;
-    }
-    if (value == "true" || value == "false" || value == "TRUE" || value == "FALSE") {
-        return DB::TypeCategory::BOOLEAN;
-    }
-    {
-        std::int64_t i;
-        auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), i);
-        if (ec == std::errc() && ptr == value.data() + value.size()) {
-            return DB::TypeCategory::NUMERIC;
-        }
-    }
-    {
-        double d;
-        auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), d);
-        if (ec == std::errc() && ptr == value.data() + value.size()) {
-            return DB::TypeCategory::NUMERIC;
-        }
-    }
+inline DB::TypeCategory widenType(DB::TypeCategory a, DB::TypeCategory b) {
+    // TODO: Handle all relevant cases
+    if (a == DB::TypeCategory::OTHER) { return b; }
+    if (b == DB::TypeCategory::OTHER) { return a; }
+    if (a == b) { return a; }
+    if (a == DB::TypeCategory::TEXT || b == DB::TypeCategory::TEXT) { return DB::TypeCategory::TEXT; }
+    if (a == DB::TypeCategory::FLOATING || b == DB::TypeCategory::FLOATING) { return DB::TypeCategory::FLOATING; }
     return DB::TypeCategory::TEXT;
 }
 
 inline std::vector<DB::TypeCategory> determineTypes(const std::vector<std::vector<std::string>>& rows) {
-    if (rows.empty()) {
-        return std::vector<DB::TypeCategory>{};
-    }
-    std::vector<DB::TypeCategory> resultTypes(rows.front().size(), DB::TypeCategory::NUMERIC);
+    if (rows.empty()) { return std::vector<DB::TypeCategory>{}; }
+    std::vector<DB::TypeCategory> resultTypes(rows.front().size(), DB::TypeCategory::OTHER);
     for (std::size_t i = 0; i < rows.size(); i++) {
-        if (i == 0) {
-            continue;
-        }
+        if (i == 0) { continue; }
         for (std::size_t j = 0; j < rows[i].size(); j++) {
-            resultTypes[j] = widenType(detectCsvCategory(rows[i][j]), resultTypes[j]);
+            resultTypes[j] = widenType(detectTypeCategory(rows[i][j]), resultTypes[j]);
         }
     }
     return resultTypes;

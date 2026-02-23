@@ -10,8 +10,6 @@
 #include "userInterface/app.hpp"
 
 int main() {
-    PartApi::initGlobalCurl();
-
     Logger logger;
     Change::setLogger(logger);
     Config config{logger};
@@ -32,6 +30,5 @@ int main() {
 
     app.run();
 
-    PartApi::cleanupGlobalCurl();
     return 0;
 }

@@ -60,7 +60,8 @@ DragResult CsvMappingVisualizer::handleDrag(ApiDestinationDetail& destination, c
         if (!payload->Data) { return DragResult::OTHER; }
         if (std::string_view(payload->DataType) != imguiMappingDragString) { return DragResult::OTHER; }
         const SourceDetail source = *static_cast<const SourceDetail*>(payload->Data);
-        if (hasMapping(source, destination.id)) { return DragResult::EXISTING; }
+        if (!source.apiSelector.empty()) { return DragResult::NOT_MAPPABLE; }
+        if (hasMapping(destination.id)) { return DragResult::EXISTING; }
         if (source.dataCategory != destination.dataCategory && destination.dataCategory != DB::TypeCategory::ANY) {
             return DragResult::WRONG_TYPE;
         }
@@ -80,7 +81,7 @@ DragResult CsvMappingVisualizer::handleDrag(DbDestinationDetail& destination, co
         if (!payload->Data) { return DragResult::OTHER; }
         if (std::string_view(payload->DataType) != imguiMappingDragString) { return DragResult::OTHER; }
         const SourceDetail source = *static_cast<const SourceDetail*>(payload->Data);
-        if (hasMapping(source, destination.id)) { return DragResult::EXISTING; }
+        if (hasMapping(destination.id)) { return DragResult::EXISTING; }
         if (source.dataCategory != DB::getCategory(destination.header.dataType)) { return DragResult::WRONG_TYPE; }
         // SUCCESS PATH
         if (payload->IsDelivery()) {

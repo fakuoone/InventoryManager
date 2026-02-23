@@ -48,28 +48,18 @@ class Config {
     void getAdditionalConfig(const nlohmann::json& j) {
         try {
             quantityColumn = j.at("quantity-column").get<std::string>();
-            if (j.contains("font")) {
-                fontPath = j.at("font").get<std::string>();
-            }
+            if (j.contains("font")) { fontPath = j.at("font").get<std::string>(); }
 
             // API
             api.address = j["api"]["address"].get<std::string>();
             api.key = j["api"]["key"].get<std::string>();
-            if (j["api"].contains("dummyJson")) {
-                api.dummyJson = j["api"]["dummyJson"].get<nlohmann::json>();
-            }
+            if (j["api"].contains("dummyJson")) { api.dummyJson = j["api"]["dummyJson"].get<nlohmann::json>(); }
             api.searchPattern = j["api"]["search"].get<nlohmann::json>().dump();
 
             // DEFAULT CSV
-            if (j.contains("order")) {
-                order.defaultPath = j["order"]["defaultPath"].get<std::filesystem::path>();
-            }
-            if (j.contains("bom")) {
-                bom.defaultPath = j["bom"]["defaultPath"].get<std::filesystem::path>();
-            }
-        } catch (const nlohmann::json::parse_error& e) {
-            logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
-        }
+            if (j.contains("order")) { order.defaultPath = j["order"]["defaultPath"].get<std::filesystem::path>(); }
+            if (j.contains("bom")) { bom.defaultPath = j["bom"]["defaultPath"].get<std::filesystem::path>(); }
+        } catch (const nlohmann::json::parse_error& e) { logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())}); }
     }
 
     std::string readConfigFile(const std::filesystem::path& configPath) {
@@ -94,7 +84,7 @@ class Config {
     }
 
   public:
-    const std::string_view ITEM_PLACE_HOLDER = "ITEM";
+    const std::string_view ITEM_PLACE_HOLDER = "${PART_NUMBER}";
 
     Config(Logger& cLogger) : logger(cLogger) {}
 
@@ -119,7 +109,7 @@ class Config {
 
     const ApiConfig& getApiConfig() const { return api; }
 
-    const std::string getDummyJson() const { return api.dummyJson.dump(); }
+    nlohmann::json getDummyJson() const { return api.dummyJson; }
 
     const std::string getSearchPattern() const { return api.searchPattern; }
 

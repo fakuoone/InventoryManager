@@ -32,7 +32,7 @@ void MappingSource::draw(float width) {
     const float height = getTotalHeight();
 
     const float anchorRadius = singleAttributeHeight / 2 - INNER_PADDING * 2;
-    const float actualWidth = width; //  + 2 * OUTER_PADDING + INNER_PADDING + 2 * anchorRadius;
+    const float actualWidth = width - 2 * OUTER_PADDING; //  + 2 * OUTER_PADDING + INNER_PADDING + 2 * anchorRadius;
 
     ImGui::PushID(this);
 
@@ -67,7 +67,7 @@ void MappingSource::draw(float width) {
 
     // draw anchor
 
-    const ImVec2 anchorCenter = ImVec2(cursor.x + actualWidth - INNER_PADDING - 2 * anchorRadius, cursor.y + singleAttributeHeight / 2);
+    const ImVec2 anchorCenter = ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING - 2 * anchorRadius, cursor.y + singleAttributeHeight / 2);
     drawList->AddCircleFilled(anchorCenter, anchorRadius, Widgets::colHoveredGrey);
 
     // store anchor in parent
@@ -420,7 +420,7 @@ void handleEntry(const nlohmann::json& value,
                 if (it != selected->end()) {
                     selected->erase(it);
                 } else {
-                    selected->emplace_back(source, path, valueStr, DB::getCategory(DB::toDbType(valueStr)));
+                    selected->emplace_back(source, path, valueStr, CSV::detectTypeCategory(valueStr));
                 }
             }
         }
