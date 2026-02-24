@@ -410,8 +410,8 @@ ActionType DbTable::drawDataCell(const CellBoilerPlate& cell, const Rect& r, con
         ImGui::PopStyleVar();
     } else {
         ImU32 col = cell.enabled ? IM_COL32_WHITE : IM_COL32(255, 255, 255, 100);
-        drawChangeInCell(cell, r, textPos, col, value);
         drawList->AddText(textPos, col, value.c_str());
+        drawChangeInCell(cell, r, textPos, col, value);
 
         if (cellType == CellType::HEADER) {
             std::string depth = std::to_string(cell.header.depth);

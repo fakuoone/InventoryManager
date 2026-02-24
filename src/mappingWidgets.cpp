@@ -265,12 +265,14 @@ void MappingDestinationToApi::draw(float width) {
     {
 
         ImGui::SetCursorScreenPos(cursor);
+        if (previewData->loading) { ImGui::BeginDisabled(); }
         ImGui::InvisibleButton(data.example.c_str(), ImVec2(cellWidthLeft, dataHeight));
+        if (previewData->loading) { ImGui::EndDisabled(); }
         bool hovered = ImGui::IsItemHovered();
 
         // 1. click: query api, 2nd click: open selectionpoup
         if (ImGui::IsItemClicked()) {
-            if (!previewData->fields.empty()) {
+            if (previewData->ready) {
                 ImGui::OpenPopup(API_POPUP.data());
             } else if (!data.example.empty()) {
                 parentVisualizer->handleApiClick(*this);

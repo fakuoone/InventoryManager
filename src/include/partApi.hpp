@@ -57,7 +57,7 @@ class PartApi {
         return CURLE_OK;
     }
 
-    bool parseData(const std::string& response) {
+    nlohmann::json parseData(const std::string& response) {
         try {
             logger.pushLog(Log{std::format("RESPONSE:\n{}", response)});
             return nlohmann::json::parse(response);
@@ -147,9 +147,12 @@ class PartApi {
     }
 
     void fetchExample(const std::string& dataPoint, UI::ApiPreviewState& state) {
-        state.loading = true;
-        state.fields = std::move(fetchDataPoint(dataPoint));
-        state.loading = false;
-        state.ready = true;
+        // TODO: somehow blocks execution on main thread
+        pool.submit([&]() {
+            state.loading = true;
+            state.fields = std::move(fetchDataPoint(dataPoint));
+            state.loading = false;
+            state.ready = true;
+        });
     }
 };

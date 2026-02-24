@@ -213,9 +213,7 @@ class CsvChangeGenerator {
 
             // store found tables to construct changes later
             std::size_t j = std::distance(csvHeader.begin(), it);
-            if (!foundTables.contains(mapping.destination.outerIdentifier)) {
-                foundTables.insert(mapping.destination.outerIdentifier);
-            }
+            if (!foundTables.contains(mapping.destination.outerIdentifier)) { foundTables.insert(mapping.destination.outerIdentifier); }
 
             // csv column references new db header
             convertedMapping.preciseHeaders.try_emplace(j, TargetData{std::vector<PreciseMapLocationCombined>{}});
@@ -271,20 +269,22 @@ class CsvChangeGenerator {
     void fetchChunk(std::span<std::vector<std::string>> chunk,
                     std::span<std::unordered_map<std::string, Change::colValMap>> resultChunk,
                     std::size_t i) {
-        if (resultChunk.size() != chunk.size()) {
-            return;
-        }
+        if (resultChunk.size() != chunk.size()) { return; }
 
         std::unordered_map<std::string, nlohmann::json> responses;
         for (std::size_t j = 0; j < chunk.size(); ++j) {
             resultChunk[j] = std::unordered_map<std::string, Change::colValMap>{};
             const std::vector<std::string>& row = chunk[j];
             for (const MappingCsvToDb& mapping : indirectApiMappings) {
-                // const MappingCsvApi& apiMapping = findApiSource(mapping.source.innerIdentifier);
+                // gets index of column to search with
+                auto it = std::find(csvData.rows[0].begin(), csvData.rows[0].end(), mapping.source.outerIdentifier);
+                if (it == csvData.rows[0].end()) { return; }
                 resultChunk[j].try_emplace(mapping.destination.outerIdentifier, Change::colValMap{});
-                nlohmann::json& result =
-                    responses.try_emplace(mapping.source.outerIdentifier, partApi.fetchDataPoint(mapping.source.outerIdentifier))
-                        .first->second;
+
+                // checks if response for this part already exists
+                auto [it, inserted] = responses.try_emplace(key);
+                if (inserted) { it->second = partApi.fetchDataPoint(chunk[j][itCsvIndex]); }
+                nlohmann::json& result = it->second;
 
                 resultChunk[j]
                     .at(mapping.destination.outerIdentifier)
@@ -295,9 +295,7 @@ class CsvChangeGenerator {
 
     ApiResultType fetchApiData() {
         std::size_t totalRows = csvData.rows.size();
-        if (totalRows <= 1) {
-            return ApiResultType{};
-        }
+        if (totalRows <= 1) { return ApiResultType{}; }
 
         std::size_t threadCount = threadPool.getAvailableThreadCount();
         std::size_t dataRows = totalRows - 1; // skip header
@@ -333,9 +331,7 @@ class CsvChangeGenerator {
         std::unordered_set<std::size_t> visited;
         for (std::size_t j = 0; j < mapped.columnIndexes.size(); j++) {
             const std::size_t mappedColumnIndex = mapped.columnIndexes[j];
-            if (visited.contains(mappedColumnIndex)) {
-                continue;
-            }
+            if (visited.contains(mappedColumnIndex)) { continue; }
             visited.emplace(mappedColumnIndex);
             const TargetData& mappedHeaders = mapped.preciseHeaders.at(mappedColumnIndex);
             for (const PreciseMapLocationCombined& preciseHeader : mappedHeaders.dbHeaders) {
@@ -360,9 +356,7 @@ class CsvChangeGenerator {
         for (const auto& [_, preciseHeaders] : mapped.preciseHeaders) {
             std::unordered_set<std::string> visitedTables;
             for (const PreciseMapLocationCombined& preciseHeader : preciseHeaders.dbHeaders) {
-                if (visitedTables.contains(preciseHeader.locations.outerIdentifier)) {
-                    continue;
-                }
+                if (visitedTables.contains(preciseHeader.locations.outerIdentifier)) { continue; }
                 visitedTables.insert(preciseHeader.locations.outerIdentifier);
                 for (const auto& header : dbData->headers.at(preciseHeader.locations.outerIdentifier).data) {
                     if (mapped.cells[preciseHeader.locations.outerIdentifier].cells.contains(header.name) || header.nullable ||
@@ -389,29 +383,42 @@ class CsvChangeGenerator {
     }
 
     void addChangesFromMapping(ChangeConvertedMapping& mapped) {
-        for (TableCells* cells : mapped.orderedCells) {
-            if (!cells) {
-                continue;
-            }
-            ChangeType type = ChangeType::INSERT_ROW;
-            IndexPKeyPair foundIndexes = dbService.findIndexAndPKeyOfExisting(cells->table, cells->cells);
-            if (foundIndexes.index != INVALID_ID) {
-                if (dbService.hasQuantityColumn(cells->table)) {
-                    dbService.updateChangeQuantity(cells->table, cells->cells, foundIndexes.index, operation);
-                    type = ChangeType::UPDATE_CELLS;
-                } else {
-                    continue;
-                }
-            };
+        // TODO: this prevents unnecessary changes when an item already exists and the mapping is not fully formed
+        // currently assumes that all cells are children of the last (deepest) mapping which is incorrect in the general case
+        if (mapped.orderedCells.empty()) { return; }
+        TableCells* deepestCell = mapped.orderedCells.back();
+        if (processCell(deepestCell, true)) { return; }
 
-            ChangeAddResult result =
-                changeTracker.addChange(Change{cells->cells, type, dbService.getTable(cells->table)}, foundIndexes.pkey);
-            if (!ChangeTracker::gotAdded(result)) {
-                logger.pushLog(Log{std::format("ERROR: Adding change from mapping failed.")});
-                return;
-            }
-            cells->cells.clear();
+        for (TableCells* cells : mapped.orderedCells) {
+            if (!processCell(cells)) { break; }
         }
+    }
+
+    bool processCell(TableCells* cells, bool onlyAddIfFound = false) {
+        // returns wether to continue
+        if (!cells) { return true; }
+        ChangeType type = ChangeType::INSERT_ROW;
+        IndexPKeyPair foundIndexes = dbService.findIndexAndPKeyOfExisting(cells->table, cells->cells);
+        bool found = false;
+        if (foundIndexes.index != INVALID_ID) {
+            if (dbService.hasQuantityColumn(cells->table)) {
+                dbService.updateChangeQuantity(cells->table, cells->cells, foundIndexes.index, operation);
+                found = true;
+                type = ChangeType::UPDATE_CELLS;
+            } else {
+                return true;
+            }
+        };
+
+        if (!found && onlyAddIfFound) { return false; }
+
+        ChangeAddResult result = changeTracker.addChange(Change{cells->cells, type, dbService.getTable(cells->table)}, foundIndexes.pkey);
+        if (!ChangeTracker::gotAdded(result)) {
+            logger.pushLog(Log{std::format("ERROR: Adding change from mapping failed.")});
+            return false;
+        }
+        cells->cells.clear();
+        return true;
     }
 
     void executeCsv() {
@@ -437,12 +444,8 @@ class CsvChangeGenerator {
     void setData(std::shared_ptr<const CompleteDbData> newData) { dbData = newData; }
 
     bool dataValid(bool once) {
-        if (!dbData) {
-            return false;
-        }
-        if (!once) {
-            return dataRead;
-        }
+        if (!dbData) { return false; }
+        if (!once) { return dataRead; }
         if (fRead.valid()) {
             if (fRead.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
                 dataRead = fRead.get();

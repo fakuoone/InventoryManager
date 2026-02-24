@@ -20,8 +20,8 @@ struct editingData {
 namespace Widgets {
 inline float childSelectTimer = 0;
 
-constexpr std::pair<ImU32, ImU32> colValid = std::pair<ImU32, ImU32>{IM_COL32(0, 120, 0, 120), IM_COL32(80, 200, 120, 255)};
-constexpr std::pair<ImU32, ImU32> colInvalid = std::pair<ImU32, ImU32>{IM_COL32(120, 0, 0, 120), IM_COL32(220, 80, 80, 255)};
+constexpr std::pair<ImU32, ImU32> colValid = std::pair<ImU32, ImU32>{IM_COL32(0, 120, 0, 255), IM_COL32(80, 200, 120, 255)};
+constexpr std::pair<ImU32, ImU32> colInvalid = std::pair<ImU32, ImU32>{IM_COL32(120, 0, 0, 255), IM_COL32(220, 80, 80, 255)};
 constexpr std::pair<ImU32, ImU32> colSelected = std::pair<ImU32, ImU32>{IM_COL32(217, 159, 0, 255), IM_COL32(179, 123, 0, 255)};
 constexpr ImU32 colGreyBg = IM_COL32(50, 50, 50, 255);
 constexpr ImU32 colHoveredGrey = IM_COL32(100, 100, 100, 255);
@@ -153,13 +153,9 @@ class DbTable {
         result.action = std::forward<F>(function)(cellBoiler, r, std::forward<Args>(args)...);
 
         ImGui::SetCursorScreenPos(min);
-        if (!cellBoiler.enabled) {
-            ImGui::BeginDisabled();
-        }
+        if (!cellBoiler.enabled) { ImGui::BeginDisabled(); }
         ImGui::InvisibleButton("##cell", size);
-        if (!cellBoiler.enabled) {
-            ImGui::EndDisabled();
-        }
+        if (!cellBoiler.enabled) { ImGui::EndDisabled(); }
 
         if (ImGui::IsItemHovered()) {
             drawList->AddRect(min, max, colHoveredGrey);
@@ -176,9 +172,7 @@ class DbTable {
             }
         }
 
-        if (ImGui::IsItemClicked()) {
-            result.mouse = MouseEventType::CLICK;
-        }
+        if (ImGui::IsItemClicked()) { result.mouse = MouseEventType::CLICK; }
 
         drawList->PopClipRect();
         return result;
