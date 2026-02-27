@@ -188,7 +188,7 @@ class CsvChangeGenerator {
         : threadPool(cThreadPool), changeTracker(cChangeTracker), dbService(cDbService), partApi(cPartApi), config(cConfig),
           logger(cLogger), operation(cOperation) {}
 
-    virtual ~CsvChangeGenerator() = default;
+    virtual ~CsvChangeGenerator() { config.saveApiArchive(); }
 
     bool run(std::filesystem::path csv) {
         csvData = readData(csv, logger);
@@ -271,24 +271,22 @@ class CsvChangeGenerator {
                     std::size_t i) {
         if (resultChunk.size() != chunk.size()) { return; }
 
+        // TODO: bugs to be found
         std::unordered_map<std::string, nlohmann::json> responses;
         for (std::size_t j = 0; j < chunk.size(); ++j) {
             resultChunk[j] = std::unordered_map<std::string, Change::colValMap>{};
             const std::vector<std::string>& row = chunk[j];
             for (const MappingCsvToDb& mapping : indirectApiMappings) {
                 // gets index of column to search with
-                auto it = std::find(csvData.rows[0].begin(), csvData.rows[0].end(), mapping.source.outerIdentifier);
-                if (it == csvData.rows[0].end()) { return; }
+                auto itHeaderIndex = std::find(csvData.rows[0].begin(), csvData.rows[0].end(), mapping.source.outerIdentifier);
+                if (itHeaderIndex == csvData.rows[0].end()) { return; }
+                std::size_t itCsvIndex = itHeaderIndex - csvData.rows[0].begin();
                 resultChunk[j].try_emplace(mapping.destination.outerIdentifier, Change::colValMap{});
-
-                // checks if response for this part already exists
-                auto [it, inserted] = responses.try_emplace(key);
-                if (inserted) { it->second = partApi.fetchDataPoint(chunk[j][itCsvIndex]); }
-                nlohmann::json& result = it->second;
 
                 resultChunk[j]
                     .at(mapping.destination.outerIdentifier)
-                    .emplace(mapping.destination.innerIdentifier, getJsonTarget(result, mapping.source.innerIdentifier));
+                    .emplace(mapping.destination.innerIdentifier,
+                             getJsonTarget(partApi.fetchDataPoint(chunk[j][itCsvIndex]), mapping.source.innerIdentifier));
             }
         }
     }
@@ -322,6 +320,7 @@ class CsvChangeGenerator {
         for (auto& f : futures) {
             f.get();
         }
+        config.saveApiArchive();
         return results;
     }
 

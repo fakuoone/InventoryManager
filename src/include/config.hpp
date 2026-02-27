@@ -6,15 +6,20 @@
 #include <fstream>
 #include <string>
 
+#include <windows.h>
+
+#include "dataTypes.hpp"
 #include "logger.hpp"
 
-#include <windows.h>
+using ApiResponseType = std::unordered_map<std::string, nlohmann::json>;
 
 struct ApiConfig {
     std::string key;
     std::string address;
     std::string searchPattern;
     nlohmann::json dummyJson;
+    std::filesystem::path responseArchive;
+    DB::ProtectedData<ApiResponseType>* responses;
 };
 
 struct ReaderConfig {
@@ -55,11 +60,39 @@ class Config {
             api.key = j["api"]["key"].get<std::string>();
             if (j["api"].contains("dummyJson")) { api.dummyJson = j["api"]["dummyJson"].get<nlohmann::json>(); }
             api.searchPattern = j["api"]["search"].get<nlohmann::json>().dump();
+            if (j["api"].contains("responseArchive")) {
+                api.responseArchive = j["api"]["responseArchive"].get<std::filesystem::path>();
+                readApiArchive();
+            } else {
+                logger.pushLog(
+                    Log{"INFORMATION: API storage feature not specified in config. This will lead to increased api request rate."});
+            }
 
             // DEFAULT CSV
             if (j.contains("order")) { order.defaultPath = j["order"]["defaultPath"].get<std::filesystem::path>(); }
             if (j.contains("bom")) { bom.defaultPath = j["bom"]["defaultPath"].get<std::filesystem::path>(); }
         } catch (const nlohmann::json::parse_error& e) { logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())}); }
+    }
+
+    void readApiArchive() {
+        if (!api.responses) { return; }
+        std::ifstream archive(api.responseArchive);
+        if (!archive) { return; }
+
+        nlohmann::json j;
+        archive >> j;
+
+        if (!j.is_object()) {
+            logger.pushLog(Log{std::format("WARNIG: Api-Archive with path: {} is specified but contents are incorrectly formatted.",
+                                           api.responseArchive.string().c_str())});
+            return;
+        }
+        {
+            std::lock_guard<std::mutex> lg{api.responses->mtx};
+            api.responses->data = std::move(j.get<ApiResponseType>());
+            api.responses->ready = true;
+        }
+        return;
     }
 
     std::string readConfigFile(const std::filesystem::path& configPath) {
@@ -80,6 +113,7 @@ class Config {
         }
 
         getAdditionalConfig(config);
+
         return databaseJsonToDbString(config);
     }
 
@@ -97,6 +131,21 @@ class Config {
         return dbString;
     }
 
+    void saveApiArchive() {
+        if (!api.responses) { return; }
+        if (api.responseArchive.empty()) { return; }
+        nlohmann::json j;
+        {
+            std::lock_guard<std::mutex> lg{api.responses->mtx};
+            j = nlohmann::json(api.responses->data);
+        }
+
+        std::ofstream archive(api.responseArchive);
+        if (!archive) { return; }
+
+        archive << j.dump();
+    }
+
     std::filesystem::path getExeDir() {
         char buffer[MAX_PATH];
         GetModuleFileName(nullptr, buffer, MAX_PATH);
@@ -108,6 +157,8 @@ class Config {
     const std::string& getQuantityColumn() const { return quantityColumn; }
 
     const ApiConfig& getApiConfig() const { return api; }
+
+    void setApiArchiveBuffer(DB::ProtectedData<ApiResponseType>* responses) { api.responses = responses; }
 
     nlohmann::json getDummyJson() const { return api.dummyJson; }
 

@@ -6,18 +6,10 @@
 #include "timing.hpp"
 
 #include <algorithm>
-#include <condition_variable>
 #include <iostream>
 #include <mutex>
 
 #include <pqxx/pqxx>
-
-template <typename T> struct ProtectedData {
-    T data;
-    std::mutex mtx;
-    std::condition_variable cv;
-    bool ready{false};
-};
 
 struct TransactionData {
     pqxx::connection conn;
@@ -67,9 +59,9 @@ struct ProtectedConnData {
 
 class DbInterface {
   private:
-    ProtectedData<StringVector> tables;
-    ProtectedData<HeaderMap> tableHeaders;
-    ProtectedData<RowMap> tableRows;
+    DB::ProtectedData<StringVector> tables;
+    DB::ProtectedData<HeaderMap> tableHeaders;
+    DB::ProtectedData<RowMap> tableRows;
     Logger& logger;
 
     ProtectedConnData connData;
@@ -152,9 +144,7 @@ class DbInterface {
                                                       header);
 
             pqxx::result nullResult = transaction.tx.exec(nullQuery);
-            if (!nullResult.empty()) {
-                info.nullable = nullResult[0]["is_nullable"].as<bool>();
-            }
+            if (!nullResult.empty()) { info.nullable = nullResult[0]["is_nullable"].as<bool>(); }
 
             // Primary key
             const std::string pkQuery = std::format("SELECT 1 "
@@ -220,9 +210,7 @@ class DbInterface {
             pqxx::result fkResult = transaction.tx.exec(fkQuery);
             if (!fkResult.empty()) {
                 // allow foreign key that is also unique key (.referencedTable)
-                if (info.type != DB::HeaderTypes::UNIQUE_KEY) {
-                    info.type = DB::HeaderTypes::FOREIGN_KEY;
-                }
+                if (info.type != DB::HeaderTypes::UNIQUE_KEY) { info.type = DB::HeaderTypes::FOREIGN_KEY; }
                 info.referencedTable = fkResult[0]["referenced_table"].c_str();
             }
 
@@ -238,9 +226,7 @@ class DbInterface {
 
             pqxx::result typeResult = transaction.tx.exec(typeQuery);
 
-            if (!typeResult.empty()) {
-                info.dataType = DB::toDbType(typeResult[0]["data_type"].c_str());
-            }
+            if (!typeResult.empty()) { info.dataType = DB::toDbType(typeResult[0]["data_type"].c_str()); }
 
             headers.data.push_back(info);
         }
@@ -250,8 +236,7 @@ class DbInterface {
 
     std::size_t computeDepth(HeaderInfo& header) {
         // Already computed
-        if (header.depth != 0)
-            return header.depth;
+        if (header.depth != 0) return header.depth;
 
         // Base case
         if (header.referencedTable.empty()) {
@@ -406,9 +391,7 @@ class DbInterface {
     Change::chHashV applyChanges(std::vector<Change> changes, SqlAction action) {
         Change::chHashV successfulChanges;
         for (const auto& change : changes) {
-            if (applySingleChange(change, action)) {
-                successfulChanges.push_back(change.getKey());
-            }
+            if (applySingleChange(change, action)) { successfulChanges.push_back(change.getKey()); }
         }
         return successfulChanges;
     }

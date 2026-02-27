@@ -1,0 +1,30 @@
+{
+  "dbname": "yourPostGresDbName",
+  "user": "yourDbUser",
+  "password": "yourDbPassword",
+  "quantity-column": "quantity",
+  "font": "yourPath\\JetBrainsMono-Medium.ttf",
+  "order": {
+    "defaultPath": "yourPath\\orderShort.csv"
+  },
+  "bom": {
+    "defaultPath": "yourPath\\testbom.csv"
+  },
+  "api": {
+    "address": "https://api.api.com//api/search/key",
+    "key": "yourApiKey",
+    "search": {
+      "SearchByPartRequest": {
+        "mouserPartNumber": "${PART_NUMBER}",
+        "partSearchOptions": "ExactMatch"
+      }
+    },
+    "responseArchive": "yourPath\\apiArchive.json",
+    "dummyJson": {
+      "Errors": [],
+      "SearchResults": {
+        "dummy": "test"
+      }
+    }
+  }
+}

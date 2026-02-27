@@ -6,7 +6,7 @@
 
 #include <mutex>
 
-struct protectedChanges {
+struct ProtectedChanges {
     std::mutex mtx;
     Change::chHashM flatData;
     Change::ctPKMD pKeyMappedData;         // table -> primaryKey -> changeKey
@@ -19,7 +19,7 @@ enum class ChangeAddResult { ALREADY_EXISTING, INVALID, INTERNAL_FAILURE, SUCCES
 
 class ChangeTracker {
   private:
-    protectedChanges changes;
+    ProtectedChanges changes;
     std::atomic<bool> frozen{false};
     std::mutex freezeMtx;
     std::condition_variable freezeCv;

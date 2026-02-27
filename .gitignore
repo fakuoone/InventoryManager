@@ -7,7 +7,7 @@
 /lib
 /keylog
 .vscode
-*.json
+cmake*
 *.ini
 *.sql
 .gitignore

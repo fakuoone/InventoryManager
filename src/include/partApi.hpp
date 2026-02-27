@@ -29,6 +29,8 @@ class PartApi {
     Config& config;
     Logger& logger;
 
+    DB::ProtectedData<ApiResponseType> responses;
+
     static inline bool globalInit = false;
     static inline bool isInit = false;
     static inline const ApiConfig* apiConfig;
@@ -96,7 +98,11 @@ class PartApi {
     }
 
   public:
-    PartApi(ThreadPool& cPool, Config& cConfig, Logger& cLogger) : pool(cPool), config(cConfig), logger(cLogger) { initGlobalCurl(); }
+    PartApi(ThreadPool& cPool, Config& cConfig, Logger& cLogger) : pool(cPool), config(cConfig), logger(cLogger) {
+        config.setApiArchiveBuffer(&responses);
+
+        initGlobalCurl();
+    }
     ~PartApi() { cleanupGlobalCurl(); }
 
     PartApi(const PartApi&) = delete;
@@ -104,7 +110,11 @@ class PartApi {
     PartApi(PartApi&&) = delete;
     PartApi& operator=(PartApi&&) = delete;
 
-    nlohmann::json fetchDataPoint(const std::string& dataPoint) {
+    nlohmann::json fetchDataPoint(const std::string& dataPoint, bool forceRefetch = false) {
+        if (!forceRefetch) {
+            std::lock_guard<std::mutex> lg{responses.mtx};
+            if (responses.data.contains(dataPoint)) { return responses.data.at(dataPoint); }
+        }
         if (!init()) { return nlohmann::json{}; }
         std::unique_ptr<CURL, CurlDeleter> curl = std::unique_ptr<CURL, CurlDeleter>(curl_easy_init());
         if (!curl) {
@@ -143,6 +153,10 @@ class PartApi {
 
         if (triggerRequest(curl.get()) != CURLE_OK) { return nlohmann::json{}; }
         nlohmann::json parsed = parseData(responseString);
+        {
+            std::lock_guard<std::mutex> lg{responses.mtx};
+            responses.data.insert_or_assign(dataPoint, parsed);
+        }
         return parsed;
     }
 

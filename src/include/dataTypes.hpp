@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <charconv>
+#include <condition_variable>
+
 #include <nlohmann/json.hpp>
 
 namespace UI {
@@ -22,6 +24,13 @@ struct ApiPreviewState {
 namespace DB {
 enum class DataType { INT16, INT32, INT64, FLOAT, DOUBLE, BOOL, STRING, TEXT, JSON, UNKNOWN };
 enum class TypeCategory { INTEGER, FLOATING, BOOLEAN, TEXT, JSON, ANY, OTHER };
+
+template <typename T> struct ProtectedData {
+    T data;
+    std::mutex mtx;
+    std::condition_variable cv;
+    bool ready{false};
+};
 
 inline DataType toDbType(const std::string& pgTypeRaw) {
     std::string pgType = pgTypeRaw;
