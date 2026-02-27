@@ -91,6 +91,7 @@ class Config {
             std::lock_guard<std::mutex> lg{api.responses->mtx};
             api.responses->data = std::move(j.get<ApiResponseType>());
             api.responses->ready = true;
+            logger.pushLog(Log{"Loaded api archive from file."})
         }
         return;
     }
@@ -144,6 +145,7 @@ class Config {
         if (!archive) { return; }
 
         archive << j.dump();
+        logger.pushLog(Log{"Saved api archive to file."})
     }
 
     std::filesystem::path getExeDir() {

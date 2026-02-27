@@ -272,7 +272,6 @@ class CsvChangeGenerator {
         if (resultChunk.size() != chunk.size()) { return; }
 
         // TODO: bugs to be found
-        std::unordered_map<std::string, nlohmann::json> responses;
         for (std::size_t j = 0; j < chunk.size(); ++j) {
             resultChunk[j] = std::unordered_map<std::string, Change::colValMap>{};
             const std::vector<std::string>& row = chunk[j];
