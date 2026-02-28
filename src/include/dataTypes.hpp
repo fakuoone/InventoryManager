@@ -182,3 +182,103 @@ inline std::vector<DB::TypeCategory> determineTypes(const std::vector<std::vecto
     return resultTypes;
 }
 } // namespace CSV
+
+namespace AutoInv {
+using MappingIdType = uint32_t;
+
+enum class SourceType { NONE, CSV, API };
+
+template <typename S, typename D> struct Mapping {
+    S source;
+    D destination;
+    bool operator==(const Mapping& other) const { return other.source == source && other.destination == destination; }
+};
+
+struct PreciseMapLocation {
+    std::string outerIdentifier;
+    std::string innerIdentifier;
+};
+
+struct ApiData {};
+
+using MappingCsvToDb = Mapping<PreciseMapLocation, PreciseMapLocation>;
+using MappingCsvApi = Mapping<std::string, uint32_t>;
+using MappingNumberInternal = Mapping<MappingIdType, MappingIdType>;
+
+using MappingVariant = std::variant<MappingCsvToDb, MappingCsvApi>;
+
+struct MappingNumber {
+    MappingNumberInternal uniqueData;
+    MappingVariant usableData;
+    SourceType sourceType;
+    bool operator==(const MappingNumber& other) const noexcept {
+        // no need to hash the type aswell since the ids are unique
+        return uniqueData.source == other.uniqueData.source && uniqueData.destination == other.uniqueData.destination &&
+               sourceType == other.sourceType;
+    }
+    explicit MappingNumber(MappingNumberInternal cUniqueData, MappingVariant cUsableData, SourceType cSourceType)
+        : uniqueData(cUniqueData), usableData(cUsableData), sourceType(cSourceType) {};
+};
+
+struct MappingHash {
+    size_t operator()(const MappingNumber& m) const noexcept {
+        // no need to hash the type aswell since the ids are unique
+        size_t h1 = std::hash<MappingIdType>{}(m.uniqueData.source);
+        size_t h2 = std::hash<MappingIdType>{}(m.uniqueData.destination);
+        return h1 ^ (h2 << 1);
+    }
+};
+
+struct SerializableMapping {
+    MappingVariant usableData;
+    SourceType sourceType;
+    SerializableMapping(const MappingVariant& v, SourceType s) : usableData(v), sourceType(s) {}
+    SerializableMapping(const MappingNumber& m) : usableData(m.usableData), sourceType(m.sourceType) {}
+};
+
+struct LoadedMappings {
+    std::vector<SerializableMapping> bom;
+    std::vector<SerializableMapping> order;
+};
+
+inline void to_json(nlohmann::json& j, const MappingVariant& v) {
+    std::visit(
+        [&](auto&& mapping) {
+            using T = std::decay_t<decltype(mapping)>;
+            if constexpr (std::is_same_v<T, MappingCsvToDb>) {
+                j = {{"type", "CsvToDb"}, {"data", mapping}};
+            } else if constexpr (std::is_same_v<T, MappingCsvApi>) {
+                j = {{"type", "CsvApi"}, {"data", mapping}};
+            }
+        },
+        v);
+}
+
+template <typename S, typename D> inline void to_json(nlohmann::json& j, const Mapping<S, D>& m) {
+    j = {{"source", m.source}, {"destination", m.destination}};
+}
+
+template <typename S, typename D> inline void from_json(const nlohmann::json& j, Mapping<S, D>& m) {
+    j.at("source").get_to(m.source);
+    j.at("destination").get_to(m.destination);
+}
+
+inline void from_json(const nlohmann::json& j, MappingVariant& v) {
+    std::string type = j.at("type");
+    if (type == "CsvToDb") {
+        v = j.at("data").get<MappingCsvToDb>();
+    } else if (type == "CsvApi") {
+        v = j.at("data").get<MappingCsvApi>();
+    }
+}
+
+inline void to_json(nlohmann::json& j, const PreciseMapLocation& p) {
+    j = {{"outerIdentifier", p.outerIdentifier}, {"innerIdentifier", p.innerIdentifier}};
+}
+
+inline void from_json(const nlohmann::json& j, PreciseMapLocation& p) {
+    j.at("outerIdentifier").get_to(p.outerIdentifier);
+    j.at("innerIdentifier").get_to(p.innerIdentifier);
+}
+
+}; // namespace AutoInv

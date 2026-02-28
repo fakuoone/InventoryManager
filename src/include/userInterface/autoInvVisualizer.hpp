@@ -6,8 +6,9 @@
 #include "userInterface/mappingWidgets.hpp"
 #include "userInterface/widgets.hpp"
 
+#include "config.hpp"
+
 namespace AutoInv {
-enum class MappingStage { CSV, API };
 
 Widgets::MouseEventType isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness);
 
@@ -20,11 +21,10 @@ class CsvMappingVisualizer {
   protected:
     DbService& dbService;
     PartApi& api;
+    Config& config;
     Logger& logger;
     std::shared_ptr<const CompleteDbData> dbData;
     UI::DataStates& dataStates;
-
-    MappingStage stage = MappingStage::CSV;
 
     std::vector<std::string> headers;
     std::vector<DB::TypeCategory> headerTypes;
@@ -44,8 +44,8 @@ class CsvMappingVisualizer {
 
     std::array<char, 256> csvBuffer;
 
-    CsvMappingVisualizer(DbService& cDbService, PartApi& cApi, Logger& cLogger, UI::DataStates& cDataStates)
-        : dbService(cDbService), api(cApi), logger(cLogger), dataStates(cDataStates) {}
+    CsvMappingVisualizer(DbService& cDbService, PartApi& cApi, Config& cConfig, Logger& cLogger, UI::DataStates& cDataStates)
+        : dbService(cDbService), api(cApi), config(cConfig), logger(cLogger), dataStates(cDataStates) {}
 
   public:
     virtual ~CsvMappingVisualizer() = default;
@@ -102,20 +102,12 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
                                         true));
         };
 
-        // Stage selector
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(120.0f);
-        int localStage = static_cast<int>(stage);
-        ImGui::SliderInt("Stage", &localStage, static_cast<int>(MappingStage::CSV), static_cast<int>(MappingStage::API));
-        stage = static_cast<MappingStage>(localStage);
-
         float buttonWidth = ImGui::CalcTextSize("Commit Mapping").x + ImGui::GetStyle().FramePadding.x * 2.0f;
         float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
 
         ImGui::SameLine();
         ImGui::SetCursorPosX(rightEdge - buttonWidth);
 
-        // TODO: Validate mappings
         ImGui::BeginDisabled(!hasMappings());
         if (ImGui::Button("Commit Mapping")) { commitMappings(); }
         ImGui::EndDisabled();
@@ -130,8 +122,8 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
   protected:
     Reader& reader;
 
-    CsvVisualizerImpl(DbService& cDbService, Reader& cReader, PartApi& cApi, Logger& cLogger, UI::DataStates& cDataStates)
-        : CsvMappingVisualizer(cDbService, cApi, cLogger, cDataStates), reader(cReader) {
+    CsvVisualizerImpl(DbService& cDbService, Reader& cReader, PartApi& cApi, Config& cConfig, Logger& cLogger, UI::DataStates& cDataStates)
+        : CsvMappingVisualizer(cDbService, cApi, cConfig, cLogger, cDataStates), reader(cReader) {
         MappingSource::setInteractionHandler(static_cast<CsvMappingVisualizer*>(this));
         MappingDestinationDb::setInteractionHandler(static_cast<CsvMappingVisualizer*>(this));
     }
@@ -191,7 +183,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
             // mappings
             const MappingNumber* toRemove = nullptr;
 
-            ImDrawList* drawlist = ImGui::GetWindowDrawList();
+            ImDrawList* drawlist = ImGui::GetForegroundDrawList();
             drawlist->PushClipRect(clipMin, clipMax, true);
             for (const MappingNumber& mapping : mappingsN) {
                 if (drawMapping(mapping, drawlist, mappingsDrawingInfo.at(mapping))) { toRemove = &mapping; }
@@ -322,18 +314,30 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         std::copy(s.begin(), s.end(), csvBuffer.begin());
         csvBuffer[s.size()] = 0x0;
     }
+
+    const std::vector<MappingNumber>& getMappings() const { return mappingsN; }
 };
 
 class BomVisualizer : public CsvVisualizerImpl<ChangeGeneratorFromBom> {
   public:
-    BomVisualizer(DbService& cDbService, ChangeGeneratorFromBom& cReader, PartApi& cApi, Logger& cLogger, UI::DataStates& cDataStates)
-        : CsvVisualizerImpl(cDbService, cReader, cApi, cLogger, cDataStates) {}
+    BomVisualizer(DbService& cDbService,
+                  ChangeGeneratorFromBom& cReader,
+                  PartApi& cApi,
+                  Config& cConfig,
+                  Logger& cLogger,
+                  UI::DataStates& cDataStates)
+        : CsvVisualizerImpl(cDbService, cReader, cApi, cConfig, cLogger, cDataStates) {}
 };
 
 class OrderVisualizer : public CsvVisualizerImpl<ChangeGeneratorFromOrder> {
   public:
-    OrderVisualizer(DbService& cDbService, ChangeGeneratorFromOrder& cReader, PartApi& cApi, Logger& cLogger, UI::DataStates& cDataStates)
-        : CsvVisualizerImpl(cDbService, cReader, cApi, cLogger, cDataStates) {}
+    OrderVisualizer(DbService& cDbService,
+                    ChangeGeneratorFromOrder& cReader,
+                    PartApi& cApi,
+                    Config& cConfig,
+                    Logger& cLogger,
+                    UI::DataStates& cDataStates)
+        : CsvVisualizerImpl(cDbService, cReader, cApi, cConfig, cLogger, cDataStates) {}
 };
 
 } // namespace AutoInv

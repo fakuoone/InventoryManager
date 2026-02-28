@@ -7,51 +7,6 @@
 #include "threadPool.hpp"
 
 namespace AutoInv {
-using MappingIdType = uint32_t;
-
-enum class SourceType { NONE, CSV, API };
-
-template <typename S, typename D> struct Mapping {
-    S source;
-    D destination;
-    bool operator==(const Mapping& other) const { return other.source == source && other.destination == destination; }
-};
-
-struct PreciseMapLocation {
-    std::string outerIdentifier;
-    std::string innerIdentifier;
-};
-
-struct ApiData {};
-
-using MappingCsvToDb = Mapping<PreciseMapLocation, PreciseMapLocation>;
-using MappingCsvApi = Mapping<std::string, uint32_t>;
-using MappingNumberInternal = Mapping<MappingIdType, MappingIdType>;
-
-using MappingVariant = std::variant<MappingCsvToDb, MappingCsvApi>;
-
-struct MappingNumber {
-    MappingNumberInternal uniqueData;
-    MappingVariant usableData;
-    SourceType sourceType;
-    bool operator==(const MappingNumber& other) const noexcept {
-        // no need to hash the type aswell since the ids are unique
-        return uniqueData.source == other.uniqueData.source && uniqueData.destination == other.uniqueData.destination &&
-               sourceType == other.sourceType;
-    }
-    explicit MappingNumber(MappingNumberInternal cUniqueData, MappingVariant cUsableData, SourceType cSourceType)
-        : uniqueData(cUniqueData), usableData(cUsableData), sourceType(cSourceType) {};
-};
-
-struct MappingHash {
-    size_t operator()(const MappingNumber& m) const noexcept {
-        // no need to hash the type aswell since the ids are unique
-        size_t h1 = std::hash<MappingIdType>{}(m.uniqueData.source);
-        size_t h2 = std::hash<MappingIdType>{}(m.uniqueData.destination);
-        return h1 ^ (h2 << 1);
-    }
-};
-
 struct TableCells {
     std::string table;
     Change::colValMap cells;

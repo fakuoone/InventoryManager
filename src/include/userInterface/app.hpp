@@ -32,21 +32,17 @@ class App {
     ChangeExeService changeExe{dbService, changeTracker, logger};
     DbVisualizer dbVisualizer{dbService, changeTracker, changeExe, logger, dataStates};
 
-    AutoInv::BomVisualizer bomVisualizer{dbService, bomReader, api, logger, dataStates};
-    AutoInv::OrderVisualizer orderVisualizer{dbService, orderReader, api, logger, dataStates};
+    AutoInv::BomVisualizer bomVisualizer{dbService, bomReader, api, config, logger, dataStates};
+    AutoInv::OrderVisualizer orderVisualizer{dbService, orderReader, api, config, logger, dataStates};
 
     std::shared_ptr<const CompleteDbData> dbData;
     std::shared_ptr<uiChangeInfo> uiChanges;
 
     bool waitForDbData() {
-        if (dataStates.dbData == UI::DataState::DATA_READY) {
-            return false;
-        }
+        if (dataStates.dbData == UI::DataState::DATA_READY) { return false; }
 
         auto result = dbService.getCompleteData();
-        if (!result) {
-            return false;
-        }
+        if (!result) { return false; }
 
         dbData = *result;
         dbVisualizer.setData(dbData);
@@ -56,9 +52,7 @@ class App {
         orderReader.setData(dbData);
 
         changeTracker.setMaxPKeys(dbData->maxPKeys);
-        if (!uiChanges) {
-            uiChanges = std::make_shared<uiChangeInfo>();
-        }
+        if (!uiChanges) { uiChanges = std::make_shared<uiChangeInfo>(); }
 
         return true;
     }
@@ -99,9 +93,7 @@ class App {
             break;
         }
         case UI::DataState::WAITING_FOR_DATA:
-            if (waitForDbData()) {
-                dataStates.dbData = UI::DataState::DATA_READY;
-            }
+            if (waitForDbData()) { dataStates.dbData = UI::DataState::DATA_READY; }
             break;
         case UI::DataState::DATA_READY:
             uiChanges = std::make_shared<uiChangeInfo>(changeTracker.getSnapShot());
@@ -133,9 +125,7 @@ class App {
 
         // Top-right corner of the content region
         ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - buttonSize.x - padding.x, padding.y));
-        if (ImGui::Button("REFETCH")) {
-            dataStates.dbData = UI::DataState::DATA_OUTDATED;
-        }
+        if (ImGui::Button("REFETCH")) { dataStates.dbData = UI::DataState::DATA_OUTDATED; }
     }
 
     void showBom() { bomVisualizer.run(); }
@@ -154,6 +144,8 @@ class App {
         : config(cConfig), pool(cPool), dbService(cDbService), changeTracker(cChangeTracker), api(cPartApi), bomReader(cBomReader),
           orderReader(cOrderReader), logger(cLogger) {}
 
+    ~App() { config.saveMappings(bomVisualizer.getMappings(), orderVisualizer.getMappings()); }
+
     App(const App&) = delete;
     App& operator=(const App&) = delete;
     App(App&&) = delete;
@@ -165,18 +157,16 @@ class App {
         dbService.initializeDbInterface(dbString);
         bomVisualizer.setDefaultPath(config.getCsvPathBom());
         orderVisualizer.setDefaultPath(config.getCsvPathOrder());
+
+        AutoInv::LoadedMappings loaded = config.readMappings(); // TODO: use loaded mappings
     }
 
     void run() {
         supplyConfigString();
         bool running = true;
         while (running) {
-            if (!imguiCtx.pollEvents()) {
-                break;
-            }
-            if (!imguiCtx.beginFrame()) {
-                continue;
-            }
+            if (!imguiCtx.pollEvents()) { break; }
+            if (!imguiCtx.beginFrame()) { continue; }
 
             handleDataState();
             if (ImGui::BeginTabBar("Main")) {

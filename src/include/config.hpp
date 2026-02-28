@@ -24,6 +24,7 @@ struct ApiConfig {
 
 struct ReaderConfig {
     std::filesystem::path defaultPath;
+    std::filesystem::path mappingArchive;
 };
 
 class Config {
@@ -69,8 +70,16 @@ class Config {
             }
 
             // DEFAULT CSV
-            if (j.contains("order")) { order.defaultPath = j["order"]["defaultPath"].get<std::filesystem::path>(); }
-            if (j.contains("bom")) { bom.defaultPath = j["bom"]["defaultPath"].get<std::filesystem::path>(); }
+            if (j.contains("order")) {
+                order.defaultPath = j["order"]["defaultPath"].get<std::filesystem::path>();
+                if (j["order"].contains("mappingArchive")) {
+                    order.mappingArchive = j["order"]["mappingArchive"].get<std::filesystem::path>();
+                }
+            }
+            if (j.contains("bom")) {
+                bom.defaultPath = j["bom"]["defaultPath"].get<std::filesystem::path>();
+                if (j["bom"].contains("mappingArchive")) { bom.mappingArchive = j["bom"]["mappingArchive"].get<std::filesystem::path>(); }
+            }
         } catch (const nlohmann::json::parse_error& e) { logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())}); }
     }
 
@@ -91,18 +100,19 @@ class Config {
             std::lock_guard<std::mutex> lg{api.responses->mtx};
             api.responses->data = std::move(j.get<ApiResponseType>());
             api.responses->ready = true;
-            logger.pushLog(Log{"Loaded api archive from file."})
+            logger.pushLog(Log{"Loaded api archive from file."});
         }
         return;
     }
 
     std::string readConfigFile(const std::filesystem::path& configPath) {
-        logger.pushLog(Log{std::format("Reading config from {}", configPath.string())});
 
         std::ifstream configFile(configPath);
         if (!configFile.is_open()) {
             logger.pushLog(Log{std::format("ERROR: Could not open {}", configPath.string())});
             return std::string{};
+        } else {
+            logger.pushLog(Log{std::format("Reading config from {}", configPath.string())});
         }
 
         nlohmann::json config;
@@ -116,6 +126,79 @@ class Config {
         getAdditionalConfig(config);
 
         return databaseJsonToDbString(config);
+    }
+
+    std::vector<AutoInv::SerializableMapping> readSingleMappingFile(const std::filesystem::path& path) {
+        std::vector<AutoInv::SerializableMapping> result;
+        std::ifstream mappingFile(path);
+        if (!mappingFile.is_open()) {
+            logger.pushLog(Log{std::format("ERROR: Could not open {}", path.string())});
+            return result;
+        }
+
+        nlohmann::json mappings;
+        try {
+            mappingFile >> mappings;
+        } catch (const nlohmann::json::parse_error& e) {
+            logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
+            return result;
+        }
+
+        for (auto& entry : mappings) {
+            AutoInv::SourceType sourceType = entry["sourceType"];
+            AutoInv::MappingVariant variant;
+            std::string type = entry["type"];
+
+            if (type == "CsvToDb") {
+                AutoInv::MappingCsvToDb m;
+                m.source = entry["source"].get<AutoInv::PreciseMapLocation>();
+                m.destination = entry["destination"].get<AutoInv::PreciseMapLocation>();
+                variant = m;
+            } else if (type == "CsvApi") {
+                AutoInv::MappingCsvApi m;
+                m.source = entry["source"].get<std::string>();
+                m.destination = entry["destination"].get<uint32_t>();
+                variant = m;
+            }
+
+            result.emplace_back(variant, sourceType);
+        }
+
+        return result;
+    }
+
+    void saveSingleMappingToFile(const std::vector<AutoInv::MappingNumber>& mappings, const std::filesystem::path& path) {
+        std::ofstream mappingFile(path);
+        if (!mappingFile.is_open()) {
+            logger.pushLog(Log{std::format("ERROR: Cant open mapping file: {}.", path.string())});
+            return;
+        }
+
+        nlohmann::json j = nlohmann::json::array();
+        for (const auto& m : mappings) {
+            nlohmann::json entry;
+            AutoInv::SerializableMapping serMapping = m;
+            entry["sourceType"] = m.sourceType;
+
+            std::visit(
+                [&](auto&& mapping) {
+                    using T = std::decay_t<decltype(mapping)>;
+                    if constexpr (std::is_same_v<T, AutoInv::MappingCsvToDb>) {
+                        entry["type"] = "CsvToDb";
+                        entry["source"] = mapping.source;
+                        entry["destination"] = mapping.destination;
+                    } else if constexpr (std::is_same_v<T, AutoInv::MappingCsvApi>) {
+                        entry["type"] = "CsvApi";
+                        entry["source"] = mapping.source;
+                        entry["destination"] = mapping.destination;
+                    }
+                },
+                m.usableData);
+
+            j.push_back(entry);
+        }
+
+        mappingFile << j.dump();
     }
 
   public:
@@ -145,7 +228,19 @@ class Config {
         if (!archive) { return; }
 
         archive << j.dump();
-        logger.pushLog(Log{"Saved api archive to file."})
+        logger.pushLog(Log{"Saved api archive to file."});
+    }
+
+    AutoInv::LoadedMappings readMappings() {
+        AutoInv::LoadedMappings mappings;
+        if (!order.mappingArchive.empty()) { mappings.order = readSingleMappingFile(order.mappingArchive); }
+        if (!bom.mappingArchive.empty()) { mappings.bom = readSingleMappingFile(bom.mappingArchive); }
+        return mappings;
+    }
+
+    void saveMappings(const std::vector<AutoInv::MappingNumber>& mappingsBom, const std::vector<AutoInv::MappingNumber>& mappingsOrder) {
+        if (!order.mappingArchive.empty()) { saveSingleMappingToFile(mappingsOrder, order.mappingArchive); }
+        if (!bom.mappingArchive.empty()) { saveSingleMappingToFile(mappingsBom, bom.mappingArchive); }
     }
 
     std::filesystem::path getExeDir() {
