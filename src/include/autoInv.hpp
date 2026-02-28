@@ -409,7 +409,10 @@ class CsvChangeGenerator {
         if (!once) { return dataRead; }
         if (fRead.valid()) {
             if (fRead.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-                dataRead = fRead.get();
+                {
+                    std::lock_guard<std::mutex> lock(mtxRead);
+                    dataRead = fRead.get();
+                }
                 cvRead.notify_all();
                 return dataRead;
             }

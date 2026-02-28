@@ -10,6 +10,7 @@ MappingSource::MappingSource(const std::string& cSelectedField,
     : data(cSelectedField, cHeader, cExample, parentVisualizer->getNextIdSource(), cDataType) {}
 MappingSource::~MappingSource() {
     parentVisualizer->removeSourceAnchor(data.id);
+    // TODO: Segfault here when ending program, also, locking in this function call has deadlock potential
     parentVisualizer->removeMappingToDbFromSource(data.id);
 }
 
@@ -102,6 +103,10 @@ bool MappingSource::beginDrag() const {
         return true;
     }
     return false;
+}
+
+const SourceDetail& MappingSource::getData() const {
+    return data;
 }
 
 void MappingDestination::setInteractionHandler(CsvMappingVisualizer* handler) {
@@ -222,6 +227,14 @@ template <typename T> DragState handleDragInternal(CsvMappingVisualizer* parentV
 DragState MappingDestinationDb::handleDrag(DbDestinationDetail& header) {
     if (!parentVisualizer) { return DragState{DragResult::OTHER, false}; }
     return handleDragInternal<DbDestinationDetail>(parentVisualizer, MappingTypes::HEADER_HEADER, header);
+}
+
+const std::string& MappingDestinationDb::getTable() const {
+    return table;
+}
+
+const std::vector<DbDestinationDetail>& MappingDestinationDb::getHeaders() const {
+    return headers;
 }
 
 bool MappingDestinationToApi::beginDrag() {
@@ -375,6 +388,15 @@ const std::vector<MappingSource>& MappingDestinationToApi::getFields() const {
 
 const std::string& MappingDestinationToApi::getSource() const {
     return data.attribute;
+}
+
+ApiDestinationDetail& MappingDestinationToApi::getOrSetData() {
+    return data;
+}
+
+const MappingSource& MappingDestinationToApi::addField(MappingSource field) {
+    selectedFields.push_back(std::move(field));
+    return selectedFields.back();
 }
 
 Widgets::MouseEventType isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness) {

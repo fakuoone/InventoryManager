@@ -89,13 +89,13 @@ class DbInterface {
             TransactionData transaction = getTransaction();
             const std::string tableQuery = "SELECT table_name FROM information_schema.tables WHERE table_schema='public'";
             auto result = transaction.tx.query<std::string>(tableQuery);
-            logger.pushLog(Log{tableQuery});
+            // logger.pushLog(Log{tableQuery});
             {
                 tables.data.clear();
                 std::lock_guard<std::mutex> lg{tables.mtx};
                 for (const auto& [tableName] : result) {
                     tables.data.push_back(tableName);
-                    logger.pushLog(Log{std::format("    table: {}", tableName)});
+                    // logger.pushLog(Log{std::format("    table: {}", tableName)});
                 }
                 transaction.tx.commit();
                 tables.ready = true;
@@ -110,7 +110,7 @@ class DbInterface {
     HeadersInfo getTableHeaders(const std::string& table) {
         TransactionData transaction = getTransaction();
         const std::string headerQuery = std::format("    SELECT * FROM {} WHERE 1=0", table);
-        logger.pushLog(Log{headerQuery});
+        // logger.pushLog(Log{headerQuery});
         pqxx::result r = transaction.tx.exec(headerQuery);
         transaction.tx.commit();
 
@@ -119,7 +119,7 @@ class DbInterface {
 
         for (pqxx::row::size_type i = 0; i < r.columns(); ++i) {
             headers.emplace_back(r.column_name(i));
-            logger.pushLog(Log{std::format("        column: {}", r.column_name(i))});
+            // logger.pushLog(Log{std::format("        column: {}", r.column_name(i))});
         }
 
         return getHeaderInfo(table, std::move(headers));
@@ -281,7 +281,7 @@ class DbInterface {
     void acquireTableContent() {
         {
             std::unique_lock<std::mutex> lockTable(tables.mtx);
-            logger.pushLog(Log{"ACQUIRE TABLE CONTENT: Waiting for tables"});
+            // logger.pushLog(Log{"ACQUIRE TABLE CONTENT: Waiting for tables"});
             tables.cv.wait(lockTable, [this] { return tables.ready; });
         }
         {
@@ -290,7 +290,7 @@ class DbInterface {
         }
 
         // get headers
-        logger.pushLog(Log{"ACQUIRE TABLE CONTENT: Preparing headerquery"});
+        // logger.pushLog(Log{"ACQUIRE TABLE CONTENT: Preparing headerquery"});
         for (const std::string& tableName : tables.data) {
             try {
                 HeadersInfo headers = getTableHeaders(tableName);
@@ -316,7 +316,7 @@ class DbInterface {
 
     void acquireTableRows(const std::string& table, const HeadersInfo& cols) {
         {
-            logger.pushLog(Log{"ACQUIRE TABLE ROWS: Waiting for tableheaders"});
+            // logger.pushLog(Log{"ACQUIRE TABLE ROWS: Waiting for tableheaders"});
             std::unique_lock<std::mutex> lockTableHeaders(tableHeaders.mtx);
             tableHeaders.cv.wait(lockTableHeaders, [this] { return tableHeaders.ready; });
         }
@@ -328,7 +328,7 @@ class DbInterface {
             }
         }
         std::map<std::string, std::vector<std::string>> colCellMap;
-        logger.pushLog(Log{"ACQUIRE TABLE ROWS: Preparing headerqueries"});
+        // logger.pushLog(Log{"ACQUIRE TABLE ROWS: Preparing headerqueries"});
 
         std::lock_guard<std::mutex> lgTableHeaders(tableHeaders.mtx);
         for (const auto& col : cols.data) {
@@ -339,7 +339,7 @@ class DbInterface {
             }
             try {
                 const std::string headerQuery = std::format("    SELECT {} FROM {}", col.name, table);
-                logger.pushLog(Log{headerQuery});
+                // logger.pushLog(Log{headerQuery});
 
                 TransactionData transaction = getTransaction();
                 pqxx::result r = transaction.tx.exec(headerQuery);
@@ -350,7 +350,7 @@ class DbInterface {
 
                 for (const pqxx::row& row : r) {
                     cells.emplace_back(row[col.name].c_str());
-                    logger.pushLog(Log{std::format("        {}: {}", col.name, row[col.name].c_str())});
+                    // logger.pushLog(Log{std::format("        {}: {}", col.name, row[col.name].c_str())});
                 }
                 colCellMap.emplace(col.name, cells);
 
@@ -367,7 +367,7 @@ class DbInterface {
     }
 
     CompleteDbData acquireAllTablesRows() {
-        logger.pushLog(Log{"ACQUIRE ALL TABLE ROWS: Waiting for tableheaders"});
+        // logger.pushLog(Log{"ACQUIRE ALL TABLE ROWS: Waiting for tableheaders"});
         {
             std::unique_lock<std::mutex> lock(tableHeaders.mtx);
             tableHeaders.cv.wait(lock, [this] { return tableHeaders.ready; });

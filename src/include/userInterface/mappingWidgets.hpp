@@ -67,6 +67,7 @@ class MappingSource {
     float getTotalHeight() const;
     void draw(const float width);
     bool beginDrag() const;
+    const SourceDetail& getData() const;
 };
 
 class MappingDestination {
@@ -92,6 +93,8 @@ class MappingDestinationDb : public MappingDestination {
 
     void draw(float width) override;
     DragState handleDrag(DbDestinationDetail& headerInfo);
+    const std::string& getTable() const;
+    const std::vector<DbDestinationDetail>& getHeaders() const;
 };
 
 class MappingDestinationToApi : public MappingDestination {
@@ -116,6 +119,8 @@ class MappingDestinationToApi : public MappingDestination {
     void removeFields();
     const std::string& getSource() const;
     const std::vector<MappingSource>& getFields() const;
+    ApiDestinationDetail& getOrSetData(); // not good
+    const MappingSource& addField(MappingSource field);
 };
 
 std::string getValueFromJsonCell(const nlohmann::json& value);
