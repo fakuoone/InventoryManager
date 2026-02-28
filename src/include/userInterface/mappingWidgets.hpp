@@ -114,6 +114,7 @@ class MappingDestinationToApi : public MappingDestination {
     void setExample(const std::string& newData);
     void setAttribute(const std::string& newData);
     void removeFields();
+    const std::string& getSource() const;
     const std::vector<MappingSource>& getFields() const;
 };
 

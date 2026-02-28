@@ -94,4 +94,8 @@ DragResult CsvMappingVisualizer::handleDrag(DbDestinationDetail& destination, co
     return DragResult::OTHER;
 }
 
+const std::vector<MappingNumber>& CsvMappingVisualizer::getMappings() const {
+    return mappingsN;
+}
+
 } // namespace AutoInv

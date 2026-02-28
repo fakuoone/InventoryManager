@@ -373,6 +373,10 @@ const std::vector<MappingSource>& MappingDestinationToApi::getFields() const {
     return selectedFields;
 }
 
+const std::string& MappingDestinationToApi::getSource() const {
+    return data.attribute;
+}
+
 Widgets::MouseEventType isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness) {
     ImGuiIO& io = ImGui::GetIO();
     const bool equalPoints = p1.x == p2.x && p1.y == p2.y;

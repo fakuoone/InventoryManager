@@ -239,8 +239,8 @@ class Config {
     }
 
     void saveMappings(const std::vector<AutoInv::MappingNumber>& mappingsBom, const std::vector<AutoInv::MappingNumber>& mappingsOrder) {
-        if (!order.mappingArchive.empty()) { saveSingleMappingToFile(mappingsOrder, order.mappingArchive); }
-        if (!bom.mappingArchive.empty()) { saveSingleMappingToFile(mappingsBom, bom.mappingArchive); }
+        if (!order.mappingArchive.empty() && !mappingsOrder.empty()) { saveSingleMappingToFile(mappingsOrder, order.mappingArchive); }
+        if (!bom.mappingArchive.empty() && !mappingsBom.empty()) { saveSingleMappingToFile(mappingsBom, bom.mappingArchive); }
     }
 
     std::filesystem::path getExeDir() {

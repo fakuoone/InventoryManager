@@ -120,8 +120,12 @@ class CsvChangeGenerator {
     Logger& logger;
 
     std::shared_ptr<const CompleteDbData> dbData;
+
     CSV::Data csvData;
     std::future<bool> fRead;
+    std::condition_variable cvRead;
+    std::mutex mtxRead;
+
     std::future<void> fExecMappings;
 
     bool dataRead = false;
@@ -394,6 +398,10 @@ class CsvChangeGenerator {
     }
 
   public:
+    std::mutex& getMutexRead() { return mtxRead; }
+
+    std::condition_variable& getCvRead() { return cvRead; }
+
     void setData(std::shared_ptr<const CompleteDbData> newData) { dbData = newData; }
 
     bool dataValid(bool once) {
@@ -402,6 +410,7 @@ class CsvChangeGenerator {
         if (fRead.valid()) {
             if (fRead.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
                 dataRead = fRead.get();
+                cvRead.notify_all();
                 return dataRead;
             }
         }
