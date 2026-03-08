@@ -13,7 +13,7 @@ void CsvMappingVisualizer::setData(std::shared_ptr<const CompleteDbData> newData
     // mappingsToApiWidgets.clear();
     // mappingsDrawingInfo.clear();
 
-    MappingIdType id = 0;
+    MappingIdType id = destAnchors.largestId + 1;
     for (const std::string& s : dbData->tables) {
         std::vector<DbDestinationDetail> destDetails;
         for (const HeaderInfo& header : dbData->headers.at(s).data) {

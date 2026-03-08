@@ -62,6 +62,7 @@ class MappingSource {
   public:
     MappingSource(const std::string& cPrimary, const std::string& cApiSelector, const std::string& cExample, DB::TypeCategory cDataType);
     ~MappingSource();
+    bool operator==(const MappingSource& other);
     static void setInteractionHandler(CsvMappingVisualizer* handler);
     const std::string& getAttribute() const;
     float getTotalHeight() const;
@@ -121,7 +122,7 @@ class MappingDestinationToApi : public MappingDestination {
     const std::string& getSource() const;
     const std::vector<MappingSource>& getFields() const;
     ApiDestinationDetail& getOrSetData(); // not good
-    const MappingSource& addField(MappingSource field);
+    const MappingSource& addField(MappingSource&& field);
     void eraseSourcesFromParent() const;
 };
 

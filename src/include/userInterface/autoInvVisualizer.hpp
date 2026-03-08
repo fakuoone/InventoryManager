@@ -202,8 +202,8 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     void run() override {
         drawHead();
 
-        ImGui::BeginChild("READER");
         if (dataStates.dbData != UI::DataState::DATA_READY) { return; }
+        ImGui::BeginChild("READER");
 
         checkNewData();
 

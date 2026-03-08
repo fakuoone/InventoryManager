@@ -10,6 +10,10 @@ MappingSource::MappingSource(const std::string& cSelectedField,
     : data(cSelectedField, cHeader, cExample, parentVisualizer->getNextIdSource(), cDataType) {}
 MappingSource::~MappingSource() {}
 
+bool MappingSource::operator==(const MappingSource& other) {
+    return data.primaryField == other.data.primaryField && data.apiSelector == other.data.apiSelector;
+}
+
 void MappingSource::setInteractionHandler(CsvMappingVisualizer* handler) {
     parentVisualizer = handler;
 }
@@ -394,9 +398,15 @@ ApiDestinationDetail& MappingDestinationToApi::getOrSetData() {
     return data;
 }
 
-const MappingSource& MappingDestinationToApi::addField(MappingSource field) {
-    selectedFields.push_back(std::move(field));
-    return selectedFields.back();
+const MappingSource& MappingDestinationToApi::addField(MappingSource&& field) {
+    auto it = std::find(selectedFields.begin(), selectedFields.end(), field);
+
+    if (it == selectedFields.end()) {
+        selectedFields.push_back(std::move(field));
+        it = std::prev(selectedFields.end());
+    }
+
+    return *it;
 }
 
 void MappingDestinationToApi::eraseSourcesFromParent() const {
@@ -452,6 +462,7 @@ void handleEntry(const nlohmann::json& value,
                 auto it =
                     std::find_if(selected->begin(), selected->end(), [&](const MappingSource& s) { return s.getAttribute() == path; });
                 if (it != selected->end()) {
+                    it->eraseFromParent();
                     selected->erase(it);
                 } else {
                     selected->emplace_back(source, path, valueStr, CSV::detectTypeCategory(valueStr));
