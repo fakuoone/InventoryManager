@@ -161,7 +161,6 @@ class PartApi {
     }
 
     void fetchExample(const std::string& dataPoint, UI::ApiPreviewState& state) {
-        // TODO: somehow blocks execution on main thread
         pool.submit([&]() {
             state.loading = true;
             state.fields = std::move(fetchDataPoint(dataPoint));

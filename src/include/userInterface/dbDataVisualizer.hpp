@@ -46,11 +46,9 @@ class DbVisualizer {
     void drawChangeOverview() {
         ImGui::Text("CHANGE OVERVIEW");
         ImGui::BeginDisabled(dataStates.dbData != UI::DataState::DATA_READY);
-        if (ImGui::Button("Execute all")) {
-            changeExe.requestChangeApplication(SqlAction::EXECUTE);
-        }
+        if (ImGui::Button("Execute all")) { changeExe.requestChangeApplication(SqlAction::EXECUTE); }
 
-        for (const std::size_t rootKey : uiChanges->roots) { // TODO segfault when switching tab before db data is ready
+        for (const std::size_t rootKey : uiChanges->roots) {
             std::size_t depth = 0;
             drawChangesTree(rootKey, &depth, INVALID_ID, INVALID_ID);
         }
@@ -75,9 +73,7 @@ class DbVisualizer {
             isChildrenNotLast = true;
         }
 
-        if (drawChange(key, treeDepth, parent, isChildrenNotLast) == Widgets::MouseEventType::CLICK) {
-            toggleNode(key);
-        }
+        if (drawChange(key, treeDepth, parent, isChildrenNotLast) == Widgets::MouseEventType::CLICK) { toggleNode(key); }
 
         if (containsKey) {
             (*treeDepth)++;
@@ -90,9 +86,7 @@ class DbVisualizer {
     }
 
     void toggleNode(std::size_t key) {
-        if (!clickedChanges.insert(key).second) {
-            clickedChanges.erase(key);
-        }
+        if (!clickedChanges.insert(key).second) { clickedChanges.erase(key); }
     }
 
     Widgets::MouseEventType drawChange(const std::size_t key, std::size_t* visualDepth, const std::size_t parent, bool isChildrenNotLast) {
@@ -104,9 +98,7 @@ class DbVisualizer {
         const Widgets::Event tableEvent = dbTable.getEvent();
         const bool handleEvent =
             tableEvent.type.mouse == Widgets::MouseEventType::CLICK || tableEvent.type.action == Widgets::ActionType::EDIT;
-        if (!handleEvent) {
-            return;
-        }
+        if (!handleEvent) { return; }
 
         if (std::holds_alternative<Widgets::DataEvent>(tableEvent.origin)) { // NO CHANGE EXISTS ON THIS ROW
             const Widgets::DataEvent event = std::get<Widgets::DataEvent>(tableEvent.origin);
@@ -114,9 +106,7 @@ class DbVisualizer {
             case Widgets::ActionType::HEADER: {
                 const HeaderVector& header = dbData->headers.at(event.tableName).data;
                 auto it = std::find_if(header.begin(), header.end(), [&](const HeaderInfo& h) { return h.name == event.headerName; });
-                if (it != header.end()) {
-                    selectedTable = it->referencedTable;
-                }
+                if (it != header.end()) { selectedTable = it->referencedTable; }
                 break;
             }
             case Widgets::ActionType::REMOVE:
@@ -191,9 +181,7 @@ class DbVisualizer {
     void run() {
         if (ImGui::BeginTabBar("Main")) {
             ImGuiTabItemFlags flags = 0;
-            if (!selectedTable.empty()) {
-                flags |= ImGuiTabItemFlags_SetSelected;
-            };
+            if (!selectedTable.empty()) { flags |= ImGuiTabItemFlags_SetSelected; };
             if (ImGui::BeginTabItem("Tables", nullptr, flags)) {
                 if (ImGui::BeginTabBar("MainTabs")) {
                     if (dataStates.dbData == UI::DataState::DATA_OUTDATED || dataStates.dbData == UI::DataState::DATA_READY) {

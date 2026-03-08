@@ -49,7 +49,7 @@ class ChangeTracker {
 
     void freeze();
     void unfreeze();
-    const Change getChange(const std::size_t key);
+    std::optional<Change> getChange(const std::size_t key);
     void propagateValidity(Change& change);
     ChangeAddResult addChange(Change change, std::optional<uint32_t> existingRowId = std::nullopt);
     void removeChanges(const std::size_t key);

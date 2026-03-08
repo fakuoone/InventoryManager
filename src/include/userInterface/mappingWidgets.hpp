@@ -68,6 +68,7 @@ class MappingSource {
     void draw(const float width);
     bool beginDrag() const;
     const SourceDetail& getData() const;
+    void eraseFromParent() const;
 };
 
 class MappingDestination {
@@ -121,6 +122,7 @@ class MappingDestinationToApi : public MappingDestination {
     const std::vector<MappingSource>& getFields() const;
     ApiDestinationDetail& getOrSetData(); // not good
     const MappingSource& addField(MappingSource field);
+    void eraseSourcesFromParent() const;
 };
 
 std::string getValueFromJsonCell(const nlohmann::json& value);

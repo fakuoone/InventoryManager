@@ -188,7 +188,6 @@ class Config {
                         entry["source"] = mapping.source;
                         entry["destination"] = mapping.destination;
                     } else if constexpr (std::is_same_v<T, AutoInv::MappingCsvApi>) {
-                        // TODO: This data is not enough
                         entry["type"] = "CsvApi";
                         entry["source"] = mapping.source;
                         entry["destination"] = mapping.destination;

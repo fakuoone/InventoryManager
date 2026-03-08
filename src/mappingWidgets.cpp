@@ -8,11 +8,7 @@ MappingSource::MappingSource(const std::string& cSelectedField,
                              const std::string& cExample,
                              DB::TypeCategory cDataType)
     : data(cSelectedField, cHeader, cExample, parentVisualizer->getNextIdSource(), cDataType) {}
-MappingSource::~MappingSource() {
-    parentVisualizer->removeSourceAnchor(data.id);
-    // TODO: Segfault here when ending program, also, locking in this function call has deadlock potential
-    parentVisualizer->removeMappingToDbFromSource(data.id);
-}
+MappingSource::~MappingSource() {}
 
 void MappingSource::setInteractionHandler(CsvMappingVisualizer* handler) {
     parentVisualizer = handler;
@@ -27,7 +23,6 @@ float MappingSource::getTotalHeight() const {
 }
 
 void MappingSource::draw(float width) {
-    // TODO: Fix slight layout issues regarding actualwidth
     // Calc Height
     singleAttributeHeight = ImGui::CalcTextSize(data.primaryField.c_str()).y + 2 * INNER_TEXT_PADDING;
     const float height = getTotalHeight();
@@ -107,6 +102,12 @@ bool MappingSource::beginDrag() const {
 
 const SourceDetail& MappingSource::getData() const {
     return data;
+}
+
+void MappingSource::eraseFromParent() const {
+    if (!parentVisualizer) { return; }
+    parentVisualizer->removeSourceAnchor(data.id);
+    parentVisualizer->removeMappingToDbFromSource(data.id);
 }
 
 void MappingDestination::setInteractionHandler(CsvMappingVisualizer* handler) {
@@ -211,7 +212,6 @@ void MappingDestinationDb::draw(float width) {
     ImGui::PopID();
 }
 
-// TODO: Who does this function belong to?
 template <typename T> DragState handleDragInternal(CsvMappingVisualizer* parentVisualizer, const MappingTypes mapType, T& destination) {
     bool beginTarget = ImGui::BeginDragDropTarget();
     const ImGuiPayload* payload =
@@ -397,6 +397,12 @@ ApiDestinationDetail& MappingDestinationToApi::getOrSetData() {
 const MappingSource& MappingDestinationToApi::addField(MappingSource field) {
     selectedFields.push_back(std::move(field));
     return selectedFields.back();
+}
+
+void MappingDestinationToApi::eraseSourcesFromParent() const {
+    for (const MappingSource& source : selectedFields) {
+        source.eraseFromParent();
+    }
 }
 
 Widgets::MouseEventType isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness) {

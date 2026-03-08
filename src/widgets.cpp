@@ -428,7 +428,6 @@ void DbTable::drawChangeInCell(const CellBoilerPlate& cell, const Rect& r, ImVec
     if (cell.header.type == DB::HeaderTypes::PRIMARY_KEY) { return; }
     bool isValid = cell.change->isLocallyValid();
     if (!isValid) {
-        // TODO: Show validity of the specific change cell
         // nullables, references to valid changes (1 level deep is enough, otherwise performance...)
         if (!cell.change->hasChildren()) {
             isValid = cell.header.nullable || !value.empty();

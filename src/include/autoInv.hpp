@@ -85,28 +85,40 @@ inline std::vector<std::string> parseLine(const std::string& line) {
 }
 
 inline CSV::Data readData(std::filesystem::path csv, Logger& logger) {
-    // TODO: error handling
     std::ifstream file(csv);
+    if (!file.is_open()) {
+        logger.pushLog(Log{std::format("ERROR: Failed to open CSV file: {}", csv.string())});
+        return CSV::Data{};
+    }
     std::string line;
-    std::pair<std::size_t, std::size_t> colCounts = {0, 0};
+    std::size_t prevCols = 0;
     std::size_t i = 0;
     std::vector<std::vector<std::string>> rows;
 
     while (std::getline(file, line)) {
         std::vector<std::string> row = parseLine(line);
-        colCounts.first = row.size();
-        rows.push_back(row);
-        if (i > 0) {
-            if (colCounts.first != colCounts.second) {
-                logger.pushLog(Log{std::format("ERROR: Parsing csv failed: Row {} has different length.", i)});
-                return CSV::Data{};
-            }
+        std::size_t cols = row.size();
+        if (cols == 0) {
+            logger.pushLog(Log{std::format("ERROR: CSV parsing failed: Row {} is empty.", i)});
+            return CSV::Data{};
         }
-        colCounts.second = colCounts.first;
-        colCounts.first = 0;
-        i++;
+        if (i > 0 && cols != prevCols) {
+            logger.pushLog(Log{std::format("ERROR: CSV parsing failed: Row {} has different length ({} vs {}).", i, cols, prevCols)});
+            return CSV::Data{};
+        }
+        prevCols = cols;
+        rows.push_back(std::move(row));
+        ++i;
+    }
+    if (rows.empty()) {
+        logger.pushLog(Log{std::format("ERROR: CSV file '{}' is empty.", csv.string())});
+        return CSV::Data{};
     }
     std::vector<DB::TypeCategory> types = CSV::determineTypes(rows);
+    if (types.empty()) {
+        logger.pushLog(Log{"ERROR: Failed to determine CSV column types."});
+        return CSV::Data{};
+    }
     return CSV::Data{std::move(rows), std::move(types)};
 }
 
@@ -229,8 +241,6 @@ class CsvChangeGenerator {
                     std::span<std::unordered_map<std::string, Change::colValMap>> resultChunk,
                     std::size_t i) {
         if (resultChunk.size() != chunk.size()) { return; }
-
-        // TODO: bugs to be found
         for (std::size_t j = 0; j < chunk.size(); ++j) {
             resultChunk[j] = std::unordered_map<std::string, Change::colValMap>{};
             const std::vector<std::string>& row = chunk[j];
@@ -340,8 +350,9 @@ class CsvChangeGenerator {
     }
 
     void addChangesFromMapping(ChangeConvertedMapping& mapped) {
-        // TODO: this prevents unnecessary changes when an item already exists and the mapping is not fully formed
-        // currently assumes that all cells are children of the last (deepest) mapping which is incorrect in the general case
+        // This assumes that all changes caused by this row are children of the deepest mapping (the one which has the highest
+        // db-relation-depth) This is incorrect in the general case, but a correct simplification in the use case here for example part has
+        // manufacturer, therefore, if part exists, manufacturer doesnt need to be added
         if (mapped.orderedCells.empty()) { return; }
         TableCells* deepestCell = mapped.orderedCells.back();
         if (processCell(deepestCell, true)) { return; }

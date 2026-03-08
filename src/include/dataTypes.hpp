@@ -161,7 +161,6 @@ inline DB::TypeCategory detectTypeCategory(const std::string& value) {
 }
 
 inline DB::TypeCategory widenType(DB::TypeCategory a, DB::TypeCategory b) {
-    // TODO: Handle all relevant cases
     if (a == DB::TypeCategory::OTHER) { return b; }
     if (b == DB::TypeCategory::OTHER) { return a; }
     if (a == b) { return a; }

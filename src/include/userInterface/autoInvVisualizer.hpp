@@ -84,6 +84,14 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     static constexpr float CENTER_MIN = 400.0f;
     static constexpr float RIGHT_MIN = 200.0f;
 
+    std::vector<AutoInv::MappingDestinationToApi>::iterator addApiWidget() {
+        const std::size_t newIndex = ++destAnchors.largestId;
+        apiPreviewCache.insert_or_assign(newIndex, UI::ApiPreviewState{});
+        mappingsToApiWidgets.emplace_back(MappingDestinationToApi(
+            ApiDestinationDetail(true, newIndex, "NONE", "API", DB::TypeCategory::ANY), &apiPreviewCache.at(newIndex), true));
+        return std::prev(mappingsToApiWidgets.end());
+    }
+
     void drawApiWidgets(const float width, ImVec2 popupStartup) {
         for (auto& mapping : mappingsToApiWidgets) {
             mapping.draw(width);
@@ -101,12 +109,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         // add api intermediate stage
         ImGui::SameLine();
         const char* btnLabel = "ADD API STAGE";
-        if (ImGui::Button(btnLabel)) {
-            const std::size_t newIndex = ++destAnchors.largestId;
-            apiPreviewCache.insert_or_assign(newIndex, UI::ApiPreviewState{});
-            mappingsToApiWidgets.emplace_back(MappingDestinationToApi(
-                ApiDestinationDetail(true, newIndex, "NONE", "API", DB::TypeCategory::ANY), &apiPreviewCache.at(newIndex), true));
-        };
+        if (ImGui::Button(btnLabel)) { addApiWidget(); };
 
         float buttonWidth = ImGui::CalcTextSize("Commit Mapping").x + ImGui::GetStyle().FramePadding.x * 2.0f;
         float rightEdge = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
@@ -140,7 +143,6 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         if (hasMapping(dest.id)) { return; }
         dest.example = source.example;
         dest.attribute = source.primaryField;
-        // TODO:  TEST primary field instead of apiSelector
         MappingCsvApi newMappingS = MappingCsvApi(source.primaryField, dest.id);
         MappingNumber newMappingN = MappingNumber{MappingNumberInternal{source.id, dest.id}, std::move(newMappingS), SourceType::API};
         mappingsDrawingInfo.insert_or_assign(newMappingN, MappingDrawing());
@@ -163,6 +165,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
                 if (itApi != mappingsToApiWidgets.end()) {
                     itApi->setAttribute("API");
                     itApi->setExample("NONE");
+                    itApi->eraseSourcesFromParent();
                     mappingsToApiWidgets.erase(itApi);
                 }
             } else if (auto* mToDb = std::get_if<MappingCsvToDb>(&mapping.usableData)) {
@@ -232,7 +235,6 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
             ImGui::SetCursorPosX((avail.x - centerWidth) / 2);
             ImGui::BeginChild("API", ImVec2(centerWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
             drawApiWidgets(centerWidth, ImVec2(leftWidth + ImGui::GetStyle().ItemSpacing.x, ImGui::GetStyle().ItemSpacing.y));
-
             ImGui::EndChild();
             ImGui::SameLine();
 
@@ -267,6 +269,9 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
             headers = reader.getHeader();
             headerTypes = reader.getHeaderTypes();
             firstRow = reader.getFirstRow();
+            for (const MappingSource& source : csvHeaderWidgets) {
+                source.eraseFromParent();
+            }
             csvHeaderWidgets.clear();
             for (std::size_t i = 0; i < headers.size(); ++i) {
                 csvHeaderWidgets.emplace_back(headers[i], std::string{}, firstRow[i], headerTypes[i]);
@@ -321,7 +326,6 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     void commitMappings() { reader.setMappingsToDb(mappingsN); }
 
     void injectMappings(const std::vector<SerializableMapping>& serializedMappings) {
-        // TODO: finish logic
         // has to run first, will fail if mappings already exist
         // while this runs, mapping display has to be suspended or locked. Interaction has to be disabled
         {
@@ -387,16 +391,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
                         auto it = std::find_if(mappingsToApiWidgets.begin(),
                                                mappingsToApiWidgets.end(),
                                                [&](const MappingDestinationToApi& m) { return m.getSource() == concreteMapping.source; });
-                        if (it == mappingsToApiWidgets.end()) {
-                            // TODO: put this in a separate function
-                            const std::size_t newIndex = ++destAnchors.largestId;
-                            apiPreviewCache.insert_or_assign(newIndex, UI::ApiPreviewState{});
-                            mappingsToApiWidgets.emplace_back(
-                                MappingDestinationToApi(ApiDestinationDetail(true, newIndex, "NONE", "API", DB::TypeCategory::ANY),
-                                                        &apiPreviewCache.at(newIndex),
-                                                        true));
-                            it = std::prev(mappingsToApiWidgets.end());
-                        }
+                        if (it == mappingsToApiWidgets.end()) { it = addApiWidget(); }
 
                         auto itSource = std::find_if(csvHeaderWidgets.begin(), csvHeaderWidgets.end(), [&](const MappingSource& m) {
                             const SourceDetail& sourceData = m.getData();

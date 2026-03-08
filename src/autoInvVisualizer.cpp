@@ -5,14 +5,13 @@ namespace AutoInv {
 
 void CsvMappingVisualizer::setData(std::shared_ptr<const CompleteDbData> newData) {
     dbData = newData;
-    destAnchors = WidgetAnchors();
-    sourceAnchors = WidgetAnchors();
-    csvHeaderWidgets.clear();
+    // destAnchors = WidgetAnchors();
+    // sourceAnchors = WidgetAnchors();
+    // csvHeaderWidgets.clear();
     dbHeaderWidgets.clear();
-    mappingsN.clear();
-    mappingsToApiWidgets.clear();
-    mappingsToApiWidgets.clear();
-    mappingsDrawingInfo.clear();
+    // mappingsN.clear();
+    // mappingsToApiWidgets.clear();
+    // mappingsDrawingInfo.clear();
 
     MappingIdType id = 0;
     for (const std::string& s : dbData->tables) {

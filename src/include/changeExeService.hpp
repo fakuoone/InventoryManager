@@ -15,16 +15,15 @@ class ChangeExeService {
     std::future<Change::chHashV> fApplyChanges;
 
     void collectChanges(std::size_t key, std::unordered_set<std::size_t>& visited, std::vector<Change>& order) {
-        if (visited.contains(key)) {
-            return;
-        }
+        if (visited.contains(key)) { return; }
         visited.insert(key);
         if (changeTracker.hasChild(key)) {
             for (std::size_t child : changeTracker.getChildren(key)) {
                 collectChanges(child, visited, order);
             }
         }
-        order.push_back(changeTracker.getChange(key));
+        auto change = changeTracker.getChange(key);
+        if (change) { order.push_back(*change); }
     }
 
     std::vector<Change> collectDescendants(const std::vector<std::size_t>& roots) {
@@ -40,9 +39,7 @@ class ChangeExeService {
 
   public:
     bool isChangeApplicationDone() {
-        if (fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-            return true;
-        }
+        if (fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) { return true; }
         return false;
     }
 

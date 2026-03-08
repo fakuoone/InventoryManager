@@ -158,7 +158,7 @@ class App {
         bomVisualizer.setDefaultPath(config.getCsvPathBom());
         orderVisualizer.setDefaultPath(config.getCsvPathOrder());
 
-        AutoInv::LoadedMappings loaded = config.readMappings(); // TODO: use loaded mappings
+        AutoInv::LoadedMappings loaded = config.readMappings();
         pool.submit(AutoInv::BomVisualizer::injectMappings, &bomVisualizer, loaded.bom);
         pool.submit(AutoInv::OrderVisualizer::injectMappings, &orderVisualizer, loaded.order);
     }

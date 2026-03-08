@@ -39,9 +39,7 @@ class DbService {
                 return std::stoll(key1) < std::stoll(key2);
             });
             std::size_t maxKey = 0;
-            if (it2 != keyVector.end()) {
-                maxKey = static_cast<std::size_t>(std::stoll(*it2));
-            }
+            if (it2 != keyVector.end()) { maxKey = static_cast<std::size_t>(std::stoll(*it2)); }
             maxPKeys[table] = maxKey;
         }
         return maxPKeys;
@@ -51,9 +49,7 @@ class DbService {
         if (!pendingData && fCompleteDbData.valid() &&
             fCompleteDbData.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
             auto data = fCompleteDbData.get();
-            if (!validateCompleteDbData(data)) {
-                return false;
-            }
+            if (!validateCompleteDbData(data)) { return false; }
             pendingData = std::make_unique<CompleteDbData>(std::move(data));
             fMaxPKeys = pool.submit(&DbService::calcMaxPKeys, this, std::cref(*pendingData));
         }
@@ -80,7 +76,6 @@ class DbService {
     }
 
     void refetch() {
-        // TODO: Doesnt really properly refetch (tested by deleting a column)
         pendingData.reset();
         dataAvailable.store(false, std::memory_order_release);
         fCompleteDbData = pool.submit(&DbInterface::acquireAllTablesRows, &dbInterface);
@@ -101,9 +96,7 @@ class DbService {
         const StringVector& uKeyColumn = row.at(uKeyName);
         IndexPKeyPair result{INVALID_ID, INVALID_ID};
 
-        if (!cells.contains(uKeyName)) {
-            return result;
-        }
+        if (!cells.contains(uKeyName)) { return result; }
 
         auto itExisting = std::find(uKeyColumn.begin(), uKeyColumn.end(), cells.at(uKeyName));
         if (itExisting != uKeyColumn.end()) {
@@ -125,23 +118,59 @@ class DbService {
 
     void
     updateChangeQuantity(const std::string& table, Change::colValMap& cells, const std::size_t index, QuantityOperation operation) const {
-        // TODO: error handling
         const std::string& quantityColumn = config.getQuantityColumn();
-        if (hasQuantityColumn(table)) {
-            std::size_t quantityDb = static_cast<std::size_t>(std::stoi(dbData->tableRows.at(table).at(quantityColumn)[index]));
-            auto [cell, _] = cells.try_emplace(quantityColumn, std::to_string(quantityDb));
-            logger.pushLog(Log{std::format(
-                "EXISTING QUANTITY IS: {}. Change-quantity will SUB, ADD, OR SET with value {}.", quantityDb, cells.at(quantityColumn))});
+        if (!hasQuantityColumn(table)) { return; }
+        try {
+            const auto& tableRows = dbData->tableRows.at(table);
+            const auto& column = tableRows.at(quantityColumn);
+            if (index >= column.size()) {
+                logger.pushLog(
+                    Log{std::format("ERROR: Quantity index {} out of range for table '{}' column '{}'.", index, table, quantityColumn)});
+                return;
+            }
+
+            std::size_t quantityDb{};
+            try {
+                quantityDb = static_cast<std::size_t>(std::stoll(column[index]));
+            } catch (...) {
+                logger.pushLog(Log{std::format("ERROR: Invalid quantity value '{}' in DB for table '{}' column '{}' row {}.",
+                                               column[index],
+                                               table,
+                                               quantityColumn,
+                                               index)});
+                return;
+            }
+
+            auto [cell, inserted] = cells.try_emplace(quantityColumn, std::to_string(quantityDb));
+            std::size_t changeValue{};
+            try {
+                changeValue = static_cast<std::size_t>(std::stoll(cell->second));
+            } catch (...) {
+                logger.pushLog(
+                    Log{std::format("ERROR: Invalid quantity change value '{}' for column '{}'.", cell->second, quantityColumn)});
+                return;
+            }
+
+            logger.pushLog(
+                Log{std::format("EXISTING QUANTITY IS: {}. Change-quantity will operate with value {}.", quantityDb, changeValue)});
+
             switch (operation) {
             case QuantityOperation::SET:
+                cells.at(quantityColumn) = std::to_string(changeValue);
                 break;
             case QuantityOperation::ADD:
-                cells.at(quantityColumn) = std::to_string(quantityDb + static_cast<std::size_t>(std::stoi(cell->second)));
+                cells.at(quantityColumn) = std::to_string(quantityDb + changeValue);
                 break;
             case QuantityOperation::SUB:
-                cells.at(quantityColumn) = std::to_string(quantityDb - static_cast<std::size_t>(std::stoi(cell->second)));
+                if (changeValue > quantityDb) {
+                    logger.pushLog(Log{std::format("ERROR: Quantity subtraction would underflow: {} - {}.", quantityDb, changeValue)});
+                    return;
+                }
+                cells.at(quantityColumn) = std::to_string(quantityDb - changeValue);
                 break;
             }
+        } catch (const std::exception& e) {
+            logger.pushLog(Log{std::format("ERROR: Failed to update quantity for table '{}': {}", table, e.what())});
         }
     }
 
@@ -161,9 +190,7 @@ class DbService {
             // columns have the same values as rows have keys
             bool pKeyFound{false};
             for (const auto& header : data.headers.at(table).data) {
-                if (header.type == DB::HeaderTypes::PRIMARY_KEY) {
-                    pKeyFound = true;
-                };
+                if (header.type == DB::HeaderTypes::PRIMARY_KEY) { pKeyFound = true; };
                 if (!data.tableRows.at(table).contains(header.name)) {
                     logger.pushLog(Log{std::format("ERROR: Table {} has header {} which has no data.", table, header.name)});
                     return false;
@@ -180,9 +207,7 @@ class DbService {
     bool validateChange(Change& change, bool fromGeneration) const {
         const StringVector& tables = dbData->tables;
         auto it = std::find(tables.begin(), tables.end(), change.getTable());
-        if (it == tables.end()) {
-            return false;
-        }
+        if (it == tables.end()) { return false; }
         bool setValidity = true;
         bool allowInvalidChange = change.hasParent() && fromGeneration;
 
@@ -190,9 +215,7 @@ class DbService {
         case ChangeType::DELETE_ROW:
             break;
         case ChangeType::INSERT_ROW:
-            if (findIndexAndPKeyOfExisting(change.getTable(), change.getCells()).index != INVALID_ID) {
-                return false;
-            }
+            if (findIndexAndPKeyOfExisting(change.getTable(), change.getCells()).index != INVALID_ID) { return false; }
             [[fallthrough]];
         case ChangeType::UPDATE_CELLS: {
             const Change::colValMap& cells = change.getCells();
@@ -200,9 +223,7 @@ class DbService {
             // check non-nullable column count
             std::size_t reqColumnCount =
                 std::count_if(headers.data.begin(), headers.data.end(), [](const HeaderInfo& h) { return !h.nullable; }) - 1;
-            if (reqColumnCount > cells.size() && change.getType() == ChangeType::INSERT_ROW) {
-                setValidity = false;
-            }
+            if (reqColumnCount > cells.size() && change.getType() == ChangeType::INSERT_ROW) { setValidity = false; }
             if (cells.size() > (headers.data.size() - 1) && !allowInvalidChange) {
                 logger.pushLog(Log{std::format("ERROR: Change is invalid because not enough columns were "
                                                "supplied to satisfy the non-null table columns.")});
@@ -260,9 +281,7 @@ class DbService {
         // early return if the thing already exists in its entirety -> TODO: might tank performance?,
         // maybe its wiser to prevent this situation from elsewhere
         if (cells.contains(headers.uKeyName)) {
-            if (findIndexAndPKeyOfExisting(table, cells).index != INVALID_ID) {
-                return changes;
-            }
+            if (findIndexAndPKeyOfExisting(table, cells).index != INVALID_ID) { return changes; }
         }
 
         for (const auto& [col, val] : cells) {
@@ -293,27 +312,19 @@ class DbService {
 
     bool checkReferencedPKeyValue(const std::string& ref, const std::string& val) const {
         // does pkey-value already exist
-        if (val.empty()) {
-            return true;
-        }
+        if (val.empty()) { return true; }
         std::string pKey = dbData->headers.at(ref).pkey;
         auto it1 = std::ranges::find_if(dbData->tableRows.at(ref).at(pKey), [&](const std::string& h) { return h == val; });
-        if (it1 != dbData->tableRows.at(ref).at(pKey).end()) {
-            return true;
-        }
+        if (it1 != dbData->tableRows.at(ref).at(pKey).end()) { return true; }
         return false;
     }
 
     bool checkReferencedUKeyValue(const std::string& ref, bool nullable, const std::string& val) const {
         // does ukey-value already exist
-        if (val.empty() && nullable) {
-            return true;
-        }
+        if (val.empty() && nullable) { return true; }
         std::string uKey = dbData->headers.at(ref).uKeyName;
         auto it1 = std::ranges::find_if(dbData->tableRows.at(ref).at(uKey), [&](const std::string& h) { return h == val; });
-        if (it1 != dbData->tableRows.at(ref).at(uKey).end()) {
-            return true;
-        }
+        if (it1 != dbData->tableRows.at(ref).at(uKey).end()) { return true; }
         return false;
     }
 
@@ -329,9 +340,7 @@ class DbService {
     ImTable getTable(const std::string& tableName) const {
         auto it = std::find(dbData->tables.begin(), dbData->tables.end(), tableName);
         ImTable tableData{tableName, 0};
-        if (it != dbData->tables.end()) {
-            tableData.id = static_cast<uint16_t>(std::distance(dbData->tables.begin(), it));
-        }
+        if (it != dbData->tables.end()) { tableData.id = static_cast<uint16_t>(std::distance(dbData->tables.begin(), it)); }
         return tableData;
     }
 

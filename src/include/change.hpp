@@ -19,6 +19,11 @@ struct ImTable {
     uint16_t id;
 };
 
+struct SqlQuery {
+    std::string query;
+    std::vector<std::string> params;
+};
+
 class Change {
     /*
     1. create table (not supported)
@@ -74,9 +79,7 @@ class Change {
     colValMap getCells() const { return changedCells; }
 
     std::string getCell(const std::string& header) const {
-        if (!changedCells.contains(header)) {
-            return std::string();
-        }
+        if (!changedCells.contains(header)) { return std::string(); }
         return changedCells.at(header);
     }
 
@@ -91,61 +94,63 @@ class Change {
                 this->changedCells[col] = val;
                 logger->pushLog(Log{std::format("            change now has column: {} with cell value: {}", col, val)});
             }
-            // this->parentKey = other.getParent();
-            // this->selected = other.isSelected();
         }
-        if (logger) {
-            logger->pushLog(Log{std::format("^^ operator")});
-        }
+        if (logger) { logger->pushLog(Log{std::format("^^ operator")}); }
 
         return *this;
     }
 
-    std::string toSQLaction(SqlAction action) const {
-        // TODO: INSERT und UPDATE sind anfällig für SQL Injektion. Beheben
-        std::string sqlString;
-
+    SqlQuery toSQLaction(SqlAction action) const {
+        SqlQuery result;
         switch (type) {
         case ChangeType::DELETE_ROW:
-            sqlString = std::format("DELETE FROM {} WHERE {} = {}", tableData.name, "id", rowId.value());
+            result.query = std::format("DELETE FROM {} WHERE id = $1", tableData.name);
+            result.params.push_back(std::to_string(rowId.value()));
             break;
+
         case ChangeType::INSERT_ROW: {
             std::string columnNames;
-            std::string cellValues;
+            std::string placeholders;
             bool first = true;
+            int paramIndex = 1;
+
             for (const auto& [col, val] : changedCells) {
-                if (col.empty() || val.empty()) {
-                    continue;
-                }
+                if (col.empty() || val.empty()) continue;
                 if (!first) {
                     columnNames += ", ";
-                    cellValues += ", ";
+                    placeholders += ", ";
                 }
+
                 first = false;
                 columnNames += col;
-                cellValues += std::format("'{}'", val);
+                placeholders += std::format("${}", paramIndex++);
+                result.params.push_back(val);
             }
-            sqlString = std::format("INSERT INTO {} ({}) VALUES ({});", tableData.name, columnNames, cellValues);
+
+            result.query = std::format("INSERT INTO {} ({}) VALUES ({});", tableData.name, columnNames, placeholders);
             break;
         }
+
         case ChangeType::UPDATE_CELLS: {
-            std::string columnValuePairs;
+            std::string pairs;
             bool first = true;
+            int paramIndex = 1;
             for (const auto& [col, val] : changedCells) {
-                if (!first) {
-                    columnValuePairs += ", ";
-                }
+                if (!first) pairs += ", ";
                 first = false;
-                columnValuePairs += std::format("{} = '{}'", col, val);
+                pairs += std::format("{} = ${}", col, paramIndex++);
+                result.params.push_back(val);
             }
-            sqlString = std::format("UPDATE {} SET {} WHERE id = {};", tableData.name, columnValuePairs, rowId.value());
+
+            result.query = std::format("UPDATE {} SET {} WHERE id = ${};", tableData.name, pairs, paramIndex);
+            result.params.push_back(std::to_string(rowId.value()));
             break;
         }
         default:
             break;
         }
 
-        return sqlString;
+        return result;
     }
 
     void setSelected(bool value) { selected = value; }
@@ -164,22 +169,16 @@ class Change {
 
     void removeParent(const std::size_t key) {
         auto it = std::find(parentKeys.begin(), parentKeys.end(), key);
-        if (it != parentKeys.end()) {
-            parentKeys.erase(it);
-        }
+        if (it != parentKeys.end()) { parentKeys.erase(it); }
     }
 
     void setLocalValidity(bool validity) {
         locallyValid = validity;
-        if (!hasChildren()) {
-            setValidity(validity);
-        }
+        if (!hasChildren()) { setValidity(validity); }
     }
 
     void setValidity(bool validity) {
-        if (validity) {
-            locallyValid = validity;
-        }
+        if (validity) { locallyValid = validity; }
         valid = validity;
     }
 
@@ -191,9 +190,7 @@ class Change {
 
     void removeChild(const std::size_t key) {
         auto it = std::find(childrenKeys.begin(), childrenKeys.end(), key);
-        if (it != childrenKeys.end()) {
-            childrenKeys.erase(it);
-        }
+        if (it != childrenKeys.end()) { childrenKeys.erase(it); }
     }
 
     bool hasChildren() const { return childrenKeys.size() != 0; }
@@ -204,9 +201,7 @@ class Change {
         std::string summary;
         std::string concat = selected ? "\n" : ",";
         for (const auto& [col, val] : changedCells) {
-            if (!summary.empty()) {
-                summary += concat;
-            }
+            if (!summary.empty()) { summary += concat; }
             summary += std::format("{}={}", col, val);
             if (summary.size() >= len && !selected) {
                 summary.resize(len - 3);
@@ -226,12 +221,8 @@ struct uiChangeInfo {
 namespace ChangeHelpers {
 inline std::unique_ptr<Change>
 getChangeOfRow(const std::shared_ptr<uiChangeInfo>& uiChanges, const std::string& table, const std::size_t id) {
-    if (!uiChanges->idMappedChanges.contains(table)) {
-        return nullptr;
-    }
-    if (id == INVALID_ID) {
-        return nullptr;
-    }
+    if (!uiChanges->idMappedChanges.contains(table)) { return nullptr; }
+    if (id == INVALID_ID) { return nullptr; }
     if (uiChanges->idMappedChanges.at(table).contains(id)) {
         const std::size_t changeKey = uiChanges->idMappedChanges.at(table).at(id);
         return std::make_unique<Change>(uiChanges->changes.at(changeKey));
