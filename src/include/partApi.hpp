@@ -25,16 +25,16 @@ struct CurlListDeleter {
 
 class PartApi {
   private:
-    ThreadPool& pool;
-    Config& config;
-    Logger& logger;
+    ThreadPool& pool_;
+    Config& config_;
+    Logger& logger_;
 
-    DB::ProtectedData<ApiResponseType> responses;
+    DB::ProtectedData<ApiResponseType> responses_;
 
-    static inline bool globalInit = false;
-    static inline bool isInit = false;
-    static inline const ApiConfig* apiConfig;
-    static inline std::string url;
+    static inline bool globalInit_ = false;
+    static inline bool isInit_ = false;
+    static inline const ApiConfig* apiConfig_;
+    static inline std::string url_;
 
     static std::size_t writeCallback(void* contents, size_t size, size_t nmemb, void* userdata) {
         auto* response = static_cast<std::string*>(userdata);
@@ -44,16 +44,16 @@ class PartApi {
     }
 
     bool init() {
-        if (isInit) { return true; }
-        apiConfig = &config.getApiConfig();
-        url = std::format("{}?apiKey={}", apiConfig->address, apiConfig->key);
+        if (isInit_) { return true; }
+        apiConfig_ = &config_.getApiConfig();
+        url_ = std::format("{}?apiKey={}", apiConfig_->address, apiConfig_->key);
         return true;
     }
 
     CURLcode triggerRequest(CURL* curl) {
         CURLcode res = curl_easy_perform(curl);
         if (res != CURLE_OK) {
-            logger.pushLog(Log{std::format("ERROR: API request failed: ", curl_easy_strerror(res))});
+            logger_.pushLog(Log{std::format("ERROR: API request failed: ", curl_easy_strerror(res))});
             return res;
         }
         return CURLE_OK;
@@ -61,23 +61,23 @@ class PartApi {
 
     nlohmann::json parseData(const std::string& response) {
         try {
-            logger.pushLog(Log{std::format("RESPONSE:\n{}", response)});
+            logger_.pushLog(Log{std::format("RESPONSE:\n{}", response)});
             return nlohmann::json::parse(response);
         } catch (const nlohmann::json::type_error& e) {
-            logger.pushLog(Log{std::format("ERROR: Could not parse api respone: {}", e.what())});
+            logger_.pushLog(Log{std::format("ERROR: Could not parse api respone: {}", e.what())});
             return false;
         } catch (const nlohmann::json::parse_error& e) {
-            logger.pushLog(Log{std::format("ERROR: Could not parse api respone: {}", e.what())});
+            logger_.pushLog(Log{std::format("ERROR: Could not parse api respone: {}", e.what())});
             return false;
         }
     }
 
     std::string formSearchPattern(const std::string& item) {
-        std::string searchPattern = config.getSearchPattern();
+        std::string searchPattern = config_.getSearchPattern();
         size_t pos = 0;
         bool replaced = false;
-        while ((pos = searchPattern.find(config.ITEM_PLACE_HOLDER, pos)) != std::string::npos) {
-            searchPattern.replace(pos, config.ITEM_PLACE_HOLDER.length(), item);
+        while ((pos = searchPattern.find(config_.ITEM_PLACE_HOLDER, pos)) != std::string::npos) {
+            searchPattern.replace(pos, config_.ITEM_PLACE_HOLDER.length(), item);
             pos += item.length();
             replaced = true;
         }
@@ -87,19 +87,19 @@ class PartApi {
     }
 
     static void initGlobalCurl() {
-        if (globalInit) { return; }
+        if (globalInit_) { return; }
         curl_global_init(CURL_GLOBAL_DEFAULT);
-        globalInit = true;
+        globalInit_ = true;
     }
 
     static void cleanupGlobalCurl() {
         curl_global_cleanup();
-        globalInit = false;
+        globalInit_ = false;
     }
 
   public:
-    PartApi(ThreadPool& cPool, Config& cConfig, Logger& cLogger) : pool(cPool), config(cConfig), logger(cLogger) {
-        config.setApiArchiveBuffer(&responses);
+    PartApi(ThreadPool& cPool, Config& cConfig, Logger& cLogger) : pool_(cPool), config_(cConfig), logger_(cLogger) {
+        config_.setApiArchiveBuffer(&responses_);
 
         initGlobalCurl();
     }
@@ -112,13 +112,13 @@ class PartApi {
 
     nlohmann::json fetchDataPoint(const std::string& dataPoint, bool forceRefetch = false) {
         if (!forceRefetch) {
-            std::lock_guard<std::mutex> lg{responses.mtx};
-            if (responses.data.contains(dataPoint)) { return responses.data.at(dataPoint); }
+            std::lock_guard<std::mutex> lg{responses_.mtx};
+            if (responses_.data.contains(dataPoint)) { return responses_.data.at(dataPoint); }
         }
         if (!init()) { return nlohmann::json{}; }
         std::unique_ptr<CURL, CurlDeleter> curl = std::unique_ptr<CURL, CurlDeleter>(curl_easy_init());
         if (!curl) {
-            logger.pushLog(Log{"ERROR: Initializing api-connection failed."});
+            logger_.pushLog(Log{"ERROR: Initializing api-connection failed."});
             return nlohmann::json{};
         }
 
@@ -129,7 +129,7 @@ class PartApi {
         std::string responseString;
 
         // setup
-        curl_easy_setopt(curl.get(), CURLOPT_URL, url.c_str());
+        curl_easy_setopt(curl.get(), CURLOPT_URL, url_.c_str());
         curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, writeCallback);
         curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &responseString);
 
@@ -154,14 +154,14 @@ class PartApi {
         if (triggerRequest(curl.get()) != CURLE_OK) { return nlohmann::json{}; }
         nlohmann::json parsed = parseData(responseString);
         {
-            std::lock_guard<std::mutex> lg{responses.mtx};
-            responses.data.insert_or_assign(dataPoint, parsed);
+            std::lock_guard<std::mutex> lg{responses_.mtx};
+            responses_.data.insert_or_assign(dataPoint, parsed);
         }
         return parsed;
     }
 
     void fetchExample(const std::string& dataPoint, UI::ApiPreviewState& state) {
-        pool.submit([&]() {
+        pool_.submit([&]() {
             state.loading = true;
             state.fields = std::move(fetchDataPoint(dataPoint));
             state.loading = false;

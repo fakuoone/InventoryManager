@@ -11,7 +11,7 @@
 
 constexpr const std::size_t BUFFER_SIZE = 256;
 
-struct editingData {
+struct EditingData {
     std::size_t whichId;
     std::vector<std::array<char, BUFFER_SIZE>> insertBuffer;
     std::array<char, BUFFER_SIZE> editBuffer;
@@ -74,23 +74,23 @@ concept drawFunction = std::invocable<F, const CellBoilerPlate&, const Rect&, Ar
 
 class DbTable {
   private:
-    std::shared_ptr<const CompleteDbData> dbData;
-    std::shared_ptr<uiChangeInfo> uiChanges;
-    std::unique_ptr<Change> rowChange;
+    std::shared_ptr<const CompleteDbData> dbData_;
+    std::shared_ptr<uiChangeInfo> uiChanges_;
+    std::unique_ptr<Change> rowChange_;
 
-    editingData& edit;
-    std::string& selectedTable;
-    std::unordered_set<std::size_t>& changeHighlight;
-    Logger& logger;
+    EditingData& edit_;
+    std::string& selectedTable_;
+    std::unordered_set<std::size_t>& changeHighlight_;
+    Logger& logger_;
 
-    float rowHeight = 0;
-    Rect headerPos;
+    float rowHeight_ = 0;
+    Rect headerPos_;
 
-    ImDrawList* drawList;
-    std::map<std::string, std::vector<float>> columnWidths;
+    ImDrawList* drawList_;
+    std::map<std::string, std::vector<float>> columnWidths_;
 
-    Event lastEvent;
-    Change::colValMap insertCells;
+    Event lastEvent_;
+    Change::colValMap insertCells_;
 
     static constexpr float SPLITTER_WIDTH = 10;
     static constexpr float SPLITTER_MIN_DIST = 60;
@@ -148,12 +148,12 @@ class DbTable {
         requires drawFunction<F, Args...>
     EventTypes drawCellSC(const CellBoilerPlate& cellBoiler, F&& function, Args&&... args) {
         EventTypes result;
-        ImVec2 min{cellBoiler.pos.x + headerPos.start.x + PAD_INNER, cellBoiler.pos.y + headerPos.start.y + PAD_INNER};
-        ImVec2 max{min.x + cellBoiler.width - PAD_INNER, min.y + rowHeight - PAD_INNER};
+        ImVec2 min{cellBoiler.pos.x + headerPos_.start.x + PAD_INNER, cellBoiler.pos.y + headerPos_.start.y + PAD_INNER};
+        ImVec2 max{min.x + cellBoiler.width - PAD_INNER, min.y + rowHeight_ - PAD_INNER};
         Rect r{min, max};
         ImVec2 size{max.x - min.x, max.y - min.y};
 
-        drawList->PushClipRect(min, max, true);
+        drawList_->PushClipRect(min, max, true);
         result.action = std::forward<F>(function)(cellBoiler, r, std::forward<Args>(args)...);
 
         ImGui::SetCursorScreenPos(min);
@@ -162,7 +162,7 @@ class DbTable {
         if (!cellBoiler.enabled) { ImGui::EndDisabled(); }
 
         if (ImGui::IsItemHovered()) {
-            drawList->AddRect(min, max, colHoveredGrey);
+            drawList_->AddRect(min, max, colHoveredGrey);
             result.mouse = MouseEventType::HOVER;
 
             if constexpr (sizeof...(Args) > 0) {
@@ -178,7 +178,7 @@ class DbTable {
 
         if (ImGui::IsItemClicked()) { result.mouse = MouseEventType::CLICK; }
 
-        drawList->PopClipRect();
+        drawList_->PopClipRect();
         return result;
     }
 
@@ -192,8 +192,8 @@ class DbTable {
     ActionType drawInsertionInputField(const CellBoilerPlate& cell, const Rect& r);
 
   public:
-    DbTable(editingData& cEdit, std::string& cSelectedTable, std::unordered_set<std::size_t>& cChangeHighlight, Logger& cLogger)
-        : edit(cEdit), selectedTable(cSelectedTable), changeHighlight(cChangeHighlight), logger(cLogger) {}
+    DbTable(EditingData& cEdit, std::string& cSelectedTable, std::unordered_set<std::size_t>& cChangeHighlight, Logger& cLogger)
+        : edit_(cEdit), selectedTable_(cSelectedTable), changeHighlight_(cChangeHighlight), logger_(cLogger) {}
 
     void drawTable(const std::string& tableName);
     void setData(std::shared_ptr<const CompleteDbData> newData);

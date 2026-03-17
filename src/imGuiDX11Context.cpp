@@ -1,7 +1,7 @@
 #include "userInterface/ImGuiDX11Context.hpp"
 
-#include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
+#include "imgui_impl_win32.h"
 
 // #pragma comment(lib, "d3d11.lib")
 
@@ -13,20 +13,20 @@ LRESULT CALLBACK ImGuiDX11Context::WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
     ImGuiDX11Context* ctx = reinterpret_cast<ImGuiDX11Context*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
 
     switch (msg) {
-        case WM_SIZE:
-            if (ctx && wParam != SIZE_MINIMIZED) {
-                ctx->resizeWidth = LOWORD(lParam);
-                ctx->resizeHeight = HIWORD(lParam);
-            }
-            return 0;
+    case WM_SIZE:
+        if (ctx && wParam != SIZE_MINIMIZED) {
+            ctx->resizeWidth_ = LOWORD(lParam);
+            ctx->resizeHeight_ = HIWORD(lParam);
+        }
+        return 0;
 
-        case WM_SYSCOMMAND:
-            if ((wParam & 0xfff0) == SC_KEYMENU) return 0;
-            break;
+    case WM_SYSCOMMAND:
+        if ((wParam & 0xfff0) == SC_KEYMENU) return 0;
+        break;
 
-        case WM_DESTROY:
-            PostQuitMessage(0);
-            return 0;
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
     }
 
     return DefWindowProcW(hWnd, msg, wParam, lParam);
@@ -36,39 +36,49 @@ ImGuiDX11Context::ImGuiDX11Context() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 
-    io = &ImGui::GetIO();
-    style = &ImGui::GetStyle();
+    io_ = &ImGui::GetIO();
+    style_ = &ImGui::GetStyle();
 
     ImGui_ImplWin32_EnableDpiAwareness();
     float scale = ImGui_ImplWin32_GetDpiScaleForMonitor(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY));
 
-    wc = {};
-    wc.cbSize = sizeof(WNDCLASSEXW);
-    wc.style = CS_CLASSDC;
-    wc.lpfnWndProc = ImGuiDX11Context::WndProc;
-    wc.hInstance = GetModuleHandle(nullptr);
-    wc.lpszClassName = L"ImGuiDX11Context";
+    wc_ = {};
+    wc_.cbSize = sizeof(WNDCLASSEXW);
+    wc_.style = CS_CLASSDC;
+    wc_.lpfnWndProc = ImGuiDX11Context::WndProc;
+    wc_.hInstance = GetModuleHandle(nullptr);
+    wc_.lpszClassName = L"ImGuiDX11Context";
 
-    RegisterClassExW(&wc);
+    RegisterClassExW(&wc_);
 
-    hwnd = CreateWindowW(wc.lpszClassName, L"Inventory Manager", WS_OVERLAPPEDWINDOW, 100, 100, int(1280 * scale), int(800 * scale), nullptr, nullptr, wc.hInstance, nullptr);
+    hwnd_ = CreateWindowW(wc_.lpszClassName,
+                          L"Inventory Manager",
+                          WS_OVERLAPPEDWINDOW,
+                          100,
+                          100,
+                          int(1280 * scale),
+                          int(800 * scale),
+                          nullptr,
+                          nullptr,
+                          wc_.hInstance,
+                          nullptr);
 
-    SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+    SetWindowLongPtr(hwnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 
-    createDeviceD3D(hwnd);
+    createDeviceD3D(hwnd_);
 
-    ShowWindow(hwnd, SW_SHOWDEFAULT);
-    UpdateWindow(hwnd);
+    ShowWindow(hwnd_, SW_SHOWDEFAULT);
+    UpdateWindow(hwnd_);
 
-    io->ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io->ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    io_->ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io_->ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
     ImGui::StyleColorsDark();
-    style->ScaleAllSizes(scale);
-    style->FontScaleDpi = scale;
+    style_->ScaleAllSizes(scale);
+    style_->FontScaleDpi = scale;
 
-    ImGui_ImplWin32_Init(hwnd);
-    ImGui_ImplDX11_Init(device, deviceContext);
+    ImGui_ImplWin32_Init(hwnd_);
+    ImGui_ImplDX11_Init(device_, deviceContext_);
 }
 
 ImGuiDX11Context::~ImGuiDX11Context() {
@@ -77,8 +87,8 @@ ImGuiDX11Context::~ImGuiDX11Context() {
     ImGui::DestroyContext();
 
     cleanupDeviceD3D();
-    DestroyWindow(hwnd);
-    UnregisterClassW(wc.lpszClassName, wc.hInstance);
+    DestroyWindow(hwnd_);
+    UnregisterClassW(wc_.lpszClassName, wc_.hInstance);
 }
 
 bool ImGuiDX11Context::pollEvents() {
@@ -92,16 +102,16 @@ bool ImGuiDX11Context::pollEvents() {
 }
 
 bool ImGuiDX11Context::beginFrame() {
-    if (swapChainOccluded && swapChain->Present(0, DXGI_PRESENT_TEST) == DXGI_STATUS_OCCLUDED) {
+    if (swapChainOccluded_ && swapChain_->Present(0, DXGI_PRESENT_TEST) == DXGI_STATUS_OCCLUDED) {
         Sleep(10);
         return false;
     }
-    swapChainOccluded = false;
+    swapChainOccluded_ = false;
 
-    if (resizeWidth && resizeHeight) {
+    if (resizeWidth_ && resizeHeight_) {
         cleanupRenderTarget();
-        swapChain->ResizeBuffers(0, resizeWidth, resizeHeight, DXGI_FORMAT_UNKNOWN, 0);
-        resizeWidth = resizeHeight = 0;
+        swapChain_->ResizeBuffers(0, resizeWidth_, resizeHeight_, DXGI_FORMAT_UNKNOWN, 0);
+        resizeWidth_ = resizeHeight_ = 0;
         createRenderTarget();
     }
 
@@ -115,8 +125,9 @@ bool ImGuiDX11Context::beginFrame() {
     ImGui::SetNextWindowSize(viewport->Size);
     ImGui::SetNextWindowViewport(viewport->ID);
 
-    ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoDocking;
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                             ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
+                             ImGuiWindowFlags_NoDocking;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
@@ -133,14 +144,14 @@ void ImGuiDX11Context::endFrame() {
 
     ImGui::Render();
 
-    float clear[4] = {clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w};
+    float clear[4] = {clearColor_.x * clearColor_.w, clearColor_.y * clearColor_.w, clearColor_.z * clearColor_.w, clearColor_.w};
 
-    deviceContext->OMSetRenderTargets(1, &mainRTV, nullptr);
-    deviceContext->ClearRenderTargetView(mainRTV, clear);
+    deviceContext_->OMSetRenderTargets(1, &mainRTV_, nullptr);
+    deviceContext_->ClearRenderTargetView(mainRTV_, clear);
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
-    HRESULT hr = swapChain->Present(1, 0);
-    swapChainOccluded = (hr == DXGI_STATUS_OCCLUDED);
+    HRESULT hr = swapChain_->Present(1, 0);
+    swapChainOccluded_ = (hr == DXGI_STATUS_OCCLUDED);
 }
 
 bool ImGuiDX11Context::createDeviceD3D(HWND hWnd) {
@@ -156,7 +167,8 @@ bool ImGuiDX11Context::createDeviceD3D(HWND hWnd) {
     D3D_FEATURE_LEVEL level;
     const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0};
 
-    HRESULT hr = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, levels, 2, D3D11_SDK_VERSION, &sd, &swapChain, &device, &level, &deviceContext);
+    HRESULT hr = D3D11CreateDeviceAndSwapChain(
+        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, 0, levels, 2, D3D11_SDK_VERSION, &sd, &swapChain_, &device_, &level, &deviceContext_);
 
     if (FAILED(hr)) return false;
 
@@ -166,21 +178,21 @@ bool ImGuiDX11Context::createDeviceD3D(HWND hWnd) {
 
 void ImGuiDX11Context::cleanupDeviceD3D() {
     cleanupRenderTarget();
-    if (swapChain) swapChain->Release();
-    if (deviceContext) deviceContext->Release();
-    if (device) device->Release();
+    if (swapChain_) swapChain_->Release();
+    if (deviceContext_) deviceContext_->Release();
+    if (device_) device_->Release();
 }
 
 void ImGuiDX11Context::createRenderTarget() {
     ID3D11Texture2D* backBuffer = nullptr;
-    swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
-    device->CreateRenderTargetView(backBuffer, nullptr, &mainRTV);
+    swapChain_->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
+    device_->CreateRenderTargetView(backBuffer, nullptr, &mainRTV_);
     backBuffer->Release();
 }
 
 void ImGuiDX11Context::cleanupRenderTarget() {
-    if (mainRTV) {
-        mainRTV->Release();
-        mainRTV = nullptr;
+    if (mainRTV_) {
+        mainRTV_->Release();
+        mainRTV_ = nullptr;
     }
 }

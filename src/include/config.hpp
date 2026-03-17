@@ -29,14 +29,14 @@ struct ReaderConfig {
 
 class Config {
   private:
-    std::string quantityColumn;
-    std::string dbString;
-    std::string fontPath;
-    ApiConfig api;
-    ReaderConfig order;
-    ReaderConfig bom;
+    std::string quantityColumn_;
+    std::string dbString_;
+    std::string fontPath_;
+    ApiConfig api_;
+    ReaderConfig order_;
+    ReaderConfig bom_;
 
-    Logger& logger;
+    Logger& logger_;
 
     std::string databaseJsonToDbString(const nlohmann::json& j) {
         try {
@@ -46,61 +46,61 @@ class Config {
             std::string connectionString = std::format("dbname={} user={} password={}", dbname, user, password);
             return connectionString;
         } catch (const nlohmann::json::parse_error& e) {
-            logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
+            logger_.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
             return std::string{};
         }
     }
 
     void getAdditionalConfig(const nlohmann::json& j) {
         try {
-            quantityColumn = j.at("quantity-column").get<std::string>();
-            if (j.contains("font")) { fontPath = j.at("font").get<std::string>(); }
+            quantityColumn_ = j.at("quantity-column").get<std::string>();
+            if (j.contains("font")) { fontPath_ = j.at("font").get<std::string>(); }
 
             // API
-            api.address = j["api"]["address"].get<std::string>();
-            api.key = j["api"]["key"].get<std::string>();
-            if (j["api"].contains("dummyJson")) { api.dummyJson = j["api"]["dummyJson"].get<nlohmann::json>(); }
-            api.searchPattern = j["api"]["search"].get<nlohmann::json>().dump();
+            api_.address = j["api"]["address"].get<std::string>();
+            api_.key = j["api"]["key"].get<std::string>();
+            if (j["api"].contains("dummyJson")) { api_.dummyJson = j["api"]["dummyJson"].get<nlohmann::json>(); }
+            api_.searchPattern = j["api"]["search"].get<nlohmann::json>().dump();
             if (j["api"].contains("responseArchive")) {
-                api.responseArchive = j["api"]["responseArchive"].get<std::filesystem::path>();
+                api_.responseArchive = j["api"]["responseArchive"].get<std::filesystem::path>();
                 readApiArchive();
             } else {
-                logger.pushLog(
+                logger_.pushLog(
                     Log{"INFORMATION: API storage feature not specified in config. This will lead to increased api request rate."});
             }
 
             // DEFAULT CSV
             if (j.contains("order")) {
-                order.defaultPath = j["order"]["defaultPath"].get<std::filesystem::path>();
+                order_.defaultPath = j["order"]["defaultPath"].get<std::filesystem::path>();
                 if (j["order"].contains("mappingArchive")) {
-                    order.mappingArchive = j["order"]["mappingArchive"].get<std::filesystem::path>();
+                    order_.mappingArchive = j["order"]["mappingArchive"].get<std::filesystem::path>();
                 }
             }
             if (j.contains("bom")) {
-                bom.defaultPath = j["bom"]["defaultPath"].get<std::filesystem::path>();
-                if (j["bom"].contains("mappingArchive")) { bom.mappingArchive = j["bom"]["mappingArchive"].get<std::filesystem::path>(); }
+                bom_.defaultPath = j["bom"]["defaultPath"].get<std::filesystem::path>();
+                if (j["bom"].contains("mappingArchive")) { bom_.mappingArchive = j["bom"]["mappingArchive"].get<std::filesystem::path>(); }
             }
-        } catch (const nlohmann::json::parse_error& e) { logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())}); }
+        } catch (const nlohmann::json::parse_error& e) { logger_.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())}); }
     }
 
     void readApiArchive() {
-        if (!api.responses) { return; }
-        std::ifstream archive(api.responseArchive);
+        if (!api_.responses) { return; }
+        std::ifstream archive(api_.responseArchive);
         if (!archive) { return; }
 
         nlohmann::json j;
         archive >> j;
 
         if (!j.is_object()) {
-            logger.pushLog(Log{std::format("WARNIG: Api-Archive with path: {} is specified but contents are incorrectly formatted.",
-                                           api.responseArchive.string().c_str())});
+            logger_.pushLog(Log{std::format("WARNIG: Api-Archive with path: {} is specified but contents are incorrectly formatted.",
+                                            api_.responseArchive.string().c_str())});
             return;
         }
         {
-            std::lock_guard<std::mutex> lg{api.responses->mtx};
-            api.responses->data = std::move(j.get<ApiResponseType>());
-            api.responses->ready = true;
-            logger.pushLog(Log{"Loaded api archive from file."});
+            std::lock_guard<std::mutex> lg{api_.responses->mtx};
+            api_.responses->data = std::move(j.get<ApiResponseType>());
+            api_.responses->ready = true;
+            logger_.pushLog(Log{"Loaded api archive from file."});
         }
         return;
     }
@@ -109,17 +109,17 @@ class Config {
 
         std::ifstream configFile(configPath);
         if (!configFile.is_open()) {
-            logger.pushLog(Log{std::format("ERROR: Could not open {}", configPath.string())});
+            logger_.pushLog(Log{std::format("ERROR: Could not open {}", configPath.string())});
             return std::string{};
         } else {
-            logger.pushLog(Log{std::format("Reading config from {}", configPath.string())});
+            logger_.pushLog(Log{std::format("Reading config from {}", configPath.string())});
         }
 
         nlohmann::json config;
         try {
             configFile >> config;
         } catch (const nlohmann::json::parse_error& e) {
-            logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
+            logger_.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
             return std::string{};
         }
 
@@ -132,7 +132,7 @@ class Config {
         std::vector<AutoInv::SerializableMapping> result;
         std::ifstream mappingFile(path);
         if (!mappingFile.is_open()) {
-            logger.pushLog(Log{std::format("ERROR: Could not open {}", path.string())});
+            logger_.pushLog(Log{std::format("ERROR: Could not open {}", path.string())});
             return result;
         }
 
@@ -140,7 +140,7 @@ class Config {
         try {
             mappingFile >> mappings;
         } catch (const nlohmann::json::parse_error& e) {
-            logger.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
+            logger_.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
             return result;
         }
 
@@ -170,7 +170,7 @@ class Config {
     void saveSingleMappingToFile(const std::vector<AutoInv::MappingNumber>& mappings, const std::filesystem::path& path) {
         std::ofstream mappingFile(path);
         if (!mappingFile.is_open()) {
-            logger.pushLog(Log{std::format("ERROR: Cant open mapping file: {}.", path.string())});
+            logger_.pushLog(Log{std::format("ERROR: Cant open mapping file: {}.", path.string())});
             return;
         }
 
@@ -204,43 +204,43 @@ class Config {
   public:
     const std::string_view ITEM_PLACE_HOLDER = "${PART_NUMBER}";
 
-    Config(Logger& cLogger) : logger(cLogger) {}
+    Config(Logger& cLogger) : logger_(cLogger) {}
 
     std::string setConfigString(const std::filesystem::path& configPath) {
         if (configPath.empty()) {
-            dbString = readConfigFile(getExeDir().parent_path() / "config/database.json");
+            dbString_ = readConfigFile(getExeDir().parent_path() / "config/database.json");
         } else {
-            dbString = readConfigFile(std::filesystem::path{configPath});
+            dbString_ = readConfigFile(std::filesystem::path{configPath});
         }
-        return dbString;
+        return dbString_;
     }
 
     void saveApiArchive() {
-        if (!api.responses) { return; }
-        if (api.responseArchive.empty()) { return; }
+        if (!api_.responses) { return; }
+        if (api_.responseArchive.empty()) { return; }
         nlohmann::json j;
         {
-            std::lock_guard<std::mutex> lg{api.responses->mtx};
-            j = nlohmann::json(api.responses->data);
+            std::lock_guard<std::mutex> lg{api_.responses->mtx};
+            j = nlohmann::json(api_.responses->data);
         }
 
-        std::ofstream archive(api.responseArchive);
+        std::ofstream archive(api_.responseArchive);
         if (!archive) { return; }
 
         archive << j.dump();
-        logger.pushLog(Log{"Saved api archive to file."});
+        logger_.pushLog(Log{"Saved api archive to file."});
     }
 
     AutoInv::LoadedMappings readMappings() {
         AutoInv::LoadedMappings mappings;
-        if (!order.mappingArchive.empty()) { mappings.order = readSingleMappingFile(order.mappingArchive); }
-        if (!bom.mappingArchive.empty()) { mappings.bom = readSingleMappingFile(bom.mappingArchive); }
+        if (!order_.mappingArchive.empty()) { mappings.order = readSingleMappingFile(order_.mappingArchive); }
+        if (!bom_.mappingArchive.empty()) { mappings.bom = readSingleMappingFile(bom_.mappingArchive); }
         return mappings;
     }
 
     void saveMappings(const std::vector<AutoInv::MappingNumber>& mappingsBom, const std::vector<AutoInv::MappingNumber>& mappingsOrder) {
-        if (!order.mappingArchive.empty() && !mappingsOrder.empty()) { saveSingleMappingToFile(mappingsOrder, order.mappingArchive); }
-        if (!bom.mappingArchive.empty() && !mappingsBom.empty()) { saveSingleMappingToFile(mappingsBom, bom.mappingArchive); }
+        if (!order_.mappingArchive.empty() && !mappingsOrder.empty()) { saveSingleMappingToFile(mappingsOrder, order_.mappingArchive); }
+        if (!bom_.mappingArchive.empty() && !mappingsBom.empty()) { saveSingleMappingToFile(mappingsBom, bom_.mappingArchive); }
     }
 
     std::filesystem::path getExeDir() {
@@ -249,19 +249,19 @@ class Config {
         return std::filesystem::path(buffer).parent_path();
     }
 
-    const std::string& getFont() const { return fontPath; }
+    const std::string& getFont() const { return fontPath_; }
 
-    const std::string& getQuantityColumn() const { return quantityColumn; }
+    const std::string& getQuantityColumn() const { return quantityColumn_; }
 
-    const ApiConfig& getApiConfig() const { return api; }
+    const ApiConfig& getApiConfig() const { return api_; }
 
-    void setApiArchiveBuffer(DB::ProtectedData<ApiResponseType>* responses) { api.responses = responses; }
+    void setApiArchiveBuffer(DB::ProtectedData<ApiResponseType>* responses) { api_.responses = responses; }
 
-    nlohmann::json getDummyJson() const { return api.dummyJson; }
+    nlohmann::json getDummyJson() const { return api_.dummyJson; }
 
-    const std::string getSearchPattern() const { return api.searchPattern; }
+    const std::string getSearchPattern() const { return api_.searchPattern; }
 
-    const std::filesystem::path getCsvPathOrder() const { return order.defaultPath; }
+    const std::filesystem::path getCsvPathOrder() const { return order_.defaultPath; }
 
-    const std::filesystem::path getCsvPathBom() const { return bom.defaultPath; }
+    const std::filesystem::path getCsvPathBom() const { return bom_.defaultPath; }
 };

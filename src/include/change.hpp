@@ -42,45 +42,45 @@ class Change {
     using ctUKMD = std::map<std::string, chSimpleMap<std::string>>;
 
   private:
-    static inline std::atomic<std::size_t> nextId{1};
-    inline static Logger* logger = nullptr;
+    static inline std::atomic<std::size_t> nextId_{1};
+    inline static Logger* logger_ = nullptr;
 
-    std::size_t changeKey;
+    std::size_t changeKey_;
 
-    colValMap changedCells;
-    ChangeType type{ChangeType::UPDATE_CELLS};
+    colValMap changedCells_;
+    ChangeType type_{ChangeType::UPDATE_CELLS};
 
-    ImTable tableData;
-    std::optional<uint32_t> rowId;
+    ImTable tableData_;
+    std::optional<uint32_t> rowId_;
 
-    std::vector<std::size_t> parentKeys;
-    std::vector<std::size_t> childrenKeys;
+    std::vector<std::size_t> parentKeys_;
+    std::vector<std::size_t> childrenKeys_;
 
-    bool selected{false};
-    bool locallyValid{false};
-    bool valid{false};
+    bool selected_{false};
+    bool locallyValid_{false};
+    bool valid_{false};
 
   public:
     Change(colValMap cCells, ChangeType cType, ImTable cTable, std::optional<std::size_t> cRowId = std::nullopt)
-        : changeKey(nextId++), changedCells(cCells), type(cType), tableData(cTable), rowId(cRowId) {}
+        : changeKey_(nextId_++), changedCells_(cCells), type_(cType), tableData_(cTable), rowId_(cRowId) {}
 
-    static void setLogger(Logger& l) { logger = &l; }
+    static void setLogger(Logger& l) { logger_ = &l; }
 
-    [[nodiscard]] std::size_t getKey() const { return changeKey; };
+    [[nodiscard]] std::size_t getKey() const { return changeKey_; };
 
-    ChangeType getType() const { return type; }
+    ChangeType getType() const { return type_; }
 
-    const std::string& getTable() const { return tableData.name; }
+    const std::string& getTable() const { return tableData_.name; }
 
-    bool hasRowId() const { return rowId.has_value(); }
+    bool hasRowId() const { return rowId_.has_value(); }
 
-    uint32_t getRowId() const { return rowId.value(); }
+    uint32_t getRowId() const { return rowId_.value(); }
 
-    colValMap getCells() const { return changedCells; }
+    colValMap getCells() const { return changedCells_; }
 
     std::string getCell(const std::string& header) const {
-        if (!changedCells.contains(header)) { return std::string(); }
-        return changedCells.at(header);
+        if (!changedCells_.contains(header)) { return std::string(); }
+        return changedCells_.at(header);
     }
 
     Change(const Change& other) = default;
@@ -90,22 +90,22 @@ class Change {
 
     Change& operator^(const Change& other) {
         if (this != &other) {
-            for (auto const& [col, val] : other.changedCells) {
-                this->changedCells[col] = val;
-                logger->pushLog(Log{std::format("            change now has column: {} with cell value: {}", col, val)});
+            for (auto const& [col, val] : other.changedCells_) {
+                this->changedCells_[col] = val;
+                logger_->pushLog(Log{std::format("            change now has column: {} with cell value: {}", col, val)});
             }
         }
-        if (logger) { logger->pushLog(Log{std::format("^^ operator")}); }
+        if (logger_) { logger_->pushLog(Log{std::format("^^ operator")}); }
 
         return *this;
     }
 
     SqlQuery toSQLaction(SqlAction action) const {
         SqlQuery result;
-        switch (type) {
+        switch (type_) {
         case ChangeType::DELETE_ROW:
-            result.query = std::format("DELETE FROM {} WHERE id = $1", tableData.name);
-            result.params.push_back(std::to_string(rowId.value()));
+            result.query = std::format("DELETE FROM {} WHERE id = $1", tableData_.name);
+            result.params.push_back(std::to_string(rowId_.value()));
             break;
 
         case ChangeType::INSERT_ROW: {
@@ -114,7 +114,7 @@ class Change {
             bool first = true;
             int paramIndex = 1;
 
-            for (const auto& [col, val] : changedCells) {
+            for (const auto& [col, val] : changedCells_) {
                 if (col.empty() || val.empty()) continue;
                 if (!first) {
                     columnNames += ", ";
@@ -127,7 +127,7 @@ class Change {
                 result.params.push_back(val);
             }
 
-            result.query = std::format("INSERT INTO {} ({}) VALUES ({});", tableData.name, columnNames, placeholders);
+            result.query = std::format("INSERT INTO {} ({}) VALUES ({});", tableData_.name, columnNames, placeholders);
             break;
         }
 
@@ -135,15 +135,15 @@ class Change {
             std::string pairs;
             bool first = true;
             int paramIndex = 1;
-            for (const auto& [col, val] : changedCells) {
+            for (const auto& [col, val] : changedCells_) {
                 if (!first) pairs += ", ";
                 first = false;
                 pairs += std::format("{} = ${}", col, paramIndex++);
                 result.params.push_back(val);
             }
 
-            result.query = std::format("UPDATE {} SET {} WHERE id = ${};", tableData.name, pairs, paramIndex);
-            result.params.push_back(std::to_string(rowId.value()));
+            result.query = std::format("UPDATE {} SET {} WHERE id = ${};", tableData_.name, pairs, paramIndex);
+            result.params.push_back(std::to_string(rowId_.value()));
             break;
         }
         default:
@@ -153,57 +153,57 @@ class Change {
         return result;
     }
 
-    void setSelected(bool value) { selected = value; }
+    void setSelected(bool value) { selected_ = value; }
 
-    bool isSelected() const { return selected; }
+    bool isSelected() const { return selected_; }
 
-    void addParent(std::size_t parent) { parentKeys.push_back(parent); }
+    void addParent(std::size_t parent) { parentKeys_.push_back(parent); }
 
-    void setRowId(uint32_t aRowId) { rowId = aRowId; }
+    void setRowId(uint32_t aRowId) { rowId_ = aRowId; }
 
-    bool hasParent() const { return parentKeys.size() != 0; }
+    bool hasParent() const { return parentKeys_.size() != 0; }
 
-    std::size_t getParentCount() const { return parentKeys.size(); }
+    std::size_t getParentCount() const { return parentKeys_.size(); }
 
-    const std::vector<std::size_t>& getParents() const { return parentKeys; }
+    const std::vector<std::size_t>& getParents() const { return parentKeys_; }
 
     void removeParent(const std::size_t key) {
-        auto it = std::find(parentKeys.begin(), parentKeys.end(), key);
-        if (it != parentKeys.end()) { parentKeys.erase(it); }
+        auto it = std::find(parentKeys_.begin(), parentKeys_.end(), key);
+        if (it != parentKeys_.end()) { parentKeys_.erase(it); }
     }
 
     void setLocalValidity(bool validity) {
-        locallyValid = validity;
+        locallyValid_ = validity;
         if (!hasChildren()) { setValidity(validity); }
     }
 
     void setValidity(bool validity) {
-        if (validity) { locallyValid = validity; }
-        valid = validity;
+        if (validity) { locallyValid_ = validity; }
+        valid_ = validity;
     }
 
-    bool isLocallyValid() const { return locallyValid; }
+    bool isLocallyValid() const { return locallyValid_; }
 
-    bool isValid() const { return valid; }
+    bool isValid() const { return valid_; }
 
-    void pushChild(const Change& change) { childrenKeys.push_back(change.getKey()); }
+    void pushChild(const Change& change) { childrenKeys_.push_back(change.getKey()); }
 
     void removeChild(const std::size_t key) {
-        auto it = std::find(childrenKeys.begin(), childrenKeys.end(), key);
-        if (it != childrenKeys.end()) { childrenKeys.erase(it); }
+        auto it = std::find(childrenKeys_.begin(), childrenKeys_.end(), key);
+        if (it != childrenKeys_.end()) { childrenKeys_.erase(it); }
     }
 
-    bool hasChildren() const { return childrenKeys.size() != 0; }
+    bool hasChildren() const { return childrenKeys_.size() != 0; }
 
-    const std::vector<std::size_t>& getChildren() const { return childrenKeys; }
+    const std::vector<std::size_t>& getChildren() const { return childrenKeys_; }
 
     std::string getCellSummary(const uint8_t len) const {
         std::string summary;
-        std::string concat = selected ? "\n" : ",";
-        for (const auto& [col, val] : changedCells) {
+        std::string concat = selected_ ? "\n" : ",";
+        for (const auto& [col, val] : changedCells_) {
             if (!summary.empty()) { summary += concat; }
             summary += std::format("{}={}", col, val);
-            if (summary.size() >= len && !selected) {
+            if (summary.size() >= len && !selected_) {
                 summary.resize(len - 3);
                 summary += "...";
             }

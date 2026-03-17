@@ -19,38 +19,38 @@ struct WidgetAnchors {
 
 class CsvMappingVisualizer {
   protected:
-    DbService& dbService;
-    PartApi& api;
-    Config& config;
-    Logger& logger;
-    std::shared_ptr<const CompleteDbData> dbData;
-    UI::DataStates& dataStates;
+    DbService& dbService_;
+    PartApi& api_;
+    Config& config_;
+    Logger& logger_;
+    std::shared_ptr<const CompleteDbData> dbData_;
+    UI::DataStates& dataStates_;
 
-    std::vector<std::string> headers;
-    std::vector<DB::TypeCategory> headerTypes;
+    std::vector<std::string> headers_;
+    std::vector<DB::TypeCategory> headerTypes_;
 
-    std::vector<std::string> firstRow;
-    std::vector<MappingDestinationDb> dbHeaderWidgets;
-    std::vector<MappingSource> csvHeaderWidgets;
+    std::vector<std::string> firstRow_;
+    std::vector<MappingDestinationDb> dbHeaderWidgets_;
+    std::vector<MappingSource> csvHeaderWidgets_;
 
-    std::vector<MappingNumber> mappingsN;
+    std::vector<MappingNumber> mappingsN_;
     std::atomic<bool> mappingsLoaded; // not a very good solution ?
 
-    std::mutex mtxInit;
-    std::condition_variable cvInit;
-    bool csvDataVisualized;
+    std::mutex mtxInit_;
+    std::condition_variable cvInit_;
+    bool csvDataVisualized_;
 
-    std::vector<MappingDestinationToApi> mappingsToApiWidgets;
-    std::unordered_map<MappingIdType, UI::ApiPreviewState> apiPreviewCache;
+    std::vector<MappingDestinationToApi> mappingsToApiWidgets_;
+    std::unordered_map<MappingIdType, UI::ApiPreviewState> apiPreviewCache_;
 
-    WidgetAnchors sourceAnchors;
-    WidgetAnchors destAnchors;
-    std::unordered_map<MappingNumber, MappingDrawing, MappingHash> mappingsDrawingInfo;
+    WidgetAnchors sourceAnchors_;
+    WidgetAnchors destAnchors_;
+    std::unordered_map<MappingNumber, MappingDrawing, MappingHash> mappingsDrawingInfo_;
 
-    std::array<char, 256> csvBuffer;
+    std::array<char, 256> csvBuffer_;
 
     CsvMappingVisualizer(DbService& cDbService, PartApi& cApi, Config& cConfig, Logger& cLogger, UI::DataStates& cDataStates)
-        : dbService(cDbService), api(cApi), config(cConfig), logger(cLogger), dataStates(cDataStates) {}
+        : dbService_(cDbService), api_(cApi), config_(cConfig), logger_(cLogger), dataStates_(cDataStates) {}
 
     virtual void createMappingToDb(const SourceDetail& source, const DbDestinationDetail& dest) = 0;
     virtual void createMappingToApi(const SourceDetail& source, ApiDestinationDetail& dest) = 0;
@@ -85,25 +85,25 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     static constexpr float RIGHT_MIN = 200.0f;
 
     std::vector<AutoInv::MappingDestinationToApi>::iterator addApiWidget() {
-        const std::size_t newIndex = ++destAnchors.largestId;
-        apiPreviewCache.insert_or_assign(newIndex, UI::ApiPreviewState{});
-        mappingsToApiWidgets.emplace_back(MappingDestinationToApi(
-            ApiDestinationDetail(true, newIndex, "NONE", "API", DB::TypeCategory::ANY), &apiPreviewCache.at(newIndex), true));
-        return std::prev(mappingsToApiWidgets.end());
+        const std::size_t newIndex = ++destAnchors_.largestId;
+        apiPreviewCache_.insert_or_assign(newIndex, UI::ApiPreviewState{});
+        mappingsToApiWidgets_.emplace_back(MappingDestinationToApi(
+            ApiDestinationDetail(true, newIndex, "NONE", "API", DB::TypeCategory::ANY), &apiPreviewCache_.at(newIndex), true));
+        return std::prev(mappingsToApiWidgets_.end());
     }
 
     void drawApiWidgets(const float width, ImVec2 popupStartup) {
-        for (auto& mapping : mappingsToApiWidgets) {
+        for (auto& mapping : mappingsToApiWidgets_) {
             mapping.draw(width);
         }
     }
 
     void drawHead() {
-        bool enterPressed = ImGui::InputText("##edit", csvBuffer.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
+        bool enterPressed = ImGui::InputText("##edit", csvBuffer_.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
         if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
             try {
-                reader.read(std::filesystem::path(std::string(csvBuffer.data())));
-            } catch (const std::exception& e) { logger.pushLog(Log{std::format("ERROR reading order: {}", e.what())}); }
+                reader.read(std::filesystem::path(std::string(csvBuffer_.data())));
+            } catch (const std::exception& e) { logger_.pushLog(Log{std::format("ERROR reading order: {}", e.what())}); }
         }
 
         // add api intermediate stage
@@ -123,7 +123,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     }
 
     void drawMappingSourceRawCSV(const float width) {
-        for (auto& csvHeaderWidget : csvHeaderWidgets) {
+        for (auto& csvHeaderWidget : csvHeaderWidgets_) {
             csvHeaderWidget.draw(width);
         }
     }
@@ -134,8 +134,8 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
             MappingCsvToDb(PreciseMapLocation(source.primaryField, source.apiSelector), PreciseMapLocation(dest.table, dest.header.name));
         SourceType sourceType = source.apiSelector.empty() ? SourceType::CSV : SourceType::API; // not very clean, but gets the job done
         MappingNumber newMappingN = MappingNumber{MappingNumberInternal{source.id, dest.id}, std::move(newMappingS), sourceType};
-        mappingsDrawingInfo.insert_or_assign(newMappingN, MappingDrawing());
-        mappingsN.emplace_back(std::move(newMappingN));
+        mappingsDrawingInfo_.insert_or_assign(newMappingN, MappingDrawing());
+        mappingsN_.emplace_back(std::move(newMappingN));
         // mappingsSToDb.emplace_back(std::move(newMappingS));
     }
 
@@ -145,8 +145,8 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         dest.attribute = source.primaryField;
         MappingCsvApi newMappingS = MappingCsvApi(source.primaryField, dest.id);
         MappingNumber newMappingN = MappingNumber{MappingNumberInternal{source.id, dest.id}, std::move(newMappingS), SourceType::API};
-        mappingsDrawingInfo.insert_or_assign(newMappingN, MappingDrawing());
-        mappingsN.emplace_back(std::move(newMappingN));
+        mappingsDrawingInfo_.insert_or_assign(newMappingN, MappingDrawing());
+        mappingsN_.emplace_back(std::move(newMappingN));
         // mappingsSToApi.emplace_back(std::move(newMappingS));
     }
 
@@ -155,18 +155,18 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         while (!mappingsLoaded.load(std::memory_order_acquire)) {
             std::this_thread::yield();
         };
-        auto it = std::find(mappingsN.begin(), mappingsN.end(), mapping);
-        if (it != mappingsN.end()) {
-            mappingsDrawingInfo.erase(mapping);
+        auto it = std::find(mappingsN_.begin(), mappingsN_.end(), mapping);
+        if (it != mappingsN_.end()) {
+            mappingsDrawingInfo_.erase(mapping);
             if (std::get_if<MappingCsvApi>(&mapping.usableData)) {
-                auto itApi = std::find_if(mappingsToApiWidgets.begin(), mappingsToApiWidgets.end(), [&](const MappingDestinationToApi& m) {
-                    return m.getId() == mapping.uniqueData.destination;
-                });
-                if (itApi != mappingsToApiWidgets.end()) {
+                auto itApi = std::find_if(mappingsToApiWidgets_.begin(),
+                                          mappingsToApiWidgets_.end(),
+                                          [&](const MappingDestinationToApi& m) { return m.getId() == mapping.uniqueData.destination; });
+                if (itApi != mappingsToApiWidgets_.end()) {
                     itApi->setAttribute("API");
                     itApi->setExample("NONE");
                     itApi->eraseSourcesFromParent();
-                    mappingsToApiWidgets.erase(itApi);
+                    mappingsToApiWidgets_.erase(itApi);
                 }
             } else if (auto* mToDb = std::get_if<MappingCsvToDb>(&mapping.usableData)) {
                 // NOT THE RIGHT SPOT FOR THIS: find api mapping if it exists to remove the fields from the widget
@@ -185,7 +185,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
                 //     it->removeFields();
                 // }
             }
-            mappingsN.erase(it);
+            mappingsN_.erase(it);
         }
     }
 
@@ -202,7 +202,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     void run() override {
         drawHead();
 
-        if (dataStates.dbData != UI::DataState::DATA_READY) { return; }
+        if (dataStates_.dbData != UI::DataState::DATA_READY) { return; }
         ImGui::BeginChild("READER");
 
         checkNewData();
@@ -220,7 +220,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
             float rightWidth = RIGHT_MIN + extra * 0.3f;
 
             // adapt layout if no api
-            if (mappingsToApiWidgets.size() == 0) {
+            if (mappingsToApiWidgets_.size() == 0) {
                 leftWidth = avail.x / 2 - SPACING / 2;
                 rightWidth = avail.x / 2 - SPACING / 2;
             }
@@ -240,7 +240,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
 
             ImGui::SetCursorPosX(avail.x - rightWidth);
             ImGui::BeginChild("DB", ImVec2(rightWidth, 0), false, ImGuiWindowFlags_NoScrollbar);
-            for (auto& headerWidget : dbHeaderWidgets) {
+            for (auto& headerWidget : dbHeaderWidgets_) {
                 headerWidget.draw(rightWidth);
             }
             ImGui::EndChild();
@@ -254,8 +254,8 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
 
             ImDrawList* drawlist = ImGui::GetForegroundDrawList();
             drawlist->PushClipRect(clipMin, clipMax, true);
-            for (const MappingNumber& mapping : mappingsN) {
-                if (drawMapping(mapping, drawlist, mappingsDrawingInfo.at(mapping))) { toRemove = &mapping; }
+            for (const MappingNumber& mapping : mappingsN_) {
+                if (drawMapping(mapping, drawlist, mappingsDrawingInfo_.at(mapping))) { toRemove = &mapping; }
             }
             drawlist->PopClipRect();
 
@@ -266,48 +266,50 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
 
     void checkNewData() {
         if (reader.dataValid(true)) {
-            headers = reader.getHeader();
-            headerTypes = reader.getHeaderTypes();
-            firstRow = reader.getFirstRow();
-            for (const MappingSource& source : csvHeaderWidgets) {
+            headers_ = reader.getHeader();
+            headerTypes_ = reader.getHeaderTypes();
+            firstRow_ = reader.getFirstRow();
+            for (const MappingSource& source : csvHeaderWidgets_) {
                 source.eraseFromParent();
             }
-            csvHeaderWidgets.clear();
-            for (std::size_t i = 0; i < headers.size(); ++i) {
-                csvHeaderWidgets.emplace_back(headers[i], std::string{}, firstRow[i], headerTypes[i]);
+            csvHeaderWidgets_.clear();
+            for (std::size_t i = 0; i < headers_.size(); ++i) {
+                csvHeaderWidgets_.emplace_back(headers_[i], std::string{}, firstRow_[i], headerTypes_[i]);
             }
             {
-                std::lock_guard<std::mutex> lockInit(mtxInit);
-                csvDataVisualized = true;
+                std::lock_guard<std::mutex> lockInit(mtxInit_);
+                csvDataVisualized_ = true;
             }
-            cvInit.notify_all();
+            cvInit_.notify_all();
         }
     }
 
     bool hasMapping(MappingIdType dest, const std::optional<SourceDetail>& source = std::nullopt) override {
         if (source.has_value()) {
-            return std::find_if(mappingsN.begin(), mappingsN.end(), [&](const MappingNumber& m) {
+            return std::find_if(mappingsN_.begin(), mappingsN_.end(), [&](const MappingNumber& m) {
                        return m.uniqueData == MappingNumberInternal(source->id, dest);
-                   }) != mappingsN.end();
+                   }) != mappingsN_.end();
         }
 
-        return std::find_if(mappingsN.begin(), mappingsN.end(), [&](const MappingNumber& m) { return m.uniqueData.destination == dest; }) !=
-               mappingsN.end();
+        return std::find_if(mappingsN_.begin(), mappingsN_.end(), [&](const MappingNumber& m) {
+                   return m.uniqueData.destination == dest;
+               }) != mappingsN_.end();
     }
 
     void removeMappingToDbFromSource(const MappingIdType sourceId) override {
-        auto it = std::find_if(mappingsN.begin(), mappingsN.end(), [&](const MappingNumber& m) { return m.uniqueData.source == sourceId; });
-        if (it == mappingsN.end()) { return; }
+        auto it =
+            std::find_if(mappingsN_.begin(), mappingsN_.end(), [&](const MappingNumber& m) { return m.uniqueData.source == sourceId; });
+        if (it == mappingsN_.end()) { return; }
 
         removeMappingToDb(*it);
     }
 
     bool drawMapping(const MappingNumber& mapping, ImDrawList* drawlist, MappingDrawing& mappingDrawingInfo) {
-        if (!sourceAnchors.anchors.count(mapping.uniqueData.source) || !destAnchors.anchors.count(mapping.uniqueData.destination)) {
+        if (!sourceAnchors_.anchors.count(mapping.uniqueData.source) || !destAnchors_.anchors.count(mapping.uniqueData.destination)) {
             return false;
         }
-        ImVec2 start = sourceAnchors.anchors.at(mapping.uniqueData.source);
-        ImVec2 end = destAnchors.anchors.at(mapping.uniqueData.destination);
+        ImVec2 start = sourceAnchors_.anchors.at(mapping.uniqueData.source);
+        ImVec2 end = destAnchors_.anchors.at(mapping.uniqueData.destination);
 
         Widgets::MouseEventType event = isMouseOnLine(start, end, mappingDrawingInfo.width * 2);
         const float thickness = event != Widgets::MouseEventType::NONE ? 6.0f : 2.0f;
@@ -318,12 +320,12 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     }
 
     bool hasMappings() {
-        return std::count_if(mappingsN.begin(), mappingsN.end(), [&](const MappingNumber& m) {
+        return std::count_if(mappingsN_.begin(), mappingsN_.end(), [&](const MappingNumber& m) {
                    return std::holds_alternative<MappingCsvToDb>(m.usableData);
                }) > 1;
     }
 
-    void commitMappings() { reader.setMappingsToDb(mappingsN); }
+    void commitMappings() { reader.setMappingsToDb(mappingsN_); }
 
     void injectMappings(const std::vector<SerializableMapping>& serializedMappings) {
         // has to run first, will fail if mappings already exist
@@ -335,8 +337,8 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
             readerCv.wait(lockReader, [this] { return reader.dataValid(false); });
         }
         {
-            std::unique_lock<std::mutex> lockInit(mtxInit);
-            cvInit.wait(lockInit, [this] { return csvDataVisualized; });
+            std::unique_lock<std::mutex> lockInit(mtxInit_);
+            cvInit_.wait(lockInit, [this] { return csvDataVisualized_; });
         }
         for (const auto& mapping : serializedMappings) {
             std::visit(
@@ -348,7 +350,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
                         // create Mapping
                         std::vector<DbDestinationDetail>::const_iterator itHeader;
                         auto itDestination =
-                            std::find_if(dbHeaderWidgets.begin(), dbHeaderWidgets.end(), [&](const MappingDestinationDb& d) {
+                            std::find_if(dbHeaderWidgets_.begin(), dbHeaderWidgets_.end(), [&](const MappingDestinationDb& d) {
                                 const std::vector<DbDestinationDetail>& headers = d.getHeaders();
                                 itHeader = std::find_if(headers.begin(), headers.end(), [&](const DbDestinationDetail& detail) {
                                     return detail.table == concreteMapping.destination.outerIdentifier &&
@@ -357,25 +359,25 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
                                 return itHeader != headers.end();
                             });
 
-                        if (itDestination == dbHeaderWidgets.end()) { return; }
+                        if (itDestination == dbHeaderWidgets_.end()) { return; }
 
                         if (concreteMapping.source.innerIdentifier.empty()) {
                             // from csv to db
-                            auto itSource = std::find_if(csvHeaderWidgets.begin(), csvHeaderWidgets.end(), [&](const MappingSource& m) {
+                            auto itSource = std::find_if(csvHeaderWidgets_.begin(), csvHeaderWidgets_.end(), [&](const MappingSource& m) {
                                 const SourceDetail& sourceData = m.getData();
                                 return sourceData.primaryField == concreteMapping.source.outerIdentifier &&
                                        sourceData.apiSelector == concreteMapping.source.innerIdentifier;
                             });
-                            if (itSource != csvHeaderWidgets.end()) { createMappingToDb(itSource->getData(), *itHeader); }
+                            if (itSource != csvHeaderWidgets_.end()) { createMappingToDb(itSource->getData(), *itHeader); }
 
                         } else {
                             // from api to db
                             auto itSource = std::find_if(
-                                mappingsToApiWidgets.begin(), mappingsToApiWidgets.end(), [&](const MappingDestinationToApi& m) {
+                                mappingsToApiWidgets_.begin(), mappingsToApiWidgets_.end(), [&](const MappingDestinationToApi& m) {
                                     return m.getSource() == concreteMapping.source.outerIdentifier;
                                 });
 
-                            if (itSource != mappingsToApiWidgets.end()) {
+                            if (itSource != mappingsToApiWidgets_.end()) {
                                 const MappingSource& added = itSource->addField(MappingSource{concreteMapping.source.outerIdentifier,
                                                                                               concreteMapping.source.innerIdentifier,
                                                                                               "example",
@@ -388,17 +390,17 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
                         // 2. create mapping from csv to this widget
                         // 2.1 find source-indexes from MappingCsvApi (source string is enough to identify the csv col)
                         // 2.2 find destination-indexes from MappingCsvApi
-                        auto it = std::find_if(mappingsToApiWidgets.begin(),
-                                               mappingsToApiWidgets.end(),
+                        auto it = std::find_if(mappingsToApiWidgets_.begin(),
+                                               mappingsToApiWidgets_.end(),
                                                [&](const MappingDestinationToApi& m) { return m.getSource() == concreteMapping.source; });
-                        if (it == mappingsToApiWidgets.end()) { it = addApiWidget(); }
+                        if (it == mappingsToApiWidgets_.end()) { it = addApiWidget(); }
 
-                        auto itSource = std::find_if(csvHeaderWidgets.begin(), csvHeaderWidgets.end(), [&](const MappingSource& m) {
+                        auto itSource = std::find_if(csvHeaderWidgets_.begin(), csvHeaderWidgets_.end(), [&](const MappingSource& m) {
                             const SourceDetail& sourceData = m.getData();
                             return sourceData.primaryField == concreteMapping.source;
                         });
 
-                        if (itSource != csvHeaderWidgets.end()) { createMappingToApi(itSource->getData(), it->getOrSetData()); }
+                        if (itSource != csvHeaderWidgets_.end()) { createMappingToApi(itSource->getData(), it->getOrSetData()); }
                     }
                 },
                 mapping.usableData);
@@ -408,12 +410,12 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
 
     void setDefaultPath(const std::filesystem::path& path) {
         std::string s = path.string();
-        if (s.size() > csvBuffer.max_size()) {
-            logger.pushLog(Log{std::format("ERROR: Path {} is too long.", s)});
+        if (s.size() > csvBuffer_.max_size()) {
+            logger_.pushLog(Log{std::format("ERROR: Path {} is too long.", s)});
             return;
         }
-        std::copy(s.begin(), s.end(), csvBuffer.begin());
-        csvBuffer[s.size()] = 0x0;
+        std::copy(s.begin(), s.end(), csvBuffer_.begin());
+        csvBuffer_[s.size()] = 0x0;
     }
 };
 

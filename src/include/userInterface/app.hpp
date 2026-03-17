@@ -6,6 +6,7 @@
 #include "changeExeService.hpp"
 #include "changeTracker.hpp"
 #include "config.hpp"
+#include "dbFilter.hpp"
 #include "dbService.hpp"
 #include "logger.hpp"
 
@@ -16,43 +17,46 @@
 
 class App {
   private:
-    ImGuiDX11Context imguiCtx;
+    ImGuiDX11Context imguiCtx_;
 
-    Config& config;
-    ThreadPool& pool;
-    DbService& dbService;
-    ChangeTracker& changeTracker;
-    PartApi& api;
-    AutoInv::ChangeGeneratorFromBom& bomReader;
-    AutoInv::ChangeGeneratorFromOrder& orderReader;
-    Logger& logger;
+    Config& config_;
+    ThreadPool& pool_;
+    DbService& dbService_;
+    ChangeTracker& changeTracker_;
+    PartApi& api_;
+    AutoInv::ChangeGeneratorFromBom& bomReader_;
+    AutoInv::ChangeGeneratorFromOrder& orderReader_;
+    Logger& logger_;
 
-    UI::DataStates dataStates;
+    UI::DataStates dataStates_;
 
-    ChangeExeService changeExe{dbService, changeTracker, logger};
-    DbVisualizer dbVisualizer{dbService, changeTracker, changeExe, logger, dataStates};
+    ChangeExeService changeExe_{dbService_, changeTracker_, logger_};
+    DbVisualizer dbVisualizer_{dbService_, changeTracker_, changeExe_, logger_, dataStates_};
 
-    AutoInv::BomVisualizer bomVisualizer{dbService, bomReader, api, config, logger, dataStates};
-    AutoInv::OrderVisualizer orderVisualizer{dbService, orderReader, api, config, logger, dataStates};
+    AutoInv::BomVisualizer bomVisualizer_{dbService_, bomReader_, api_, config_, logger_, dataStates_};
+    AutoInv::OrderVisualizer orderVisualizer_{dbService_, orderReader_, api_, config_, logger_, dataStates_};
 
-    std::shared_ptr<const CompleteDbData> dbData;
-    std::shared_ptr<uiChangeInfo> uiChanges;
+    DbFilter dbFilter_{pool_, logger_, dataStates_};
+
+    std::shared_ptr<const CompleteDbData> dbData_;
+    std::shared_ptr<uiChangeInfo> uiChanges_;
 
     bool waitForDbData() {
-        if (dataStates.dbData == UI::DataState::DATA_READY) { return false; }
+        if (dataStates_.dbData == UI::DataState::DATA_READY) { return false; }
 
-        auto result = dbService.getCompleteData();
+        auto result = dbService_.getCompleteData();
         if (!result) { return false; }
 
-        dbData = *result;
-        dbVisualizer.setData(dbData);
-        bomVisualizer.setData(dbData);
-        orderVisualizer.setData(dbData);
-        bomReader.setData(dbData);
-        orderReader.setData(dbData);
+        dbData_ = *result;
+        dbVisualizer_.setData(dbData_);
+        bomVisualizer_.setData(dbData_);
+        orderVisualizer_.setData(dbData_);
+        bomReader_.setData(dbData_);
+        orderReader_.setData(dbData_);
+        dbFilter_.setData(dbData_);
 
-        changeTracker.setMaxPKeys(dbData->maxPKeys);
-        if (!uiChanges) { uiChanges = std::make_shared<uiChangeInfo>(); }
+        changeTracker_.setMaxPKeys(dbData_->maxPKeys);
+        if (!uiChanges_) { uiChanges_ = std::make_shared<uiChangeInfo>(); }
 
         return true;
     }
@@ -80,27 +84,27 @@ class App {
     }
 
     void handleDataState() {
-        switch (dataStates.dbData) {
+        switch (dataStates_.dbData) {
         case UI::DataState::INIT:
-            dbService.startUp();
-            dataStates.dbData = UI::DataState::WAITING_FOR_DATA;
+            dbService_.startUp();
+            dataStates_.dbData = UI::DataState::WAITING_FOR_DATA;
             break;
         case UI::DataState::DATA_OUTDATED: {
-            dbService.refetch();
-            uiChanges = std::make_shared<uiChangeInfo>(changeTracker.getSnapShot());
-            dbVisualizer.setChangeData(uiChanges);
-            dataStates.dbData = UI::DataState::WAITING_FOR_DATA;
+            dbService_.refetch();
+            uiChanges_ = std::make_shared<uiChangeInfo>(changeTracker_.getSnapShot());
+            dbVisualizer_.setChangeData(uiChanges_);
+            dataStates_.dbData = UI::DataState::WAITING_FOR_DATA;
             break;
         }
         case UI::DataState::WAITING_FOR_DATA:
-            if (waitForDbData()) { dataStates.dbData = UI::DataState::DATA_READY; }
+            if (waitForDbData()) { dataStates_.dbData = UI::DataState::DATA_READY; }
             break;
         case UI::DataState::DATA_READY:
-            uiChanges = std::make_shared<uiChangeInfo>(changeTracker.getSnapShot());
-            dbVisualizer.setChangeData(uiChanges);
-            if (changeExe.isChangeApplicationDone()) {
-                changeExe.getSuccessfulChanges();
-                dataStates.dbData = UI::DataState::DATA_OUTDATED;
+            uiChanges_ = std::make_shared<uiChangeInfo>(changeTracker_.getSnapShot());
+            dbVisualizer_.setChangeData(uiChanges_);
+            if (changeExe_.isChangeApplicationDone()) {
+                changeExe_.getSuccessfulChanges();
+                dataStates_.dbData = UI::DataState::DATA_OUTDATED;
             }
             break;
         default:
@@ -116,7 +120,7 @@ class App {
     }
 
     void drawDb() {
-        dbVisualizer.run();
+        dbVisualizer_.run();
         ImVec2 buttonSize = ImGui::CalcTextSize("REFETCH");
         buttonSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
         buttonSize.y += ImGui::GetStyle().FramePadding.y * 2.0f;
@@ -125,12 +129,12 @@ class App {
 
         // Top-right corner of the content region
         ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - buttonSize.x - padding.x, padding.y));
-        if (ImGui::Button("REFETCH")) { dataStates.dbData = UI::DataState::DATA_OUTDATED; }
+        if (ImGui::Button("REFETCH")) { dataStates_.dbData = UI::DataState::DATA_OUTDATED; }
     }
 
-    void showBom() { bomVisualizer.run(); }
+    void showBom() { bomVisualizer_.run(); }
 
-    void showOrder() { orderVisualizer.run(); }
+    void showOrder() { orderVisualizer_.run(); }
 
   public:
     App(Config& cConfig,
@@ -141,10 +145,10 @@ class App {
         AutoInv::ChangeGeneratorFromBom& cBomReader,
         AutoInv::ChangeGeneratorFromOrder& cOrderReader,
         Logger& cLogger)
-        : config(cConfig), pool(cPool), dbService(cDbService), changeTracker(cChangeTracker), api(cPartApi), bomReader(cBomReader),
-          orderReader(cOrderReader), logger(cLogger) {}
+        : config_(cConfig), pool_(cPool), dbService_(cDbService), changeTracker_(cChangeTracker), api_(cPartApi), bomReader_(cBomReader),
+          orderReader_(cOrderReader), logger_(cLogger) {}
 
-    ~App() { config.saveMappings(bomVisualizer.getMappings(), orderVisualizer.getMappings()); }
+    ~App() { config_.saveMappings(bomVisualizer_.getMappings(), orderVisualizer_.getMappings()); }
 
     App(const App&) = delete;
     App& operator=(const App&) = delete;
@@ -152,23 +156,23 @@ class App {
     App& operator=(App&&) = delete;
 
     void supplyConfigString() {
-        std::string dbString = config.setConfigString(std::filesystem::path{}); // OPTIONAL USER SUPPLIED CONFIG PATH
-        initFont(config.getFont());
-        dbService.initializeDbInterface(dbString);
-        bomVisualizer.setDefaultPath(config.getCsvPathBom());
-        orderVisualizer.setDefaultPath(config.getCsvPathOrder());
+        std::string dbString = config_.setConfigString(std::filesystem::path{}); // OPTIONAL USER SUPPLIED CONFIG PATH
+        initFont(config_.getFont());
+        dbService_.initializeDbInterface(dbString);
+        bomVisualizer_.setDefaultPath(config_.getCsvPathBom());
+        orderVisualizer_.setDefaultPath(config_.getCsvPathOrder());
 
-        AutoInv::LoadedMappings loaded = config.readMappings();
-        pool.submit(AutoInv::BomVisualizer::injectMappings, &bomVisualizer, loaded.bom);
-        pool.submit(AutoInv::OrderVisualizer::injectMappings, &orderVisualizer, loaded.order);
+        AutoInv::LoadedMappings loaded = config_.readMappings();
+        pool_.submit(AutoInv::BomVisualizer::injectMappings, &bomVisualizer_, loaded.bom);
+        pool_.submit(AutoInv::OrderVisualizer::injectMappings, &orderVisualizer_, loaded.order);
     }
 
     void run() {
         supplyConfigString();
         bool running = true;
         while (running) {
-            if (!imguiCtx.pollEvents()) { break; }
-            if (!imguiCtx.beginFrame()) { continue; }
+            if (!imguiCtx_.pollEvents()) { break; }
+            if (!imguiCtx_.beginFrame()) { continue; }
 
             handleDataState();
             if (ImGui::BeginTabBar("Main")) {
@@ -189,7 +193,7 @@ class App {
 
             ImGui::ShowMetricsWindow();
             drawFpsOverlay();
-            imguiCtx.endFrame();
+            imguiCtx_.endFrame();
         }
     }
 };

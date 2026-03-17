@@ -19,15 +19,15 @@ enum class ChangeAddResult { ALREADY_EXISTING, INVALID, INTERNAL_FAILURE, SUCCES
 
 class ChangeTracker {
   private:
-    ProtectedChanges changes;
-    std::atomic<bool> frozen{false};
-    std::mutex freezeMtx;
-    std::condition_variable freezeCv;
+    ProtectedChanges changes_;
+    std::atomic<bool> frozen_{false};
+    std::mutex freezeMtx_;
+    std::condition_variable freezeCv_;
 
-    DbService& dbService;
-    Logger& logger;
+    DbService& dbService_;
+    Logger& logger_;
 
-    std::map<std::string, std::size_t> initialMaxPKeys;
+    std::map<std::string, std::size_t> initialMaxPKeys_;
 
     void mergeCellChanges(Change& existingChange, const Change& newChange);
     void waitIfFrozen();
@@ -45,7 +45,7 @@ class ChangeTracker {
     void logDetail(std::string content);
 
   public:
-    ChangeTracker(DbService& cDbService, Logger& cLogger) : dbService(cDbService), logger(cLogger) {}
+    ChangeTracker(DbService& cDbService, Logger& cLogger) : dbService_(cDbService), logger_(cLogger) {}
 
     void freeze();
     void unfreeze();

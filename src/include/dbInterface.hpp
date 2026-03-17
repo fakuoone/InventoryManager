@@ -59,29 +59,29 @@ struct ProtectedConnData {
 
 class DbInterface {
   private:
-    DB::ProtectedData<StringVector> tables;
-    DB::ProtectedData<HeaderMap> tableHeaders;
-    DB::ProtectedData<RowMap> tableRows;
-    Logger& logger;
+    DB::ProtectedData<StringVector> tables_;
+    DB::ProtectedData<HeaderMap> tableHeaders_;
+    DB::ProtectedData<RowMap> tableRows_;
+    Logger& logger_;
 
-    ProtectedConnData connData;
+    ProtectedConnData connData_;
 
-    [[nodiscard]] TransactionData getTransaction() {
-        std::unique_lock lock(connData.mtx);
-        connData.cv.wait(lock, [this] { return connData.connStringValid; });
-        return TransactionData(connData.connString);
+    TransactionData getTransaction() {
+        std::unique_lock lock(connData_.mtx);
+        connData_.cv.wait(lock, [this] { return connData_.connStringValid; });
+        return TransactionData(connData_.connString);
     }
 
   public:
-    DbInterface(Logger& cLogger) : logger(cLogger) {}
+    DbInterface(Logger& cLogger) : logger_(cLogger) {}
 
     void initializeWithConfigString(const std::string& confString) {
         {
-            std::lock_guard lock(connData.mtx);
-            connData.connString = confString;
-            connData.connStringValid = !confString.empty();
+            std::lock_guard lock(connData_.mtx);
+            connData_.connString = confString;
+            connData_.connStringValid = !confString.empty();
         }
-        connData.cv.notify_all(); // wake all waiting DB threads
+        connData_.cv.notify_all(); // wake all waiting DB threads
     }
 
     void acquireTables() {
@@ -91,18 +91,18 @@ class DbInterface {
             auto result = transaction.tx.query<std::string>(tableQuery);
             // logger.pushLog(Log{tableQuery});
             {
-                tables.data.clear();
-                std::lock_guard<std::mutex> lg{tables.mtx};
+                tables_.data.clear();
+                std::lock_guard<std::mutex> lg{tables_.mtx};
                 for (const auto& [tableName] : result) {
-                    tables.data.push_back(tableName);
+                    tables_.data.push_back(tableName);
                     // logger.pushLog(Log{std::format("    table: {}", tableName)});
                 }
                 transaction.tx.commit();
-                tables.ready = true;
+                tables_.ready = true;
             }
-            tables.cv.notify_one();
+            tables_.cv.notify_one();
         } catch (std::exception const& e) {
-            logger.pushLog(Log{std::format("ERROR: {}", e.what())});
+            logger_.pushLog(Log{std::format("ERROR: {}", e.what())});
             return;
         }
     }
@@ -186,7 +186,7 @@ class DbInterface {
                     info.type = DB::HeaderTypes::UNIQUE_KEY;
                     headers.uKeyName = header;
                 } else {
-                    logger.pushLog(Log{std::format("WARNING: composite UNIQUE key on table '{}', column '{}' ignored", table, header)});
+                    logger_.pushLog(Log{std::format("WARNING: composite UNIQUE key on table '{}', column '{}' ignored", table, header)});
                 }
             }
 
@@ -245,7 +245,7 @@ class DbInterface {
         }
 
         // self reference
-        HeadersInfo& referencedHeaders = tableHeaders.data.at(header.referencedTable);
+        HeadersInfo& referencedHeaders = tableHeaders_.data.at(header.referencedTable);
         if (std::find_if(referencedHeaders.data.begin(), referencedHeaders.data.end(), [&](HeaderInfo& tH) {
                 return tH.referencedTable == header.referencedTable;
             }) != referencedHeaders.data.end()) {
@@ -264,77 +264,77 @@ class DbInterface {
     }
 
     void assignDependencyIndexes() {
-        for (auto& [tableName, headers] : tableHeaders.data) {
+        for (auto& [tableName, headers] : tableHeaders_.data) {
             for (HeaderInfo& header : headers.data) {
                 computeDepth(header);
             }
         }
-        for (auto& [tableName, headers] : tableHeaders.data) {
+        for (auto& [tableName, headers] : tableHeaders_.data) {
             std::size_t tableDepth = 0;
             for (const auto& header : headers.data) {
                 tableDepth = std::max(tableDepth, header.depth);
             }
-            tableHeaders.data[tableName].maxDepth = tableDepth;
+            tableHeaders_.data[tableName].maxDepth = tableDepth;
         }
     }
 
     void acquireTableContent() {
         {
-            std::unique_lock<std::mutex> lockTable(tables.mtx);
+            std::unique_lock<std::mutex> lockTable(tables_.mtx);
             // logger.pushLog(Log{"ACQUIRE TABLE CONTENT: Waiting for tables"});
-            tables.cv.wait(lockTable, [this] { return tables.ready; });
+            tables_.cv.wait(lockTable, [this] { return tables_.ready; });
         }
         {
-            std::lock_guard<std::mutex> lgHeaders{tableHeaders.mtx};
-            tableHeaders.data.clear();
+            std::lock_guard<std::mutex> lgHeaders{tableHeaders_.mtx};
+            tableHeaders_.data.clear();
         }
 
         // get headers
         // logger.pushLog(Log{"ACQUIRE TABLE CONTENT: Preparing headerquery"});
-        for (const std::string& tableName : tables.data) {
+        for (const std::string& tableName : tables_.data) {
             try {
                 HeadersInfo headers = getTableHeaders(tableName);
                 {
-                    std::lock_guard<std::mutex> lgHeaders{tableHeaders.mtx};
-                    std::lock_guard<std::mutex> lgTables{tables.mtx};
-                    tableHeaders.data.emplace(tableName, std::move(headers));
+                    std::lock_guard<std::mutex> lgHeaders{tableHeaders_.mtx};
+                    std::lock_guard<std::mutex> lgTables{tables_.mtx};
+                    tableHeaders_.data.emplace(tableName, std::move(headers));
                 }
             } catch (std::exception const& e) {
-                logger.pushLog(Log{std::format("ERROR: {}", e.what())});
+                logger_.pushLog(Log{std::format("ERROR: {}", e.what())});
                 return;
             }
         }
         {
-            std::lock_guard<std::mutex> lgHeaders{tableHeaders.mtx};
-            std::lock_guard<std::mutex> lgTables{tables.mtx};
+            std::lock_guard<std::mutex> lgHeaders{tableHeaders_.mtx};
+            std::lock_guard<std::mutex> lgTables{tables_.mtx};
             assignDependencyIndexes();
-            tableHeaders.ready = true;
-            tables.ready = false;
+            tableHeaders_.ready = true;
+            tables_.ready = false;
         }
-        tableHeaders.cv.notify_one();
+        tableHeaders_.cv.notify_one();
     }
 
     void acquireTableRows(const std::string& table, const HeadersInfo& cols) {
         {
             // logger.pushLog(Log{"ACQUIRE TABLE ROWS: Waiting for tableheaders"});
-            std::unique_lock<std::mutex> lockTableHeaders(tableHeaders.mtx);
-            tableHeaders.cv.wait(lockTableHeaders, [this] { return tableHeaders.ready; });
+            std::unique_lock<std::mutex> lockTableHeaders(tableHeaders_.mtx);
+            tableHeaders_.cv.wait(lockTableHeaders, [this] { return tableHeaders_.ready; });
         }
         {
-            std::lock_guard<std::mutex> lgTables{tables.mtx};
-            if (std::find(tables.data.begin(), tables.data.end(), table) == tables.data.end()) {
-                logger.pushLog(Log{std::format("ERROR: Acquiring rows: Table {} is unknown.", table)});
+            std::lock_guard<std::mutex> lgTables{tables_.mtx};
+            if (std::find(tables_.data.begin(), tables_.data.end(), table) == tables_.data.end()) {
+                logger_.pushLog(Log{std::format("ERROR: Acquiring rows: Table {} is unknown.", table)});
                 return;
             }
         }
         std::map<std::string, std::vector<std::string>> colCellMap;
         // logger.pushLog(Log{"ACQUIRE TABLE ROWS: Preparing headerqueries"});
 
-        std::lock_guard<std::mutex> lgTableHeaders(tableHeaders.mtx);
+        std::lock_guard<std::mutex> lgTableHeaders(tableHeaders_.mtx);
         for (const auto& col : cols.data) {
-            const HeaderVector& localHeaders = tableHeaders.data.at(table).data;
+            const HeaderVector& localHeaders = tableHeaders_.data.at(table).data;
             if (std::ranges::find_if(localHeaders, [&](const HeaderInfo& h) { return h.name == col.name; }) == localHeaders.end()) {
-                logger.pushLog(Log{std::format("ERROR: Acquiring rows: Header {} for table {} is unknown.", col.name, table)});
+                logger_.pushLog(Log{std::format("ERROR: Acquiring rows: Header {} for table {} is unknown.", col.name, table)});
                 return;
             }
             try {
@@ -355,37 +355,37 @@ class DbInterface {
                 colCellMap.emplace(col.name, cells);
 
             } catch (std::exception const& e) {
-                logger.pushLog(Log{std::format("ERROR: {}", e.what())});
+                logger_.pushLog(Log{std::format("ERROR: {}", e.what())});
                 return;
             }
         }
         {
-            std::lock_guard<std::mutex> lgTableRows{tableRows.mtx};
-            tableRows.data.insert_or_assign(table, std::move(colCellMap));
-            tableRows.ready = true;
+            std::lock_guard<std::mutex> lgTableRows{tableRows_.mtx};
+            tableRows_.data.insert_or_assign(table, std::move(colCellMap));
+            tableRows_.ready = true;
         }
     }
 
     CompleteDbData acquireAllTablesRows() {
         // logger.pushLog(Log{"ACQUIRE ALL TABLE ROWS: Waiting for tableheaders"});
         {
-            std::unique_lock<std::mutex> lock(tableHeaders.mtx);
-            tableHeaders.cv.wait(lock, [this] { return tableHeaders.ready; });
+            std::unique_lock<std::mutex> lock(tableHeaders_.mtx);
+            tableHeaders_.cv.wait(lock, [this] { return tableHeaders_.ready; });
         }
 
         std::vector<std::pair<std::string, HeadersInfo>> work;
         {
-            std::lock_guard<std::mutex> lockTables(tables.mtx);
-            std::lock_guard<std::mutex> lockTableHeaders(tableHeaders.mtx);
+            std::lock_guard<std::mutex> lockTables(tables_.mtx);
+            std::lock_guard<std::mutex> lockTableHeaders(tableHeaders_.mtx);
 
-            for (const auto& table : tables.data) {
-                work.emplace_back(table, tableHeaders.data.at(table));
+            for (const auto& table : tables_.data) {
+                work.emplace_back(table, tableHeaders_.data.at(table));
             }
         }
         for (const auto& [table, headers] : work) {
             acquireTableRows(table, headers);
         }
-        return CompleteDbData{tables.data, tableHeaders.data, tableRows.data, std::map<std::string, std::size_t>{}};
+        return CompleteDbData{tables_.data, tableHeaders_.data, tableRows_.data, std::map<std::string, std::size_t>{}};
     }
 
     Change::chHashV applyChanges(std::vector<Change> changes, SqlAction action) {
@@ -399,8 +399,8 @@ class DbInterface {
     bool applySingleChange(const Change& change, SqlAction action) {
         try {
             SqlQuery changeQuery = change.toSQLaction(action);
-            logger.pushLog(Log{std::format("    Applying change {}", change.getKey())});
-            logger.pushLog(Log{changeQuery.query});
+            logger_.pushLog(Log{std::format("    Applying change {}", change.getKey())});
+            logger_.pushLog(Log{changeQuery.query});
             TransactionData transaction = getTransaction();
             pqxx::params p;
             for (const auto& v : changeQuery.params) {
@@ -408,9 +408,9 @@ class DbInterface {
             }
             pqxx::result r = transaction.tx.exec(changeQuery.query, p);
             transaction.tx.commit();
-            logger.pushLog(Log{std::format("SUCCESS: Affected rows: {}", r.affected_rows())});
+            logger_.pushLog(Log{std::format("SUCCESS: Affected rows: {}", r.affected_rows())});
         } catch (std::exception const& e) {
-            logger.pushLog(Log{std::format("ERROR: {}", e.what())});
+            logger_.pushLog(Log{std::format("ERROR: {}", e.what())});
             return false;
         }
 

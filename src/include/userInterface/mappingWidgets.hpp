@@ -55,9 +55,9 @@ struct SourceDetail {
 
 class MappingSource {
   private:
-    static inline CsvMappingVisualizer* parentVisualizer;
-    SourceDetail data;
-    float singleAttributeHeight;
+    static inline CsvMappingVisualizer* parentVisualizer_;
+    SourceDetail data_;
+    float singleAttributeHeight_;
 
   public:
     MappingSource(const std::string& cPrimary, const std::string& cApiSelector, const std::string& cExample, DB::TypeCategory cDataType);
@@ -74,24 +74,24 @@ class MappingSource {
 
 class MappingDestination {
   protected:
-    static inline CsvMappingVisualizer* parentVisualizer;
-    bool mappable = true;
+    static inline CsvMappingVisualizer* parentVisualizer_;
+    bool mappable_ = true;
 
   public:
     static void setInteractionHandler(CsvMappingVisualizer* handler);
     virtual void draw(float width) = 0;
 
-    MappingDestination(bool cMappable) : mappable(cMappable) {}
+    MappingDestination(bool cMappable) : mappable_(cMappable) {}
 };
 
 class MappingDestinationDb : public MappingDestination {
   private:
-    const std::string table;
-    std::vector<DbDestinationDetail> headers;
+    const std::string table_;
+    std::vector<DbDestinationDetail> headers_;
 
   public:
     MappingDestinationDb(const std::string cTable, const std::vector<DbDestinationDetail> cHeaders, bool cMappable)
-        : MappingDestination(cMappable), table(cTable), headers(cHeaders) {}
+        : MappingDestination(cMappable), table_(cTable), headers_(cHeaders) {}
 
     void draw(float width) override;
     DragState handleDrag(DbDestinationDetail& headerInfo);

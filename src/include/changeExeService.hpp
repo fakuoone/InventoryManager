@@ -8,21 +8,21 @@
 
 class ChangeExeService {
   private:
-    DbService& dbService;
-    ChangeTracker& changeTracker;
-    Logger& logger;
+    DbService& dbService_;
+    ChangeTracker& changeTracker_;
+    Logger& logger_;
 
-    std::future<Change::chHashV> fApplyChanges;
+    std::future<Change::chHashV> fApplyChanges_;
 
     void collectChanges(std::size_t key, std::unordered_set<std::size_t>& visited, std::vector<Change>& order) {
         if (visited.contains(key)) { return; }
         visited.insert(key);
-        if (changeTracker.hasChild(key)) {
-            for (std::size_t child : changeTracker.getChildren(key)) {
+        if (changeTracker_.hasChild(key)) {
+            for (std::size_t child : changeTracker_.getChildren(key)) {
                 collectChanges(child, visited, order);
             }
         }
-        auto change = changeTracker.getChange(key);
+        auto change = changeTracker_.getChange(key);
         if (change) { order.push_back(*change); }
     }
 
@@ -39,15 +39,15 @@ class ChangeExeService {
 
   public:
     bool isChangeApplicationDone() {
-        if (fApplyChanges.valid() && fApplyChanges.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) { return true; }
+        if (fApplyChanges_.valid() && fApplyChanges_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) { return true; }
         return false;
     }
 
     Change::chHashV getSuccessfulChanges() {
         Change::chHashV successfulChanges{};
         if (isChangeApplicationDone()) {
-            successfulChanges = fApplyChanges.get();
-            changeTracker.removeChanges(successfulChanges);
+            successfulChanges = fApplyChanges_.get();
+            changeTracker_.removeChanges(successfulChanges);
         }
         return successfulChanges;
     }
@@ -60,20 +60,20 @@ class ChangeExeService {
 
     void requestChangeApplication(const std::vector<std::size_t> changeKeys, SqlAction action) {
         // requests execution for vector of changeKey
-        changeTracker.freeze();
+        changeTracker_.freeze();
         std::vector<Change> allChanges = collectDescendants(changeKeys);
-        fApplyChanges = dbService.requestChangeApplication(allChanges, action);
-        changeTracker.unfreeze();
+        fApplyChanges_ = dbService_.requestChangeApplication(allChanges, action);
+        changeTracker_.unfreeze();
     }
 
     void requestChangeApplication(SqlAction action) {
         // request execution for all changes
-        changeTracker.freeze();
-        std::vector<Change> allChanges = collectDescendants(changeTracker.getCalcRoots());
-        fApplyChanges = dbService.requestChangeApplication(allChanges, action);
-        changeTracker.unfreeze();
+        changeTracker_.freeze();
+        std::vector<Change> allChanges = collectDescendants(changeTracker_.getCalcRoots());
+        fApplyChanges_ = dbService_.requestChangeApplication(allChanges, action);
+        changeTracker_.unfreeze();
     }
 
     ChangeExeService(DbService& cDbService, ChangeTracker& cChangeTracker, Logger& cLogger)
-        : dbService(cDbService), changeTracker(cChangeTracker), logger(cLogger) {}
+        : dbService_(cDbService), changeTracker_(cChangeTracker), logger_(cLogger) {}
 };

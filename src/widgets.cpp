@@ -2,16 +2,16 @@
 
 namespace Widgets {
 void DbTable::handleSplitterDrag(std::vector<float>& splitters, const std::size_t index) {
-    float mouseX = ImGui::GetIO().MousePos.x - headerPos.start.x;
+    float mouseX = ImGui::GetIO().MousePos.x - headerPos_.start.x;
     const float minRef = index <= 0 ? SPLITTER_MIN_DIST : splitters[index - 1] + SPLITTER_MIN_DIST;
-    const float maxRef = index >= splitters.size() - 1 ? (headerPos.end.x - headerPos.start.x) : splitters[index + 1] - SPLITTER_MIN_DIST;
+    const float maxRef = index >= splitters.size() - 1 ? (headerPos_.end.x - headerPos_.start.x) : splitters[index + 1] - SPLITTER_MIN_DIST;
     // check if limits violated (splitter doesnt move other splitters)
     if (mouseX <= minRef || mouseX >= maxRef) { return; }
     splitters[index] = mouseX;
 }
 
 void DbTable::splitterRefit(std::vector<float>& splitters, const float space) {
-    const float oldWidth = headerPos.end.x - headerPos.start.x;
+    const float oldWidth = headerPos_.end.x - headerPos_.start.x;
     if (fabs(oldWidth - space) < 1e-3f) { return; }
     const std::size_t columnSize = splitters.size();
     if (space < (columnSize * SPLITTER_MIN_DIST + (columnSize - 1) * SPLITTER_WIDTH)) { return; }
@@ -22,15 +22,15 @@ void DbTable::splitterRefit(std::vector<float>& splitters, const float space) {
 }
 
 void DbTable::drawHeader(const std::string& tableName) {
-    const auto& headers = dbData->headers.at(tableName).data;
-    auto& splitterPoss = columnWidths.at(tableName);
+    const auto& headers = dbData_->headers.at(tableName).data;
+    auto& splitterPoss = columnWidths_.at(tableName);
 
-    headerPos.start = ImGui::GetCursorScreenPos();
-    headerPos.start.y += PAD_HEADER_Y;
-    headerPos.start.x += PAD_OUTER_X + LEFT_RESERVE;
+    headerPos_.start = ImGui::GetCursorScreenPos();
+    headerPos_.start.y += PAD_HEADER_Y;
+    headerPos_.start.x += PAD_OUTER_X + LEFT_RESERVE;
     const float available = ImGui::GetContentRegionAvail().x - 2 * PAD_OUTER_X - LEFT_RESERVE - RIGHT_RESERVE;
     splitterRefit(splitterPoss, available);
-    headerPos.end = ImVec2(headerPos.start.x + available, headerPos.start.y + rowHeight + PAD_HEADER_Y);
+    headerPos_.end = ImVec2(headerPos_.start.x + available, headerPos_.start.y + rowHeight_ + PAD_HEADER_Y);
 
     ImVec2 cursor = ImVec2(0, 0); // screen coordinates
     for (size_t i = 0; i < headers.size(); ++i) {
@@ -41,9 +41,9 @@ void DbTable::drawHeader(const std::string& tableName) {
             cellBoiler,
             [this](const CellBoilerPlate& cb, const Rect& r, const std::string& v) -> ActionType { return drawHeaderCell(cb, r, v); },
             headers[i].name);
-        if (fromHeader.mouse != MouseEventType::NONE && !lastEvent.hasDataBesidesHover()) {
-            lastEvent.type = fromHeader;
-            lastEvent.origin = DataEvent(tableName, "", headers[i].name);
+        if (fromHeader.mouse != MouseEventType::NONE && !lastEvent_.hasDataBesidesHover()) {
+            lastEvent_.type = fromHeader;
+            lastEvent_.origin = DataEvent(tableName, "", headers[i].name);
         }
         ImGui::PopID();
 
@@ -51,48 +51,48 @@ void DbTable::drawHeader(const std::string& tableName) {
         if (i + 1 < headers.size()) { drawSplitterSC(tableName, i, cursor.x); }
     }
 
-    ImGui::Dummy(ImVec2(cursor.x, rowHeight));
+    ImGui::Dummy(ImVec2(cursor.x, rowHeight_));
 }
 
 void DbTable::drawSplitterSC(const std::string& tableName, size_t index, float rightEdgeAbs) {
-    const float rightEdge = rightEdgeAbs + headerPos.start.x;
+    const float rightEdge = rightEdgeAbs + headerPos_.start.x;
     const float leftEdge = rightEdge - SPLITTER_WIDTH;
-    ImGui::SetCursorScreenPos(ImVec2(leftEdge, headerPos.start.y));
-    ImGui::InvisibleButton(("##splitter" + std::to_string(index)).c_str(), ImVec2(SPLITTER_WIDTH, rowHeight));
-    if (ImGui::IsItemActive()) { handleSplitterDrag(columnWidths.at(tableName), index); }
+    ImGui::SetCursorScreenPos(ImVec2(leftEdge, headerPos_.start.y));
+    ImGui::InvisibleButton(("##splitter" + std::to_string(index)).c_str(), ImVec2(SPLITTER_WIDTH, rowHeight_));
+    if (ImGui::IsItemActive()) { handleSplitterDrag(columnWidths_.at(tableName), index); }
     if (ImGui::IsItemHovered() || ImGui::IsItemActive()) {
         ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-        drawList->AddRectFilled(
-            ImVec2(leftEdge, headerPos.start.y), ImVec2(rightEdge, headerPos.start.y + rowHeight), IM_COL32(255, 255, 255, 150));
+        drawList_->AddRectFilled(
+            ImVec2(leftEdge, headerPos_.start.y), ImVec2(rightEdge, headerPos_.start.y + rowHeight_), IM_COL32(255, 255, 255, 150));
     }
 }
 
 void DbTable::drawColumns(const std::string& tableName) {
-    const std::vector<float>& splitterPoss = columnWidths.at(tableName);
-    ImVec2 cursor = ImVec2(0, headerPos.end.y - headerPos.start.y);
-    const auto& headers = dbData->headers.at(tableName).data;
+    const std::vector<float>& splitterPoss = columnWidths_.at(tableName);
+    ImVec2 cursor = ImVec2(0, headerPos_.end.y - headerPos_.start.y);
+    const auto& headers = dbData_->headers.at(tableName).data;
 
     drawUserInputRowFields(tableName, headers, splitterPoss, cursor);
-    cursor.y += rowHeight;
+    cursor.y += rowHeight_;
     cursor.x = 0;
 
     for (std::size_t i = 0; i < headers.size(); ++i) {
         drawColumn(tableName, i, splitterPoss, cursor);
         cursor.x = splitterPoss[i] + 0.5f * SPLITTER_WIDTH;
-        cursor.y = headerPos.end.y - headerPos.start.y + rowHeight;
+        cursor.y = headerPos_.end.y - headerPos_.start.y + rowHeight_;
     }
 }
 
 void DbTable::drawColumn(const std::string& tableName, const std::size_t i, const std::vector<float>& splitterPoss, ImVec2& cursor) {
-    const HeaderInfo& headerInfo = dbData->headers.at(tableName).data[i];
+    const HeaderInfo& headerInfo = dbData_->headers.at(tableName).data[i];
     ImGui::PushID(headerInfo.name.c_str());
     ImGui::PushID(static_cast<int>(i));
     std::size_t cellIndex = 0;
 
-    for (const std::string& cell : dbData->tableRows.at(tableName).at(headerInfo.name)) {
-        const std::string pKey = dbData->tableRows.at(tableName).at(dbData->headers.at(tableName).pkey)[cellIndex];
+    for (const std::string& cell : dbData_->tableRows.at(tableName).at(headerInfo.name)) {
+        const std::string pKey = dbData_->tableRows.at(tableName).at(dbData_->headers.at(tableName).pkey)[cellIndex];
         const std::size_t pKeyId = static_cast<std::size_t>(std::stoi(pKey));
-        rowChange = ChangeHelpers::getChangeOfRow(uiChanges, tableName, static_cast<std::size_t>(std::stoi(pKey)));
+        rowChange_ = ChangeHelpers::getChangeOfRow(uiChanges_, tableName, static_cast<std::size_t>(std::stoi(pKey)));
         float width = i > 0 ? splitterPoss[i] - splitterPoss[i - 1] : splitterPoss[0] + 0.5f * SPLITTER_WIDTH;
 
         ImGui::PushID(static_cast<int>(cellIndex));
@@ -100,14 +100,14 @@ void DbTable::drawColumn(const std::string& tableName, const std::size_t i, cons
         // selection column
         if (i == 0) {
             // drawRowBackgroundIfNeeded(cursor, splitterPoss, rowChange.get());
-            handleFirstColumnIfNeeded(tableName, headerInfo, pKey, cursor, rowChange.get());
+            handleFirstColumnIfNeeded(tableName, headerInfo, pKey, cursor, rowChange_.get());
         }
 
         // data cell via celldrawer
         bool isUkeyAndHasParent = false;
-        if (rowChange) { isUkeyAndHasParent = headerInfo.type == DB::HeaderTypes::UNIQUE_KEY && rowChange->hasParent(); }
-        bool editable = edit.whichId == pKeyId && headerInfo.type != DB::HeaderTypes::PRIMARY_KEY && !isUkeyAndHasParent;
-        const CellBoilerPlate cellBoiler = CellBoilerPlate(headerInfo, cursor, rowChange.get(), width, true, editable, false, false, i);
+        if (rowChange_) { isUkeyAndHasParent = headerInfo.type == DB::HeaderTypes::UNIQUE_KEY && rowChange_->hasParent(); }
+        bool editable = edit_.whichId == pKeyId && headerInfo.type != DB::HeaderTypes::PRIMARY_KEY && !isUkeyAndHasParent;
+        const CellBoilerPlate cellBoiler = CellBoilerPlate(headerInfo, cursor, rowChange_.get(), width, true, editable, false, false, i);
 
         EventTypes fromData = drawCellSC(
             cellBoiler,
@@ -120,26 +120,26 @@ void DbTable::drawColumn(const std::string& tableName, const std::size_t i, cons
                 // make cell editable by click
                 fromData.action = ActionType::REQUEST_EDIT;
             }
-            lastEvent.type = fromData;
-            lastEvent.origin = Widgets::DataEvent(tableName, pKey, headerInfo.name);
+            lastEvent_.type = fromData;
+            lastEvent_.origin = Widgets::DataEvent(tableName, pKey, headerInfo.name);
         }
 
         // draw any insertion/change overlay for this cell (uses same rect as the cell)
         {
-            ImVec2 min = ImVec2(cursor.x + headerPos.start.x + PAD_INNER, cursor.y + headerPos.start.y + PAD_INNER);
-            ImVec2 max = ImVec2(min.x + width - PAD_INNER, min.y + rowHeight - PAD_INNER);
+            ImVec2 min = ImVec2(cursor.x + headerPos_.start.x + PAD_INNER, cursor.y + headerPos_.start.y + PAD_INNER);
+            ImVec2 max = ImVec2(min.x + width - PAD_INNER, min.y + rowHeight_ - PAD_INNER);
             Rect cellRect(min, max);
-            drawList->PushClipRect(min, max, true);
-            drawChangeOverlayIfNeeded(rowChange.get(), cell, headerInfo.name, cellRect, fromData);
-            drawList->PopClipRect();
+            drawList_->PushClipRect(min, max, true);
+            drawChangeOverlayIfNeeded(rowChange_.get(), cell, headerInfo.name, cellRect, fromData);
+            drawList_->PopClipRect();
         }
 
         // edit column
-        if (i + 1 == dbData->headers.at(tableName).data.size()) {
-            handleLastActionIfNeeded(tableName, splitterPoss, i, cursor, rowChange.get(), pKey);
+        if (i + 1 == dbData_->headers.at(tableName).data.size()) {
+            handleLastActionIfNeeded(tableName, splitterPoss, i, cursor, rowChange_.get(), pKey);
         }
 
-        cursor.y += rowHeight;
+        cursor.y += rowHeight_;
         cellIndex++;
         ImGui::PopID();
     }
@@ -156,7 +156,7 @@ void DbTable::drawUserInputRowFields(const std::string& tableName,
                                      const std::vector<float>& splitterPoss,
                                      ImVec2& cursor) {
     ImGui::PushID("USERINPUT");
-    if (edit.insertBuffer.size() < headers.size()) { edit.insertBuffer.resize(headers.size()); }
+    if (edit_.insertBuffer.size() < headers.size()) { edit_.insertBuffer.resize(headers.size()); }
     Change::colValMap newChangeColVal{};
 
     for (std::size_t i = 0; i < headers.size(); ++i) {
@@ -180,11 +180,11 @@ void DbTable::drawUserInputRowFields(const std::string& tableName,
         ImGui::PushID("ENTER");
         if (i + 1 == headers.size()) {
             EventTypes lastColEnter = drawLastColumnEnter(cursor, splitterPoss, i);
-            if (lastColEnter.mouse == MouseEventType::CLICK && !lastEvent.hasDataBesidesHover()) {
-                lastEvent.cells = insertCells;
-                lastEvent.type = lastColEnter;
-                insertCells.clear();
-                for (auto& buffer : edit.insertBuffer) {
+            if (lastColEnter.mouse == MouseEventType::CLICK && !lastEvent_.hasDataBesidesHover()) {
+                lastEvent_.cells = insertCells_;
+                lastEvent_.type = lastColEnter;
+                insertCells_.clear();
+                for (auto& buffer : edit_.insertBuffer) {
                     std::memset(buffer.data(), 0, std::strlen(buffer.data()));
                 }
             }
@@ -212,12 +212,12 @@ EventTypes DbTable::handleFirstColumnIfNeeded(
             drawCellSC(cellBoiler, [this](const CellBoilerPlate& cell, const Rect& r) -> ActionType { return drawFirstColumnSC(cell, r); });
         ImGui::PopID();
     }
-    if (fromFirst.mouse != MouseEventType::NONE && !lastEvent.hasDataBesidesHover()) {
-        lastEvent.type = fromFirst;
+    if (fromFirst.mouse != MouseEventType::NONE && !lastEvent_.hasDataBesidesHover()) {
+        lastEvent_.type = fromFirst;
         if (change) {
-            lastEvent.origin = *change;
+            lastEvent_.origin = *change;
         } else {
-            lastEvent.origin = DataEvent(tableName, pKey, "FIRST");
+            lastEvent_.origin = DataEvent(tableName, pKey, "FIRST");
         }
     }
     return fromFirst;
@@ -231,12 +231,12 @@ EventTypes DbTable::handleLastActionIfNeeded(const std::string& tableName,
                                              const Change* change,
                                              const std::string& pKey) {
     EventTypes fromAction = drawActionColumn(cursor, splitterPoss, columnIndex, change);
-    if (fromAction.mouse != MouseEventType::NONE && !lastEvent.hasDataBesidesHover()) {
-        lastEvent.type = fromAction;
+    if (fromAction.mouse != MouseEventType::NONE && !lastEvent_.hasDataBesidesHover()) {
+        lastEvent_.type = fromAction;
         if (change) {
-            lastEvent.origin = *change;
+            lastEvent_.origin = *change;
         } else {
-            lastEvent.origin = DataEvent(tableName, pKey, "LAST");
+            lastEvent_.origin = DataEvent(tableName, pKey, "LAST");
         }
     }
     return fromAction;
@@ -246,14 +246,14 @@ EventTypes DbTable::handleLastActionIfNeeded(const std::string& tableName,
 void DbTable::drawRowBackgroundIfNeeded(const ImVec2& cursor, const std::vector<float>& splitterPoss, const Change* change) {
     if (!change) { return; }
 
-    ImVec2 min = ImVec2(headerPos.start.x + PAD_INNER, headerPos.start.y + cursor.y + PAD_INNER);
-    ImVec2 max = ImVec2(splitterPoss.back() + headerPos.start.x + 0.5f * SPLITTER_WIDTH, min.y + rowHeight - PAD_INNER);
+    ImVec2 min = ImVec2(headerPos_.start.x + PAD_INNER, headerPos_.start.y + cursor.y + PAD_INNER);
+    ImVec2 max = ImVec2(splitterPoss.back() + headerPos_.start.x + 0.5f * SPLITTER_WIDTH, min.y + rowHeight_ - PAD_INNER);
     // semi-transparent blue-ish highlight
     ImU32 bgCol = change->isValid() ? colValid.first : colInvalid.first;
-    drawList->AddRectFilled(min, max, bgCol);
+    drawList_->AddRectFilled(min, max, bgCol);
 
     ImU32 borderCol = change->isValid() ? colValid.second : colInvalid.first; // adjust as needed
-    drawList->AddRect(min, max, borderCol, 0.0f, ~0, 1.0f);
+    drawList_->AddRect(min, max, borderCol, 0.0f, ~0, 1.0f);
 }
 
 void DbTable::drawInsertionCellsOfColumn(const std::string& tableName,
@@ -262,11 +262,11 @@ void DbTable::drawInsertionCellsOfColumn(const std::string& tableName,
                                          const std::vector<float>& splitterPoss,
                                          ImVec2& cursor,
                                          std::size_t& cellIndex) {
-    if (!uiChanges) { return; }
-    if (!uiChanges->idMappedChanges.contains(tableName)) { return; }
+    if (!uiChanges_) { return; }
+    if (!uiChanges_->idMappedChanges.contains(tableName)) { return; }
 
-    for (const auto& [pKeyNum, changeKey] : uiChanges->idMappedChanges.at(tableName)) {
-        Change& change = uiChanges->changes.at(changeKey);
+    for (const auto& [pKeyNum, changeKey] : uiChanges_->idMappedChanges.at(tableName)) {
+        Change& change = uiChanges_->changes.at(changeKey);
         if (change.getType() != ChangeType::INSERT_ROW) { continue; }
         const std::string pKey = std::to_string(pKeyNum);
 
@@ -282,7 +282,7 @@ void DbTable::drawInsertionCellsOfColumn(const std::string& tableName,
         // data cell: use changed value if present, otherwise empty
         const std::string changedVal = change.getCell(headerInfo.name);
         bool isUkeyAndHasParent = headerInfo.type == DB::HeaderTypes::UNIQUE_KEY && change.hasParent();
-        bool editable = edit.whichId == pKeyNum && headerInfo.type != DB::HeaderTypes::PRIMARY_KEY && !isUkeyAndHasParent;
+        bool editable = edit_.whichId == pKeyNum && headerInfo.type != DB::HeaderTypes::PRIMARY_KEY && !isUkeyAndHasParent;
         const CellBoilerPlate cellBoiler = CellBoilerPlate(headerInfo, cursor, &change, width, true, editable, false, false, i);
         EventTypes fromData = drawCellSC(
             cellBoiler,
@@ -290,25 +290,25 @@ void DbTable::drawInsertionCellsOfColumn(const std::string& tableName,
                 return drawDataCell(cellBoiler, r, v, CellType::DATA);
             },
             changedVal);
-        if (fromData.mouse != MouseEventType::NONE && !lastEvent.hasDataBesidesHover()) {
-            lastEvent.type = fromData;
-            lastEvent.origin = Widgets::DataEvent(tableName, pKey, headerInfo.name);
+        if (fromData.mouse != MouseEventType::NONE && !lastEvent_.hasDataBesidesHover()) {
+            lastEvent_.type = fromData;
+            lastEvent_.origin = Widgets::DataEvent(tableName, pKey, headerInfo.name);
         }
 
         // overlay for insertion (draw over cell)
         {
-            ImVec2 min = ImVec2(cursor.x + headerPos.start.x + PAD_INNER, cursor.y + headerPos.start.y + PAD_INNER);
-            ImVec2 max = ImVec2(min.x + width - PAD_INNER, min.y + rowHeight - PAD_INNER);
+            ImVec2 min = ImVec2(cursor.x + headerPos_.start.x + PAD_INNER, cursor.y + headerPos_.start.y + PAD_INNER);
+            ImVec2 max = ImVec2(min.x + width - PAD_INNER, min.y + rowHeight_ - PAD_INNER);
             Rect cellRect(min, max);
             drawChangeOverlayIfNeeded(&change, changedVal, headerInfo.name, cellRect, fromData);
         }
 
         // last/action column for insertion row
-        if (i + 1 == dbData->headers.at(tableName).data.size()) {
+        if (i + 1 == dbData_->headers.at(tableName).data.size()) {
             handleLastActionIfNeeded(tableName, splitterPoss, i, cursor, &change, pKey);
         }
 
-        cursor.y += rowHeight;
+        cursor.y += rowHeight_;
         cellIndex++;
         ImGui::PopID();
     }
@@ -327,8 +327,8 @@ void DbTable::drawChangeOverlayIfNeeded(
     if (yOffset < PAD_INNER_CONTENT) { yOffset = PAD_INNER_CONTENT; }
     ImVec2 textPos(r.start.x + PAD_INNER_CONTENT, r.start.y + yOffset);
     if (event.mouse == MouseEventType::HOVER) {
-        drawList->AddRectFilled(r.start, r.end, colHoveredGrey);
-        drawList->AddText(textPos, IM_COL32_WHITE, originalValue.c_str());
+        drawList_->AddRectFilled(r.start, r.end, colHoveredGrey);
+        drawList_->AddText(textPos, IM_COL32_WHITE, originalValue.c_str());
     }
 }
 
@@ -383,8 +383,8 @@ DbTable::drawActionColumn(const ImVec2& pos, const std::vector<float>& splitterP
 ActionType DbTable::drawDataCell(const CellBoilerPlate& cell, const Rect& r, const std::string& value, CellType cellType) {
     ActionType action{ActionType::DATA};
     ImU32 colBg = cell.selected ? colSelected.first : colGreyBg;
-    drawList->PushClipRect(r.start, r.end, true);
-    drawList->AddRectFilled(r.start, r.end, colBg);
+    drawList_->PushClipRect(r.start, r.end, true);
+    drawList_->AddRectFilled(r.start, r.end, colBg);
 
     ImVec2 textSize = ImGui::CalcTextSize(value.c_str());
     float yOffset = (r.end.y - r.start.y - textSize.y) * 0.5f;
@@ -397,33 +397,33 @@ ActionType DbTable::drawDataCell(const CellBoilerPlate& cell, const Rect& r, con
         ImGui::SetCursorScreenPos(textPos);
         ImGui::SetNextItemWidth(r.end.x - textPos.x - PAD_INNER_CONTENT);
 
-        char* dataSource = cell.isInsert ? edit.insertBuffer[cell.headerIndex].data() : edit.editBuffer.data();
-        if (!cell.isInsert && edit.whichId != cell.headerIndex) { std::snprintf(dataSource, BUFFER_SIZE, "%s", value.c_str()); }
+        char* dataSource = cell.isInsert ? edit_.insertBuffer[cell.headerIndex].data() : edit_.editBuffer.data();
+        if (!cell.isInsert && edit_.whichId != cell.headerIndex) { std::snprintf(dataSource, BUFFER_SIZE, "%s", value.c_str()); }
 
         bool enterPressed = ImGui::InputText("##edit", dataSource, BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
         if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
             if (cell.isInsert) {
-                insertCells.emplace(cell.header.name, std::string(dataSource));
+                insertCells_.emplace(cell.header.name, std::string(dataSource));
             } else {
                 Change::colValMap newChangeColVal{{cell.header.name, std::string(dataSource)}};
-                lastEvent.cells = std::move(newChangeColVal);
-                edit.whichId = INVALID_ID;
+                lastEvent_.cells = std::move(newChangeColVal);
+                edit_.whichId = INVALID_ID;
                 action = ActionType::EDIT;
             }
         }
         ImGui::PopStyleVar();
     } else {
         ImU32 col = cell.enabled ? IM_COL32_WHITE : IM_COL32(255, 255, 255, 100);
-        drawList->AddText(textPos, col, value.c_str());
+        drawList_->AddText(textPos, col, value.c_str());
         drawChangeInCell(cell, r, textPos, col, value);
 
         if (cellType == CellType::HEADER) {
             std::string depth = std::to_string(cell.header.depth);
-            drawList->AddText(ImVec2{r.end.x - ImGui::CalcTextSize(depth.c_str()).x, r.start.y}, col, depth.c_str());
+            drawList_->AddText(ImVec2{r.end.x - ImGui::CalcTextSize(depth.c_str()).x, r.start.y}, col, depth.c_str());
         }
     }
 
-    drawList->PopClipRect();
+    drawList_->PopClipRect();
     return action;
 }
 
@@ -437,7 +437,7 @@ void DbTable::drawChangeInCell(const CellBoilerPlate& cell, const Rect& r, ImVec
             isValid = cell.header.nullable || !value.empty();
         } else {
             for (const std::size_t key : cell.change->getChildren()) {
-                const Change& child = uiChanges.get()->changes.at(key);
+                const Change& child = uiChanges_.get()->changes.at(key);
                 if (child.getTable() == cell.header.name) {
                     isValid = child.isLocallyValid();
                     break;
@@ -449,18 +449,18 @@ void DbTable::drawChangeInCell(const CellBoilerPlate& cell, const Rect& r, ImVec
     std::pair<ImU32, ImU32> changeCols = isValid ? colValid : colInvalid;
     switch (cell.change->getType()) {
     case ChangeType::DELETE_ROW:
-        drawList->AddLine(ImVec2{r.start.x, r.start.y + (r.end.y - r.start.y) / 2},
-                          ImVec2{r.end.x, r.start.y + (r.end.y - r.start.y) / 2},
-                          ImU32(colInvalid.second));
+        drawList_->AddLine(ImVec2{r.start.x, r.start.y + (r.end.y - r.start.y) / 2},
+                           ImVec2{r.end.x, r.start.y + (r.end.y - r.start.y) / 2},
+                           ImU32(colInvalid.second));
         break;
 
     case ChangeType::UPDATE_CELLS:
         [[fallthrough]];
     case ChangeType::INSERT_ROW:
         if (!cell.change->getCell(cell.header.name).empty() || value.empty()) {
-            drawList->AddRectFilled(r.start, r.end, changeCols.first);
-            drawList->AddRect(r.start, r.end, changeCols.second);
-            drawList->AddText(textPos, col, cell.change->getCell(cell.header.name).c_str());
+            drawList_->AddRectFilled(r.start, r.end, changeCols.first);
+            drawList_->AddRect(r.start, r.end, changeCols.second);
+            drawList_->AddText(textPos, col, cell.change->getCell(cell.header.name).c_str());
         }
     default:
         break;
@@ -497,8 +497,8 @@ ActionType DbTable::drawInsertionInputField(const CellBoilerPlate& cell, const R
 }
 
 void DbTable::drawTable(const std::string& tableName) {
-    if (rowHeight == 0) { rowHeight = ImGui::CalcTextSize("test").y + (PAD_INNER + PAD_INNER_CONTENT) * 2; }
-    drawList = ImGui::GetWindowDrawList();
+    if (rowHeight_ == 0) { rowHeight_ = ImGui::CalcTextSize("test").y + (PAD_INNER + PAD_INNER_CONTENT) * 2; }
+    drawList_ = ImGui::GetWindowDrawList();
     ImGui::PushID(tableName.c_str());
     drawHeader(tableName);
     drawColumns(tableName);
@@ -506,27 +506,27 @@ void DbTable::drawTable(const std::string& tableName) {
 }
 
 void DbTable::setData(std::shared_ptr<const CompleteDbData> newData) {
-    dbData = newData;
-    for (const auto& [tableName, tableInfo] : dbData->headers) {
+    dbData_ = newData;
+    for (const auto& [tableName, tableInfo] : dbData_->headers) {
         std::size_t colCount = tableInfo.data.size();
         float widthPerColumn = (ImGui::GetContentRegionAvail().x - 2 * PAD_OUTER_X - LEFT_RESERVE - RIGHT_RESERVE) / (float)colCount;
-        columnWidths[tableName].clear();
+        columnWidths_[tableName].clear();
         for (std::size_t i = 0; i < colCount; i++) {
-            columnWidths[tableName].push_back((i + 1) * widthPerColumn);
+            columnWidths_[tableName].push_back((i + 1) * widthPerColumn);
         }
     }
 }
 
 void DbTable::setChangeData(std::shared_ptr<uiChangeInfo> changeData) {
-    uiChanges = changeData;
+    uiChanges_ = changeData;
 }
 
 Event DbTable::getEvent() const {
-    return lastEvent;
+    return lastEvent_;
 }
 
 void DbTable::popEvent() {
-    lastEvent = Event();
+    lastEvent_ = Event();
 }
 
 void ChangeOverviewer::setChangeData(std::shared_ptr<uiChangeInfo> changeData) {

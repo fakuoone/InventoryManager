@@ -7,31 +7,31 @@ MappingSource::MappingSource(const std::string& cSelectedField,
                              const std::string& cHeader,
                              const std::string& cExample,
                              DB::TypeCategory cDataType)
-    : data(cSelectedField, cHeader, cExample, parentVisualizer->getNextIdSource(), cDataType) {}
+    : data_(cSelectedField, cHeader, cExample, parentVisualizer_->getNextIdSource(), cDataType) {}
 MappingSource::~MappingSource() {}
 
 bool MappingSource::operator==(const MappingSource& other) {
-    return data.primaryField == other.data.primaryField && data.apiSelector == other.data.apiSelector;
+    return data_.primaryField == other.data_.primaryField && data_.apiSelector == other.data_.apiSelector;
 }
 
 void MappingSource::setInteractionHandler(CsvMappingVisualizer* handler) {
-    parentVisualizer = handler;
+    parentVisualizer_ = handler;
 }
 
 const std::string& MappingSource::getAttribute() const {
-    return data.apiSelector;
+    return data_.apiSelector;
 }
 
 float MappingSource::getTotalHeight() const {
-    return 2 * (singleAttributeHeight) + 2 * INNER_PADDING;
+    return 2 * (singleAttributeHeight_) + 2 * INNER_PADDING;
 }
 
 void MappingSource::draw(float width) {
     // Calc Height
-    singleAttributeHeight = ImGui::CalcTextSize(data.primaryField.c_str()).y + 2 * INNER_TEXT_PADDING;
+    singleAttributeHeight_ = ImGui::CalcTextSize(data_.primaryField.c_str()).y + 2 * INNER_TEXT_PADDING;
     const float height = getTotalHeight();
 
-    const float anchorRadius = singleAttributeHeight / 2 - INNER_PADDING * 2;
+    const float anchorRadius = singleAttributeHeight_ / 2 - INNER_PADDING * 2;
     const float actualWidth = width - 2 * OUTER_PADDING; //  + 2 * OUTER_PADDING + INNER_PADDING + 2 * anchorRadius;
 
     ImGui::PushID(this);
@@ -49,7 +49,7 @@ void MappingSource::draw(float width) {
     drawList->AddRect(bgRectBegin, bgRectEnd, IM_COL32(120, 120, 120, 200), 0.0f);
 
     ImGui::SetCursorScreenPos(cursor);
-    ImGui::InvisibleButton(data.primaryField.c_str(), ImVec2(width, singleAttributeHeight));
+    ImGui::InvisibleButton(data_.primaryField.c_str(), ImVec2(width, singleAttributeHeight_));
 
     // hover effect on header
     cursor.x += INNER_PADDING;
@@ -61,34 +61,35 @@ void MappingSource::draw(float width) {
         ImU32 colBg = dragged ? Widgets::colSelected.first : Widgets::colGreyBg;
         ImU32 colBorder = dragged ? Widgets::colSelected.second : Widgets::colHoveredGrey;
 
-        drawList->AddRectFilled(cursor, ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING, cursor.y + singleAttributeHeight), colBg, 0.0f);
-        drawList->AddRect(cursor, ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING, cursor.y + singleAttributeHeight), colBorder, 0.0f);
+        drawList->AddRectFilled(cursor, ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING, cursor.y + singleAttributeHeight_), colBg, 0.0f);
+        drawList->AddRect(cursor, ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING, cursor.y + singleAttributeHeight_), colBorder, 0.0f);
     }
 
     // draw anchor
 
-    const ImVec2 anchorCenter = ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING - 2 * anchorRadius, cursor.y + singleAttributeHeight / 2);
+    const ImVec2 anchorCenter =
+        ImVec2(cursor.x + actualWidth - 2 * INNER_PADDING - 2 * anchorRadius, cursor.y + singleAttributeHeight_ / 2);
     drawList->AddCircleFilled(anchorCenter, anchorRadius, Widgets::colHoveredGrey);
 
     // store anchor in parent
-    parentVisualizer->storeAnchorSource(data.id, anchorCenter);
+    parentVisualizer_->storeAnchorSource(data_.id, anchorCenter);
 
     // header
     drawList->AddText(ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING),
                       hovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(220, 220, 220, 255),
-                      data.apiSelector.empty() ? data.primaryField.c_str() : data.apiSelector.c_str());
-    cursor.y += singleAttributeHeight;
+                      data_.apiSelector.empty() ? data_.primaryField.c_str() : data_.apiSelector.c_str());
+    cursor.y += singleAttributeHeight_;
 
     // example
     drawList->PushClipRect(ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING),
-                           ImVec2(cursor.x + actualWidth - 2 * INNER_TEXT_PADDING, cursor.y + singleAttributeHeight),
+                           ImVec2(cursor.x + actualWidth - 2 * INNER_TEXT_PADDING, cursor.y + singleAttributeHeight_),
                            true);
 
     drawList->AddText(
-        ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING), IM_COL32(220, 220, 220, 255), data.example.c_str());
+        ImVec2(cursor.x + INNER_TEXT_PADDING, cursor.y + INNER_TEXT_PADDING), IM_COL32(220, 220, 220, 255), data_.example.c_str());
 
     drawList->PopClipRect();
-    cursor.y += singleAttributeHeight;
+    cursor.y += singleAttributeHeight_;
 
     ImGui::SetCursorScreenPos(cursor);
     ImGui::Dummy(ImVec2(0, OUTER_PADDING));
@@ -97,7 +98,7 @@ void MappingSource::draw(float width) {
 
 bool MappingSource::beginDrag() const {
     if (ImGui::BeginDragDropSource()) {
-        ImGui::SetDragDropPayload(imguiMappingDragString.data(), &data, sizeof(data));
+        ImGui::SetDragDropPayload(imguiMappingDragString.data(), &data_, sizeof(data_));
         ImGui::EndDragDropSource();
         return true;
     }
@@ -105,21 +106,21 @@ bool MappingSource::beginDrag() const {
 }
 
 const SourceDetail& MappingSource::getData() const {
-    return data;
+    return data_;
 }
 
 void MappingSource::eraseFromParent() const {
-    if (!parentVisualizer) { return; }
-    parentVisualizer->removeSourceAnchor(data.id);
-    parentVisualizer->removeMappingToDbFromSource(data.id);
+    if (!parentVisualizer_) { return; }
+    parentVisualizer_->removeSourceAnchor(data_.id);
+    parentVisualizer_->removeMappingToDbFromSource(data_.id);
 }
 
 void MappingDestination::setInteractionHandler(CsvMappingVisualizer* handler) {
-    parentVisualizer = handler;
+    parentVisualizer_ = handler;
 }
 
 void MappingDestinationDb::draw(float width) {
-    if (headers.size() == 0) { return; }
+    if (headers_.size() == 0) { return; }
     ImGui::PushID(this);
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -128,14 +129,14 @@ void MappingDestinationDb::draw(float width) {
 
     // Headerwidth
     float maxHeaderWidth = 0.0f;
-    for (const auto& header : headers) {
+    for (const auto& header : headers_) {
         maxHeaderWidth = std::max(maxHeaderWidth, ImGui::CalcTextSize(header.header.name.c_str()).x);
     }
     maxHeaderWidth = std::min(maxHeaderWidth, static_cast<float>(0.5 * widthPadded));
 
     // Calc Height
-    const float headerHeight = ImGui::CalcTextSize(headers.at(0).header.name.c_str()).y + 2 * INNER_TEXT_PADDING;
-    const float height = headers.size() * (headerHeight) + 2 * INNER_PADDING;
+    const float headerHeight = ImGui::CalcTextSize(headers_.at(0).header.name.c_str()).y + 2 * INNER_TEXT_PADDING;
+    const float height = headers_.size() * (headerHeight) + 2 * INNER_PADDING;
     ImVec2 begin = ImGui::GetCursorScreenPos();
     begin.x += OUTER_PADDING;
     begin.y += OUTER_PADDING;
@@ -152,7 +153,7 @@ void MappingDestinationDb::draw(float width) {
     cursor.y += INNER_PADDING;
 
     // Headers column
-    for (auto& header : headers) {
+    for (auto& header : headers_) {
         // draw anchor
         const ImVec2 anchorCenter = ImVec2(cursor.x + INNER_PADDING + anchorRadius, cursor.y + headerHeight / 2);
 
@@ -195,17 +196,17 @@ void MappingDestinationDb::draw(float width) {
 
         // Anchor
         if (header.mappable) { drawList->AddCircleFilled(anchorCenter, anchorRadius, Widgets::colHoveredGrey); }
-        parentVisualizer->storeAnchorDest(header.id, anchorCenter);
+        parentVisualizer_->storeAnchorDest(header.id, anchorCenter);
 
         cursor.y += headerHeight;
     }
 
     ImVec2 end = cursor;
     // Table
-    float tableWidth = ImGui::CalcTextSize(table.c_str()).x;
+    float tableWidth = ImGui::CalcTextSize(table_.c_str()).x;
     cursor.x = begin.x + widthPadded - tableWidth - OUTER_PADDING - INNER_PADDING;
     cursor.y = begin.y + (cursor.y + INNER_PADDING - begin.y) / 2 - headerHeight / 2;
-    drawList->AddText(cursor, IM_COL32(255, 255, 255, 255), table.c_str());
+    drawList->AddText(cursor, IM_COL32(255, 255, 255, 255), table_.c_str());
 
     drawList->AddLine(ImVec2(begin.x + widthPadded / 2, begin.y),
                       ImVec2(begin.x + widthPadded / 2, end.y + INNER_PADDING),
@@ -229,16 +230,16 @@ template <typename T> DragState handleDragInternal(CsvMappingVisualizer* parentV
 }
 
 DragState MappingDestinationDb::handleDrag(DbDestinationDetail& header) {
-    if (!parentVisualizer) { return DragState{DragResult::OTHER, false}; }
-    return handleDragInternal<DbDestinationDetail>(parentVisualizer, MappingTypes::HEADER_HEADER, header);
+    if (!parentVisualizer_) { return DragState{DragResult::OTHER, false}; }
+    return handleDragInternal<DbDestinationDetail>(parentVisualizer_, MappingTypes::HEADER_HEADER, header);
 }
 
 const std::string& MappingDestinationDb::getTable() const {
-    return table;
+    return table_;
 }
 
 const std::vector<DbDestinationDetail>& MappingDestinationDb::getHeaders() const {
-    return headers;
+    return headers_;
 }
 
 bool MappingDestinationToApi::beginDrag() {
@@ -292,7 +293,7 @@ void MappingDestinationToApi::draw(float width) {
             if (previewData->ready) {
                 ImGui::OpenPopup(API_POPUP.data());
             } else if (!data.example.empty()) {
-                parentVisualizer->handleApiClick(*this);
+                parentVisualizer_->handleApiClick(*this);
             }
         }
 
@@ -334,7 +335,7 @@ void MappingDestinationToApi::draw(float width) {
 
         // LEFT side drag destination
         if (data.mappable) { drawList->AddCircleFilled(anchorCenterLeft, anchorRadius, Widgets::colHoveredGrey); }
-        parentVisualizer->storeAnchorDest(data.id, anchorCenterLeft);
+        parentVisualizer_->storeAnchorDest(data.id, anchorCenterLeft);
     }
 
     {
@@ -362,8 +363,8 @@ void MappingDestinationToApi::drawPreview(ImVec2 startUp) {
 }
 
 DragState MappingDestinationToApi::handleDrag(ApiDestinationDetail& detail) {
-    if (!parentVisualizer) { return DragState{DragResult::OTHER, false}; }
-    return handleDragInternal<ApiDestinationDetail>(parentVisualizer, MappingTypes::HEADER_API, detail);
+    if (!parentVisualizer_) { return DragState{DragResult::OTHER, false}; }
+    return handleDragInternal<ApiDestinationDetail>(parentVisualizer_, MappingTypes::HEADER_API, detail);
 }
 
 const std::string& MappingDestinationToApi::getExample() const {

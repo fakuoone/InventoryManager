@@ -14,7 +14,7 @@
 
 class ThreadPool {
   public:
-    explicit ThreadPool(std::size_t cThreadCount, Logger& cLogger);
+    ThreadPool(std::size_t cThreadCount, Logger& cLogger);
     ~ThreadPool();
 
     // Submit any callable (including member functions)
@@ -26,10 +26,10 @@ class ThreadPool {
         std::future<R> fut = task->get_future();
 
         {
-            std::lock_guard<std::mutex> lock(mtx);
-            tasks.emplace([task] { (*task)(); });
+            std::lock_guard<std::mutex> lock(mtx_);
+            tasks_.emplace([task] { (*task)(); });
         }
-        cv.notify_one();
+        cv_.notify_one();
         return fut;
     }
 
@@ -38,11 +38,11 @@ class ThreadPool {
   private:
     void workerLoop();
 
-    Logger& logger;
-    std::vector<std::thread> workers;
-    std::queue<std::function<void()>> tasks;
+    Logger& logger_;
+    std::vector<std::thread> workers_;
+    std::queue<std::function<void()>> tasks_;
 
-    std::mutex mtx;
-    std::condition_variable cv;
-    std::atomic<bool> stopping{false};
+    std::mutex mtx_;
+    std::condition_variable cv_;
+    std::atomic<bool> stopping_{false};
 };

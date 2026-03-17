@@ -124,30 +124,30 @@ inline CSV::Data readData(std::filesystem::path csv, Logger& logger) {
 
 class CsvChangeGenerator {
   protected:
-    ThreadPool& threadPool;
-    ChangeTracker& changeTracker;
-    DbService& dbService;
-    PartApi& partApi;
-    Config& config;
-    Logger& logger;
+    ThreadPool& pool_;
+    ChangeTracker& changeTracker_;
+    DbService& dbService_;
+    PartApi& partApi_;
+    Config& config_;
+    Logger& logger_;
 
-    std::shared_ptr<const CompleteDbData> dbData;
+    std::shared_ptr<const CompleteDbData> dbData_;
 
-    CSV::Data csvData;
-    std::future<bool> fRead;
-    std::condition_variable cvRead;
-    std::mutex mtxRead;
+    CSV::Data csvData_;
+    std::future<bool> fRead_;
+    std::condition_variable cvRead_;
+    std::mutex mtxRead_;
 
-    std::future<void> fExecMappings;
+    std::future<void> fExecMappings_;
 
-    bool dataRead = false;
+    bool dataRead_ = false;
 
-    std::vector<MappingCsvToDb> directMappings;
-    std::vector<MappingCsvToDb> indirectApiMappings;
-    std::vector<MappingCsvApi> intermediateApiMappings;
-    std::size_t missingParam = 0;
+    std::vector<MappingCsvToDb> directMappings_;
+    std::vector<MappingCsvToDb> indirectApiMappings_;
+    std::vector<MappingCsvApi> intermediateApiMappings_;
+    std::size_t missingParam_ = 0;
 
-    QuantityOperation operation;
+    QuantityOperation operation_;
 
     CsvChangeGenerator(ThreadPool& cThreadPool,
                        ChangeTracker& cChangeTracker,
@@ -156,29 +156,29 @@ class CsvChangeGenerator {
                        Config& cConfig,
                        Logger& cLogger,
                        QuantityOperation cOperation)
-        : threadPool(cThreadPool), changeTracker(cChangeTracker), dbService(cDbService), partApi(cPartApi), config(cConfig),
-          logger(cLogger), operation(cOperation) {}
+        : pool_(cThreadPool), changeTracker_(cChangeTracker), dbService_(cDbService), partApi_(cPartApi), config_(cConfig),
+          logger_(cLogger), operation_(cOperation) {}
 
-    virtual ~CsvChangeGenerator() { config.saveApiArchive(); }
+    virtual ~CsvChangeGenerator() { config_.saveApiArchive(); }
 
     bool run(std::filesystem::path csv) {
-        csvData = readData(csv, logger);
-        return !csvData.rows.empty();
+        csvData_ = readData(csv, logger_);
+        return !csvData_.rows.empty();
     }
 
     void convertMappings(ChangeConvertedMapping& convertedMapping,
                          std::unordered_set<std::string>& foundTables,
                          const std::vector<MappingCsvToDb>& mappings,
                          SourceType source) {
-        const std::vector<std::string>& csvHeader = csvData.rows[0];
+        const std::vector<std::string>& csvHeader = csvData_.rows[0];
 
         for (const MappingCsvToDb& mapping : mappings) {
             // check legality of mapping
             const auto it = std::find_if(
                 csvHeader.begin(), csvHeader.end(), [&](const std::string& col) { return mapping.source.outerIdentifier == col; });
             if (it == csvHeader.end()) {
-                logger.pushLog(Log{std::format("ERROR: Converting mappings failed because {} does not match a csv column.",
-                                               mapping.source.outerIdentifier)});
+                logger_.pushLog(Log{std::format("ERROR: Converting mappings failed because {} does not match a csv column.",
+                                                mapping.source.outerIdentifier)});
                 return;
             }
 
@@ -204,14 +204,14 @@ class CsvChangeGenerator {
         ChangeConvertedMapping convertedMapping;
         std::unordered_set<std::string> foundTables;
 
-        convertMappings(convertedMapping, foundTables, directMappings, SourceType::CSV);
-        convertMappings(convertedMapping, foundTables, indirectApiMappings, SourceType::API);
+        convertMappings(convertedMapping, foundTables, directMappings_, SourceType::CSV);
+        convertMappings(convertedMapping, foundTables, indirectApiMappings_, SourceType::API);
 
         return convertedMapping;
     }
 
     const MappingCsvApi& findApiSource(MappingIdType mappingId) const {
-        auto it = std::find_if(intermediateApiMappings.begin(), intermediateApiMappings.end(), [&](const MappingCsvApi& m) {
+        auto it = std::find_if(intermediateApiMappings_.begin(), intermediateApiMappings_.end(), [&](const MappingCsvApi& m) {
             return m.destination == mappingId;
         });
         // if this doesnt exist, might as well crash
@@ -232,7 +232,7 @@ class CsvChangeGenerator {
             }
         } catch (nlohmann::json::exception& e) {
             // handle error
-            logger.pushLog(Log{std::format("ERROR: Api response doesnt cotain {}", selectedField)});
+            logger_.pushLog(Log{std::format("ERROR: Api response doesnt cotain {}", selectedField)});
             return std::string{};
         }
     }
@@ -244,26 +244,26 @@ class CsvChangeGenerator {
         for (std::size_t j = 0; j < chunk.size(); ++j) {
             resultChunk[j] = std::unordered_map<std::string, Change::colValMap>{};
             const std::vector<std::string>& row = chunk[j];
-            for (const MappingCsvToDb& mapping : indirectApiMappings) {
+            for (const MappingCsvToDb& mapping : indirectApiMappings_) {
                 // gets index of column to search with
-                auto itHeaderIndex = std::find(csvData.rows[0].begin(), csvData.rows[0].end(), mapping.source.outerIdentifier);
-                if (itHeaderIndex == csvData.rows[0].end()) { return; }
-                std::size_t itCsvIndex = itHeaderIndex - csvData.rows[0].begin();
+                auto itHeaderIndex = std::find(csvData_.rows[0].begin(), csvData_.rows[0].end(), mapping.source.outerIdentifier);
+                if (itHeaderIndex == csvData_.rows[0].end()) { return; }
+                std::size_t itCsvIndex = itHeaderIndex - csvData_.rows[0].begin();
                 resultChunk[j].try_emplace(mapping.destination.outerIdentifier, Change::colValMap{});
 
                 resultChunk[j]
                     .at(mapping.destination.outerIdentifier)
                     .emplace(mapping.destination.innerIdentifier,
-                             getJsonTarget(partApi.fetchDataPoint(chunk[j][itCsvIndex]), mapping.source.innerIdentifier));
+                             getJsonTarget(partApi_.fetchDataPoint(chunk[j][itCsvIndex]), mapping.source.innerIdentifier));
             }
         }
     }
 
     ApiResultType fetchApiData() {
-        std::size_t totalRows = csvData.rows.size();
+        std::size_t totalRows = csvData_.rows.size();
         if (totalRows <= 1) { return ApiResultType{}; }
 
-        std::size_t threadCount = threadPool.getAvailableThreadCount();
+        std::size_t threadCount = pool_.getAvailableThreadCount();
         std::size_t dataRows = totalRows - 1; // skip header
 
         threadCount = std::max(std::size_t(1), std::min(threadCount, dataRows / 10));
@@ -278,17 +278,18 @@ class CsvChangeGenerator {
 
         for (std::size_t i = 0; i < threadCount; ++i) {
             std::size_t currentChunkSize = baseChunkSize + (i < remainder ? 1 : 0);
-            std::span<std::vector<std::string>> chunk = std::span(csvData.rows).subspan(chunkStart == 0 ? 1 : chunkStart, currentChunkSize);
+            std::span<std::vector<std::string>> chunk =
+                std::span(csvData_.rows).subspan(chunkStart == 0 ? 1 : chunkStart, currentChunkSize);
             std::span<std::unordered_map<std::string, Change::colValMap>> resultChunk =
                 std::span(results).subspan(chunkStart, currentChunkSize);
             chunkStart += currentChunkSize;
-            futures.push_back(threadPool.submit(&CsvChangeGenerator::fetchChunk, this, chunk, resultChunk, i));
+            futures.push_back(pool_.submit(&CsvChangeGenerator::fetchChunk, this, chunk, resultChunk, i));
         }
 
         for (auto& f : futures) {
             f.get();
         }
-        config.saveApiArchive();
+        config_.saveApiArchive();
         return results;
     }
 
@@ -325,12 +326,13 @@ class CsvChangeGenerator {
             for (const PreciseMapLocationCombined& preciseHeader : preciseHeaders.dbHeaders) {
                 if (visitedTables.contains(preciseHeader.locations.outerIdentifier)) { continue; }
                 visitedTables.insert(preciseHeader.locations.outerIdentifier);
-                for (const auto& header : dbData->headers.at(preciseHeader.locations.outerIdentifier).data) {
+                for (const auto& header : dbData_->headers.at(preciseHeader.locations.outerIdentifier).data) {
                     if (mapped.cells[preciseHeader.locations.outerIdentifier].cells.contains(header.name) || header.nullable ||
                         header.type == DB::HeaderTypes::PRIMARY_KEY) {
                         continue;
                     }
-                    mapped.cells[preciseHeader.locations.outerIdentifier].cells.emplace(header.name, std::format("TODO{}", missingParam++));
+                    mapped.cells[preciseHeader.locations.outerIdentifier].cells.emplace(header.name,
+                                                                                        std::format("TODO{}", missingParam_++));
                 }
             }
         }
@@ -345,7 +347,7 @@ class CsvChangeGenerator {
         }
 
         std::sort(mapped.orderedCells.begin(), mapped.orderedCells.end(), [&](const TableCells* a, const TableCells* b) {
-            return dbData->headers.at(a->table).maxDepth < dbData->headers.at(b->table).maxDepth;
+            return dbData_->headers.at(a->table).maxDepth < dbData_->headers.at(b->table).maxDepth;
         });
     }
 
@@ -366,11 +368,11 @@ class CsvChangeGenerator {
         // returns wether to continue
         if (!cells) { return true; }
         ChangeType type = ChangeType::INSERT_ROW;
-        IndexPKeyPair foundIndexes = dbService.findIndexAndPKeyOfExisting(cells->table, cells->cells);
+        IndexPKeyPair foundIndexes = dbService_.findIndexAndPKeyOfExisting(cells->table, cells->cells);
         bool found = false;
         if (foundIndexes.index != INVALID_ID) {
-            if (dbService.hasQuantityColumn(cells->table)) {
-                dbService.updateChangeQuantity(cells->table, cells->cells, foundIndexes.index, operation);
+            if (dbService_.hasQuantityColumn(cells->table)) {
+                dbService_.updateChangeQuantity(cells->table, cells->cells, foundIndexes.index, operation_);
                 found = true;
                 type = ChangeType::UPDATE_CELLS;
             } else {
@@ -380,9 +382,9 @@ class CsvChangeGenerator {
 
         if (!found && onlyAddIfFound) { return false; }
 
-        ChangeAddResult result = changeTracker.addChange(Change{cells->cells, type, dbService.getTable(cells->table)}, foundIndexes.pkey);
+        ChangeAddResult result = changeTracker_.addChange(Change{cells->cells, type, dbService_.getTable(cells->table)}, foundIndexes.pkey);
         if (!ChangeTracker::gotAdded(result)) {
-            logger.pushLog(Log{std::format("ERROR: Adding change from mapping failed.")});
+            logger_.pushLog(Log{std::format("ERROR: Adding change from mapping failed.")});
             return false;
         }
         cells->cells.clear();
@@ -395,7 +397,7 @@ class CsvChangeGenerator {
 
         std::vector<Change> changes;
         ApiResultType results = fetchApiData();
-        for (const auto& row : csvData.rows) {
+        for (const auto& row : csvData_.rows) {
             if (i == 0) {
                 i++;
                 continue;
@@ -409,35 +411,35 @@ class CsvChangeGenerator {
     }
 
   public:
-    std::mutex& getMutexRead() { return mtxRead; }
+    std::mutex& getMutexRead() { return mtxRead_; }
 
-    std::condition_variable& getCvRead() { return cvRead; }
+    std::condition_variable& getCvRead() { return cvRead_; }
 
-    void setData(std::shared_ptr<const CompleteDbData> newData) { dbData = newData; }
+    void setData(std::shared_ptr<const CompleteDbData> newData) { dbData_ = newData; }
 
     bool dataValid(bool once) {
-        if (!dbData) { return false; }
-        if (!once) { return dataRead; }
-        if (fRead.valid()) {
-            if (fRead.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        if (!dbData_) { return false; }
+        if (!once) { return dataRead_; }
+        if (fRead_.valid()) {
+            if (fRead_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
                 {
-                    std::lock_guard<std::mutex> lock(mtxRead);
-                    dataRead = fRead.get();
+                    std::lock_guard<std::mutex> lock(mtxRead_);
+                    dataRead_ = fRead_.get();
                 }
-                cvRead.notify_all();
-                return dataRead;
+                cvRead_.notify_all();
+                return dataRead_;
             }
         }
         return false;
     }
 
-    void read(std::filesystem::path csv) { fRead = threadPool.submit(&CsvChangeGenerator::run, this, csv); }
+    void read(std::filesystem::path csv) { fRead_ = pool_.submit(&CsvChangeGenerator::run, this, csv); }
 
-    const std::vector<std::string>& getHeader() { return csvData.rows.front(); }
+    const std::vector<std::string>& getHeader() { return csvData_.rows.front(); }
 
-    const std::vector<DB::TypeCategory>& getHeaderTypes() { return csvData.columnTypes; }
+    const std::vector<DB::TypeCategory>& getHeaderTypes() { return csvData_.columnTypes; }
 
-    const std::vector<std::string>& getFirstRow() { return *(csvData.rows.begin() + 1); }
+    const std::vector<std::string>& getFirstRow() { return *(csvData_.rows.begin() + 1); }
 
     void setMappingsToDb(const std::vector<MappingNumber> mappings) {
         std::vector<MappingCsvToDb> mappingsFromCsv;
@@ -463,18 +465,18 @@ class CsvChangeGenerator {
         }
 
         for (const MappingCsvToDb& mapping : mappingsFromCsv) {
-            logger.pushLog(Log{std::format("MAPPINGS: MAPPED {} WITH {} TO {} OF {}",
-                                           mapping.source.outerIdentifier,
-                                           mapping.source.innerIdentifier,
-                                           mapping.destination.innerIdentifier,
-                                           mapping.destination.outerIdentifier)});
+            logger_.pushLog(Log{std::format("MAPPINGS: MAPPED {} WITH {} TO {} OF {}",
+                                            mapping.source.outerIdentifier,
+                                            mapping.source.innerIdentifier,
+                                            mapping.destination.innerIdentifier,
+                                            mapping.destination.outerIdentifier)});
         }
-        directMappings = std::move(mappingsFromCsv);
-        indirectApiMappings = std::move(mappingsFromApi);
+        directMappings_ = std::move(mappingsFromCsv);
+        indirectApiMappings_ = std::move(mappingsFromApi);
         reqExecuteCsv();
     }
 
-    void reqExecuteCsv() { fExecMappings = threadPool.submit(&CsvChangeGenerator::executeCsv, this); }
+    void reqExecuteCsv() { fExecMappings_ = pool_.submit(&CsvChangeGenerator::executeCsv, this); }
 };
 
 class ChangeGeneratorFromBom : public CsvChangeGenerator {

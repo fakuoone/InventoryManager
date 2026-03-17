@@ -3,44 +3,40 @@
 
 #include <iostream>
 
-ThreadPool::ThreadPool(std::size_t cThreadCount, Logger& cLogger) : logger(cLogger) {
-    workers.reserve(cThreadCount);
+ThreadPool::ThreadPool(std::size_t cThreadCount, Logger& cLogger) : logger_(cLogger) {
+    workers_.reserve(cThreadCount);
     for (std::size_t i = 0; i < cThreadCount; ++i) {
-        workers.emplace_back(&ThreadPool::workerLoop, this);
+        workers_.emplace_back(&ThreadPool::workerLoop, this);
     }
-    logger.pushLog(Log(std::format("created {} threads", cThreadCount)));
+    logger_.pushLog(Log(std::format("created {} threads", cThreadCount)));
 }
 
 ThreadPool::~ThreadPool() {
-    stopping = true;
-    cv.notify_all();
+    stopping_ = true;
+    cv_.notify_all();
 
-    for (auto& t : workers) {
-        if (t.joinable()) {
-            t.join();
-        }
+    for (auto& t : workers_) {
+        if (t.joinable()) { t.join(); }
     }
-    logger.pushLog(Log(std::format("deleted threads")));
+    logger_.pushLog(Log(std::format("deleted threads")));
 }
 
 void ThreadPool::workerLoop() {
     while (true) {
         std::function<void()> task;
         {
-            std::unique_lock<std::mutex> lock(mtx);
-            cv.wait(lock, [this] { return stopping || !tasks.empty(); });
+            std::unique_lock<std::mutex> lock(mtx_);
+            cv_.wait(lock, [this] { return stopping_ || !tasks_.empty(); });
 
-            if (stopping && tasks.empty()) {
-                return;
-            }
+            if (stopping_ && tasks_.empty()) { return; }
 
-            task = std::move(tasks.front());
-            tasks.pop();
+            task = std::move(tasks_.front());
+            tasks_.pop();
         }
         task(); // execute outside the lock
     }
 }
 
 std::size_t ThreadPool::getAvailableThreadCount() const {
-    return workers.size() - tasks.size();
+    return workers_.size() - tasks_.size();
 }
