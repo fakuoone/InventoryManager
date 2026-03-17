@@ -51,6 +51,10 @@ struct Event {
     EventTypes type;
     std::variant<DataEvent, Change> origin;
     Change::colValMap cells;
+
+    bool hasDataBesidesHover() const {
+        return type.action != ActionType::NONE && type.mouse != MouseEventType::NONE && type.mouse != MouseEventType::HOVER;
+    }
 };
 
 struct CellBoilerPlate {

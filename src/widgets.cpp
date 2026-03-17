@@ -41,7 +41,7 @@ void DbTable::drawHeader(const std::string& tableName) {
             cellBoiler,
             [this](const CellBoilerPlate& cb, const Rect& r, const std::string& v) -> ActionType { return drawHeaderCell(cb, r, v); },
             headers[i].name);
-        if (fromHeader.mouse != MouseEventType::NONE) {
+        if (fromHeader.mouse != MouseEventType::NONE && !lastEvent.hasDataBesidesHover()) {
             lastEvent.type = fromHeader;
             lastEvent.origin = DataEvent(tableName, "", headers[i].name);
         }
@@ -116,6 +116,10 @@ void DbTable::drawColumn(const std::string& tableName, const std::size_t i, cons
             },
             cell);
         if (fromData.mouse != MouseEventType::NONE || fromData.action == ActionType::EDIT) {
+            if (fromData.action == ActionType::DATA && fromData.mouse == MouseEventType::CLICK) {
+                // make cell editable by click
+                fromData.action = ActionType::REQUEST_EDIT;
+            }
             lastEvent.type = fromData;
             lastEvent.origin = Widgets::DataEvent(tableName, pKey, headerInfo.name);
         }
@@ -176,7 +180,7 @@ void DbTable::drawUserInputRowFields(const std::string& tableName,
         ImGui::PushID("ENTER");
         if (i + 1 == headers.size()) {
             EventTypes lastColEnter = drawLastColumnEnter(cursor, splitterPoss, i);
-            if (lastColEnter.mouse == MouseEventType::CLICK) {
+            if (lastColEnter.mouse == MouseEventType::CLICK && !lastEvent.hasDataBesidesHover()) {
                 lastEvent.cells = insertCells;
                 lastEvent.type = lastColEnter;
                 insertCells.clear();
@@ -208,7 +212,7 @@ EventTypes DbTable::handleFirstColumnIfNeeded(
             drawCellSC(cellBoiler, [this](const CellBoilerPlate& cell, const Rect& r) -> ActionType { return drawFirstColumnSC(cell, r); });
         ImGui::PopID();
     }
-    if (fromFirst.mouse != MouseEventType::NONE) {
+    if (fromFirst.mouse != MouseEventType::NONE && !lastEvent.hasDataBesidesHover()) {
         lastEvent.type = fromFirst;
         if (change) {
             lastEvent.origin = *change;
@@ -227,7 +231,7 @@ EventTypes DbTable::handleLastActionIfNeeded(const std::string& tableName,
                                              const Change* change,
                                              const std::string& pKey) {
     EventTypes fromAction = drawActionColumn(cursor, splitterPoss, columnIndex, change);
-    if (fromAction.mouse != MouseEventType::NONE) {
+    if (fromAction.mouse != MouseEventType::NONE && !lastEvent.hasDataBesidesHover()) {
         lastEvent.type = fromAction;
         if (change) {
             lastEvent.origin = *change;
@@ -286,7 +290,7 @@ void DbTable::drawInsertionCellsOfColumn(const std::string& tableName,
                 return drawDataCell(cellBoiler, r, v, CellType::DATA);
             },
             changedVal);
-        if (fromData.mouse != MouseEventType::NONE) {
+        if (fromData.mouse != MouseEventType::NONE && !lastEvent.hasDataBesidesHover()) {
             lastEvent.type = fromData;
             lastEvent.origin = Widgets::DataEvent(tableName, pKey, headerInfo.name);
         }
@@ -445,8 +449,10 @@ void DbTable::drawChangeInCell(const CellBoilerPlate& cell, const Rect& r, ImVec
     std::pair<ImU32, ImU32> changeCols = isValid ? colValid : colInvalid;
     switch (cell.change->getType()) {
     case ChangeType::DELETE_ROW:
-        drawList->AddRectFilled(r.start, r.end, changeCols.first);
-        drawList->AddRect(r.start, r.end, changeCols.second);
+        drawList->AddLine(ImVec2{r.start.x, r.start.y + (r.end.y - r.start.y) / 2},
+                          ImVec2{r.end.x, r.start.y + (r.end.y - r.start.y) / 2},
+                          ImU32(colInvalid.second));
+        break;
 
     case ChangeType::UPDATE_CELLS:
         [[fallthrough]];
@@ -527,60 +533,6 @@ void ChangeOverviewer::setChangeData(std::shared_ptr<uiChangeInfo> changeData) {
     uiChanges = changeData;
 }
 
-// ChangeOverviewer
-bool ChangeOverviewer::drawChildren(const std::vector<std::size_t>& children, float allowedWidth) {
-    // TODO: Draw parent aswell
-    // TODO: give a label to unclear data (children:)
-    // TODO: fix bottom padding when text is expanded
-    // TODO: fix rowid to always be visible (gets pushed out of sight when not enough space)
-    const float childHeight = ImGui::GetFrameHeight();
-    uint16_t drawableCount = allowedWidth / (childWidth + hPadding);
-    uint16_t count = std::min<uint16_t>(drawableCount, (uint16_t)children.size());
-    ImVec2 startPos = ImGui::GetCursorPos();
-    startPos.x += hPadding;
-
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    bool clicked = false;
-
-    for (uint16_t i = 0; i < count; i++) {
-        const ImVec2 childPos = {startPos.x + i * (childWidth + hPadding), startPos.y};
-        ImGui::SetCursorPos(childPos);
-        ImGui::InvisibleButton(("##child_" + std::to_string(children[i])).c_str(), ImVec2(childWidth, childHeight));
-        const bool hovered = ImGui::IsItemHovered();
-        const bool localClicked = ImGui::IsItemClicked();
-        clicked = clicked | localClicked;
-
-        // ---- Background
-        ImU32 bg = hovered ? IM_COL32(80, 80, 80, 160) : IM_COL32(60, 60, 60, 120);
-
-        dl->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), bg, 0.0f);
-
-        // TODO: Beim scrollen verschiebt sich der Text nicht.
-        // ---- Centered text
-        const std::string label = std::to_string(children[i]);
-        ImVec2 textSize = ImGui::CalcTextSize(label.c_str());
-        ImVec2 textPos = {childPos.x + (childWidth - textSize.x) * 0.5f, childPos.y + (childHeight - textSize.y) * 0.5f};
-        dl->AddText(textPos, IM_COL32_WHITE, label.c_str());
-
-        // ---- Click handling
-        if (localClicked) {
-            childSelectTimer = 1.0f;
-            selectedTable = uiChanges->changes.at(children[i]).getTable();
-            changeHighlight.emplace(children[i]);
-        }
-    }
-
-    // ---- Ellipsis if truncated
-    if (count < children.size()) {
-        ImGui::SetCursorPos({startPos.x + count * (childWidth + hPadding), startPos.y});
-        ImGui::TextUnformatted("...");
-    }
-
-    // ---- Advance cursor once
-    ImGui::SetCursorPosY(startPos.y + childHeight);
-    return clicked;
-}
-
 MouseEventType ChangeOverviewer::drawSingleChangeOverview(const Change& change,
                                                           std::size_t* visualDepth,
                                                           const std::size_t parent,
@@ -615,7 +567,6 @@ MouseEventType ChangeOverviewer::drawSingleChangeOverview(const Change& change,
     ImU32 bgCol = change.isValid() ? colValid.first : colInvalid.first;
     ImU32 borderCol = change.isValid() ? colValid.second : colInvalid.second;
 
-    // make yellow
     if (changeHighlight.contains(change.getKey())) {
         childSelectTimer -= ImGui::GetIO().DeltaTime;
         if (childSelectTimer < 0) {
@@ -626,32 +577,24 @@ MouseEventType ChangeOverviewer::drawSingleChangeOverview(const Change& change,
         borderCol = colSelected.second;
     }
 
-    // ---- Full width
     const float width = ImGui::GetContentRegionAvail().x - *visualDepth * INDENTATION_WIDTH;
     ImVec2 startPos = ImGui::GetCursorScreenPos();
     startPos.x += *visualDepth * INDENTATION_WIDTH;
 
-    // Calculate widths
     const float remainingWidth = width - (UID_COL + TYPE_COL + ROW_COL + HPADDING * 2.0f);
-    // const uint16_t maxChildren = static_cast<uint16_t>(remainingWidth / (childWidth + HPADDING));
-    // const uint16_t visibleChildren = std::min<uint16_t>(maxChildren, children.size());
-    // const float childrenWidth = visibleChildren * (childWidth + HPADDING);
     const float childrenWidth = 0;
     const float remainingTextWidth = remainingWidth - childrenWidth;
 
     const std::string summary = change.getCellSummary(60);
     ImVec2 summarySize = ImGui::CalcTextSize(summary.c_str(), nullptr, false, remainingTextWidth);
 
-    // ---- Dynamic row height
     const float rowHeight = std::max(ImGui::GetFrameHeight(), summarySize.y) + VPADDING_INT * 2.0f;
 
-    // ---- Interaction + layout
     ImGui::SetNextItemAllowOverlap();
     ImGui::InvisibleButton("##change_row", ImVec2(width, rowHeight));
     const bool hovered = ImGui::IsItemHovered();
     const bool clicked = ImGui::IsItemClicked();
 
-    // ---- Draw background
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 min = startPos;
     ImVec2 max = {startPos.x + width, startPos.y + rowHeight};
@@ -661,9 +604,7 @@ MouseEventType ChangeOverviewer::drawSingleChangeOverview(const Change& change,
     if (selected) { dl->AddRect(min, max, borderCol); }
     if (hovered) { dl->AddRect(min, max, IM_COL32(255, 255, 255, 60)); }
 
-    // ---- Draw content (single row, wrapped summary)
     ImGui::SetCursorScreenPos({startPos.x + HPADDING, startPos.y + HPADDING});
-
     ImGui::AlignTextToFramePadding();
 
     // UID
@@ -681,11 +622,7 @@ MouseEventType ChangeOverviewer::drawSingleChangeOverview(const Change& change,
         ImGui::PopTextWrapPos();
     }
 
-    // children
     ImGui::SameLine(startPos.x + HPADDING + UID_COL + TYPE_COL + summarySize.x);
-    // bool childClicked = drawChildren(children, childrenWidth);
-
-    // if (clicked && !childClicked) {
     if (clicked) {
         // changeTracker.toggleChangeSelect(imGuiKeyId);
         event = MouseEventType::CLICK;

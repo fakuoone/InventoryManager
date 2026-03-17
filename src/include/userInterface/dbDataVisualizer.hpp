@@ -100,6 +100,7 @@ class DbVisualizer {
             tableEvent.type.mouse == Widgets::MouseEventType::CLICK || tableEvent.type.action == Widgets::ActionType::EDIT;
         if (!handleEvent) { return; }
 
+        logger.pushLog(Log{std::format("EVENT occured.")});
         if (std::holds_alternative<Widgets::DataEvent>(tableEvent.origin)) { // NO CHANGE EXISTS ON THIS ROW
             const Widgets::DataEvent event = std::get<Widgets::DataEvent>(tableEvent.origin);
             switch (tableEvent.type.action) {
