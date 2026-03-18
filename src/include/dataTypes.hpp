@@ -19,6 +19,8 @@ struct ApiPreviewState {
     bool ready = false;
     nlohmann::json fields;
 };
+
+constexpr std::size_t BUFFER_SIZE = 256;
 } // namespace UI
 
 namespace DB {

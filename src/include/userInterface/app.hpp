@@ -36,9 +36,12 @@ class App {
     AutoInv::BomVisualizer bomVisualizer_{dbService_, bomReader_, api_, config_, logger_, dataStates_};
     AutoInv::OrderVisualizer orderVisualizer_{dbService_, orderReader_, api_, config_, logger_, dataStates_};
 
-    DbFilter dbFilter_{pool_, logger_, dataStates_};
+    DbFilter dbFilter_{dbService_, pool_, logger_, dataStates_};
 
     std::shared_ptr<const CompleteDbData> dbData_;
+    std::shared_ptr<const CompleteDbData> filteredDbData_; // copy of data for simplicity and thread safety
+    bool filterActive_ = false;
+    std::array<char, UI::BUFFER_SIZE> filterBuffer_;
     std::shared_ptr<uiChangeInfo> uiChanges_;
 
     bool waitForDbData() {
@@ -106,6 +109,11 @@ class App {
                 changeExe_.getSuccessfulChanges();
                 dataStates_.dbData = UI::DataState::DATA_OUTDATED;
             }
+            // check filtered data
+            if (dbFilter_.dataReady()) {
+                filteredDbData_ = dbFilter_.getFilteredData();
+                dbVisualizer_.setData(filteredDbData_); // gets filtered data
+            }
             break;
         default:
             break;
@@ -121,15 +129,53 @@ class App {
 
     void drawDb() {
         dbVisualizer_.run();
-        ImVec2 buttonSize = ImGui::CalcTextSize("REFETCH");
-        buttonSize.x += ImGui::GetStyle().FramePadding.x * 2.0f;
-        buttonSize.y += ImGui::GetStyle().FramePadding.y * 2.0f;
 
-        ImVec2 padding = ImGui::GetStyle().WindowPadding;
+        ImGuiStyle& style = ImGui::GetStyle();
+        ImVec2 padding = style.WindowPadding;
+        ImVec2 spacing = style.ItemSpacing;
 
-        // Top-right corner of the content region
-        ImGui::SetCursorPos(ImVec2(ImGui::GetWindowContentRegionMax().x - buttonSize.x - padding.x, padding.y));
+        float right = ImGui::GetWindowContentRegionMax().x;
+        float y = padding.y;
+
+        ImVec2 refetchSize = ImGui::CalcTextSize("REFETCH");
+        refetchSize.x += style.FramePadding.x * 2.0f;
+        refetchSize.y += style.FramePadding.y * 2.0f;
+
+        ImVec2 filterSize = ImGui::CalcTextSize("FILTER");
+        filterSize.x += style.FramePadding.x * 2.0f;
+        filterSize.y += style.FramePadding.y * 2.0f;
+
+        float inputWidth = 150.0f;
+        float inputHeight = ImGui::GetFrameHeight();
+
+        float x = right - padding.x;
+
+        // [FILTER INPUT - FILTER BUTTON - REFETCH - RIGHT EDGE]
+        // REFETCH
+        x -= refetchSize.x;
+        ImGui::SetCursorPos(ImVec2(x, y));
         if (ImGui::Button("REFETCH")) { dataStates_.dbData = UI::DataState::DATA_OUTDATED; }
+
+        // FILTER button
+        x -= spacing.x + filterSize.x;
+        ImGui::SetCursorPos(ImVec2(x, y));
+        if (ImGui::Selectable("FILTER", filterActive_, 0, filterSize)) {
+            if (filterActive_) {
+                dbVisualizer_.setData(dbData_);
+                filterActive_ = false;
+            } else {
+                dbFilter_.startFilterSearch(std::string(filterBuffer_.data()));
+                filterActive_ = true;
+            }
+        }
+
+        // FILTER string
+        x -= spacing.x + inputWidth;
+        ImGui::SetCursorPos(ImVec2(x, y));
+        ImGui::SetNextItemWidth(inputWidth);
+
+        bool inputFinished =
+            ImGui::InputText("##filterstring", filterBuffer_.data(), UI::BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
     }
 
     void showBom() { bomVisualizer_.run(); }

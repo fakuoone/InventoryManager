@@ -99,7 +99,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
     }
 
     void drawHead() {
-        bool enterPressed = ImGui::InputText("##edit", csvBuffer_.data(), BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
+        bool enterPressed = ImGui::InputText("##edit", csvBuffer_.data(), UI::BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
         if (enterPressed || ImGui::IsItemDeactivatedAfterEdit()) {
             try {
                 reader.read(std::filesystem::path(std::string(csvBuffer_.data())));

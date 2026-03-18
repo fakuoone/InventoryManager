@@ -9,12 +9,10 @@
 #include <unordered_set>
 #include <variant>
 
-constexpr const std::size_t BUFFER_SIZE = 256;
-
 struct EditingData {
     std::size_t whichId;
-    std::vector<std::array<char, BUFFER_SIZE>> insertBuffer;
-    std::array<char, BUFFER_SIZE> editBuffer;
+    std::vector<std::array<char, UI::BUFFER_SIZE>> insertBuffer;
+    std::array<char, UI::BUFFER_SIZE> editBuffer;
 };
 
 namespace Widgets {
@@ -57,7 +55,7 @@ struct Event {
     }
 };
 
-struct CellBoilerPlate {
+struct CellInfo {
     const HeaderInfo header;
     const ImVec2& pos;
     const Change* change;
@@ -70,7 +68,7 @@ struct CellBoilerPlate {
 };
 
 template <typename F, typename... Args>
-concept drawFunction = std::invocable<F, const CellBoilerPlate&, const Rect&, Args...>;
+concept drawFunction = std::invocable<F, const CellInfo&, const Rect&, Args...>;
 
 class DbTable {
   private:
@@ -146,7 +144,7 @@ class DbTable {
 
     template <typename F, typename... Args>
         requires drawFunction<F, Args...>
-    EventTypes drawCellSC(const CellBoilerPlate& cellBoiler, F&& function, Args&&... args) {
+    EventTypes drawCellSC(const CellInfo& cellBoiler, F&& function, Args&&... args) {
         EventTypes result;
         ImVec2 min{cellBoiler.pos.x + headerPos_.start.x + PAD_INNER, cellBoiler.pos.y + headerPos_.start.y + PAD_INNER};
         ImVec2 max{min.x + cellBoiler.width - PAD_INNER, min.y + rowHeight_ - PAD_INNER};
@@ -182,14 +180,14 @@ class DbTable {
         return result;
     }
 
-    ActionType drawDataCell(const CellBoilerPlate& cell, const Rect& r, const std::string& value, CellType cellType);
-    void drawChangeInCell(const CellBoilerPlate& cell, const Rect& r, ImVec2 textPos, ImU32 col, const std::string& value);
-    ActionType drawHeaderCell(const CellBoilerPlate& cell, const Rect& r, const std::string& header);
-    ActionType drawActionColumnXSC(const CellBoilerPlate& cell, const Rect& r);
-    ActionType drawActionColumnENTER(const CellBoilerPlate& cell, const Rect& r);
-    ActionType drawActionColumnEditSC(const CellBoilerPlate& cell, const Rect& r);
-    ActionType drawFirstColumnSC(const CellBoilerPlate& cell, const Rect& r);
-    ActionType drawInsertionInputField(const CellBoilerPlate& cell, const Rect& r);
+    ActionType drawDataCell(const CellInfo& cell, const Rect& r, const std::string& value, CellType cellType);
+    void drawChangeInCell(const CellInfo& cell, const Rect& r, ImVec2 textPos, ImU32 col, const std::string& value);
+    ActionType drawHeaderCell(const CellInfo& cell, const Rect& r, const std::string& header);
+    ActionType drawActionColumnXSC(const CellInfo& cell, const Rect& r);
+    ActionType drawActionColumnENTER(const CellInfo& cell, const Rect& r);
+    ActionType drawActionColumnEditSC(const CellInfo& cell, const Rect& r);
+    ActionType drawFirstColumnSC(const CellInfo& cell, const Rect& r);
+    ActionType drawInsertionInputField(const CellInfo& cell, const Rect& r);
 
   public:
     DbTable(EditingData& cEdit, std::string& cSelectedTable, std::unordered_set<std::size_t>& cChangeHighlight, Logger& cLogger)

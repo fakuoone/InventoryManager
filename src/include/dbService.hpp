@@ -30,21 +30,6 @@ class DbService {
 
     std::atomic<bool> dataAvailable_{false};
 
-    std::map<std::string, std::size_t> calcMaxPKeys(CompleteDbData data) {
-        std::map<std::string, std::size_t> maxPKeys;
-        for (const auto& table : data.tables) {
-            // Get max index of pkeys
-            const StringVector& keyVector = data.tableRows.at(table).at(data.headers.at(table).pkey);
-            auto it2 = std::max_element(keyVector.begin(), keyVector.end(), [](const std::string& key1, const std::string& key2) {
-                return std::stoll(key1) < std::stoll(key2);
-            });
-            std::size_t maxKey = 0;
-            if (it2 != keyVector.end()) { maxKey = static_cast<std::size_t>(std::stoll(*it2)); }
-            maxPKeys[table] = maxKey;
-        }
-        return maxPKeys;
-    }
-
     bool isDataReady() {
         if (!pendingData_ && fCompleteDbData_.valid() &&
             fCompleteDbData_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
@@ -87,6 +72,21 @@ class DbService {
         } else {
             return std::unexpected(false);
         }
+    }
+
+    std::map<std::string, std::size_t> calcMaxPKeys(const CompleteDbData& data) const {
+        std::map<std::string, std::size_t> maxPKeys;
+        for (const auto& table : data.tables) {
+            // Get max index of pkeys
+            const StringVector& keyVector = data.tableRows.at(table).at(data.headers.at(table).pkey);
+            auto it2 = std::max_element(keyVector.begin(), keyVector.end(), [](const std::string& key1, const std::string& key2) {
+                return std::stoll(key1) < std::stoll(key2);
+            });
+            std::size_t maxKey = 0;
+            if (it2 != keyVector.end()) { maxKey = static_cast<std::size_t>(std::stoll(*it2)); }
+            maxPKeys[table] = maxKey;
+        }
+        return maxPKeys;
     }
 
     IndexPKeyPair findIndexAndPKeyOfExisting(const std::string& table, const Change::colValMap& cells) const {
