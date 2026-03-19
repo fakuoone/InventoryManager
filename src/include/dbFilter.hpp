@@ -7,8 +7,13 @@
 #include "dbService.hpp"
 #include "threadPool.hpp"
 
+struct Hits {
+    std::set<std::size_t> hits;
+    std::set<std::string> ukeyHits;
+};
+
 class DbFilter {
-    using HitMap = std::unordered_map<std::string, std::set<std::size_t>>;
+    using HitMap = std::unordered_map<std::string, Hits>;
 
   private:
     Logger& logger_;
@@ -22,10 +27,11 @@ class DbFilter {
     std::mutex filterMtx_;
 
     std::shared_ptr<const CompleteDbData> filterByKeyword(const std::string& keyword) {
+        CompleteDbData dbData;
+        if (keyword.empty()) { return std::make_shared<CompleteDbData>(dbData); }
+        if (dataStates_.dbData != UI::DataState::DATA_READY) { return std::make_shared<CompleteDbData>(dbData); }
         std::lock_guard<std::mutex> lg(filterMtx_);
         logger_.pushLog(Log{std::format("FILTERING BY {}", keyword)});
-        CompleteDbData dbData;
-        if (dataStates_.dbData != UI::DataState::DATA_READY) { return std::make_shared<CompleteDbData>(dbData); }
 
         dbData.tables = dbData_->tables;
         dbData.headers = dbData_->headers;
@@ -48,16 +54,46 @@ class DbFilter {
 
     HitMap findHitsByKeyword(const std::string& keyword) {
         HitMap hitMap;
-        for (const auto& [table, headerData] : dbData_->tableRows) {
-            for (const auto& [headerName, vec] : headerData) {
+
+        // sort by depth to prevent multiple iterations
+        std::vector<std::string> depthOrder;
+        depthOrder.reserve(dbData_->headers.size());
+
+        for (const auto& [key, value] : dbData_->headers) {
+            depthOrder.push_back(key);
+        }
+        std::sort(depthOrder.begin(), depthOrder.end(), [&](const std::string& a, const std::string& b) {
+            return dbData_->headers.at(a).maxDepth < dbData_->headers.at(b).maxDepth;
+        });
+
+        for (const std::string& tableName : depthOrder) {
+            const ColumnDataMap& rowData = dbData_->tableRows.at(tableName);
+            std::size_t headerIndex = 0;
+            for (const auto& [headerName, vec] : rowData) {
                 std::size_t tableRowIndex = 0;
                 for (const auto& value : vec) {
-                    if (value.find(keyword) != std::string::npos) {
-                        if (!hitMap.contains(table)) { hitMap.emplace(table, std::set<std::size_t>{}); }
-                        hitMap.at(table).insert(tableRowIndex);
+                    if (!hitMap.contains(tableName)) { hitMap.emplace(tableName, Hits{}); }
+                    if (value.empty()) {
+                        tableRowIndex++;
+                        continue;
+                    }
+                    const std::string& ukey = dbData_->headers.at(tableName).uKeyName;
+                    if (value.find(keyword) != std::string::npos) { // Direct find
+                        hitMap.at(tableName).hits.insert(tableRowIndex);
+                        // add unique key as hit so that dependant data gets affected aswell
+                        hitMap.at(tableName).ukeyHits.insert(rowData.at(ukey).at(tableRowIndex));
+                    }
+                    const std::string& referencedTable = dbData_->headers.at(tableName).data.at(headerIndex).referencedTable;
+                    if (!referencedTable.empty()) {
+                        if (hitMap.at(referencedTable).ukeyHits.contains(value)) { // Dependency
+                            hitMap.at(tableName).hits.insert(tableRowIndex);
+                            // add unique key as hit so that dependant data gets affected aswell
+                            hitMap.at(tableName).ukeyHits.insert(rowData.at(ukey).at(tableRowIndex));
+                        }
                     }
                     tableRowIndex++;
                 }
+                headerIndex++;
             }
         }
         return hitMap;
@@ -70,7 +106,7 @@ class DbFilter {
             const ColumnDataMap& rowsOldTable = dbData_->tableRows.at(table);
             for (auto& [headerName, vecNew] : rowsNewTable) {
                 const StringVector& rowsOldHeader = rowsOldTable.at(headerName);
-                for (const std::size_t rowIndex : hits) {
+                for (const std::size_t rowIndex : hits.hits) {
                     vecNew.push_back(rowsOldHeader.at(rowIndex));
                 }
             }
