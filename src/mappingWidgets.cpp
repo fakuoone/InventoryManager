@@ -418,6 +418,7 @@ void MappingDestinationToApi::eraseSourcesFromParent() const {
 
 Widgets::MouseEventType isMouseOnLine(const ImVec2& p1, const ImVec2& p2, const float thickness) {
     ImGuiIO& io = ImGui::GetIO();
+    if (ImGui::IsAnyItemHovered() || ImGui::IsAnyItemActive()) { return Widgets::MouseEventType::NONE; }
     const bool equalPoints = p1.x == p2.x && p1.y == p2.y;
     const bool xOutOfRange = (io.MousePos.x >= p1.x && io.MousePos.x >= p2.x) || (io.MousePos.x <= p1.x && io.MousePos.x <= p2.x);
     const bool yOutOfRange = (io.MousePos.y >= p1.y && io.MousePos.y >= p2.y) || (io.MousePos.y <= p1.y && io.MousePos.y <= p2.y);
