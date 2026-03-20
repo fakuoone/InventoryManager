@@ -4,7 +4,10 @@
 #include "dbService.hpp"
 #include "logger.hpp"
 #include "partApi.hpp"
+#include "pch.hpp"
 #include "threadPool.hpp"
+
+#define EXCLUDE_API_FAILS
 
 namespace AutoInv {
 struct TableCells {
@@ -122,6 +125,40 @@ inline CSV::Data readData(std::filesystem::path csv, Logger& logger) {
     return CSV::Data{std::move(rows), std::move(types)};
 }
 
+inline std::string escapeCsvField(const std::string& field) {
+    bool needsQuotes = field.find_first_of(",\"\n") != std::string::npos;
+    if (!needsQuotes) { return field; }
+
+    std::string escaped = "\"";
+    for (char c : field) {
+        if (c == '"') {
+            escaped += "\"\"";
+        } else {
+            escaped += c;
+        }
+    }
+    escaped += "\"";
+    return escaped;
+}
+
+inline bool writeData(std::filesystem::path csv, const CSV::Data& data, Logger& logger) {
+    std::ofstream out(csv);
+
+    if (!out.is_open()) {
+        logger.pushLog(Log{std::format("ERROR: Writing csv failed: cannot open output file {}.", csv.string())});
+        return false;
+    }
+
+    for (const auto& row : data.rows) {
+        for (std::size_t i = 0; i < row.size(); ++i) {
+            out << escapeCsvField(row[i]);
+            if (i + 1 < row.size()) { out << ","; }
+        }
+        out << "\n";
+    }
+    return true;
+}
+
 class CsvChangeGenerator {
   protected:
     ThreadPool& pool_;
@@ -132,6 +169,8 @@ class CsvChangeGenerator {
     Logger& logger_;
 
     std::shared_ptr<const CompleteDbData> dbData_;
+
+    std::filesystem::path lastSuccessfulCsvPath_;
 
     CSV::Data csvData_;
     std::future<bool> fRead_;
@@ -147,6 +186,9 @@ class CsvChangeGenerator {
     std::vector<MappingCsvApi> intermediateApiMappings_;
     std::size_t missingParam_ = 0;
 
+    std::set<std::size_t> failedCsvApiRows_;
+    std::mutex failedCsvApiMtx_;
+
     QuantityOperation operation_;
 
     CsvChangeGenerator(ThreadPool& cThreadPool,
@@ -159,11 +201,13 @@ class CsvChangeGenerator {
         : pool_(cThreadPool), changeTracker_(cChangeTracker), dbService_(cDbService), partApi_(cPartApi), config_(cConfig),
           logger_(cLogger), operation_(cOperation) {}
 
-    virtual ~CsvChangeGenerator() { config_.saveApiArchive(); }
+    virtual ~CsvChangeGenerator() = default;
 
     bool run(std::filesystem::path csv) {
         csvData_ = readData(csv, logger_);
-        return !csvData_.rows.empty();
+        bool success = !csvData_.rows.empty();
+        if (success) { lastSuccessfulCsvPath_ = csv; }
+        return success;
     }
 
     void convertMappings(ChangeConvertedMapping& convertedMapping,
@@ -223,7 +267,6 @@ class CsvChangeGenerator {
         std::replace(pointer.begin(), pointer.end(), '/', '/');
 
         try {
-            // logger.pushLog(Log{std::format("INFO: Checking api response:  \n{}", j.dump())});
             auto& value = j.at(nlohmann::json::json_pointer(pointer));
             if (value.is_string()) {
                 return value.get<std::string>();
@@ -231,7 +274,6 @@ class CsvChangeGenerator {
                 return value.dump();
             }
         } catch (nlohmann::json::exception& e) {
-            // handle error
             logger_.pushLog(Log{std::format("ERROR: Api response doesnt cotain {}", selectedField)});
             return std::string{};
         }
@@ -239,7 +281,7 @@ class CsvChangeGenerator {
 
     void fetchChunk(std::span<std::vector<std::string>> chunk,
                     std::span<std::unordered_map<std::string, Change::colValMap>> resultChunk,
-                    std::size_t i) {
+                    std::size_t chunkStart) {
         if (resultChunk.size() != chunk.size()) { return; }
         for (std::size_t j = 0; j < chunk.size(); ++j) {
             resultChunk[j] = std::unordered_map<std::string, Change::colValMap>{};
@@ -249,28 +291,37 @@ class CsvChangeGenerator {
                 auto itHeaderIndex = std::find(csvData_.rows[0].begin(), csvData_.rows[0].end(), mapping.source.outerIdentifier);
                 if (itHeaderIndex == csvData_.rows[0].end()) { return; }
                 std::size_t itCsvIndex = itHeaderIndex - csvData_.rows[0].begin();
-                resultChunk[j].try_emplace(mapping.destination.outerIdentifier, Change::colValMap{});
+                std::string jsonTarget = getJsonTarget(partApi_.fetchDataPoint(chunk[j][itCsvIndex]), mapping.source.innerIdentifier);
 
-                resultChunk[j]
-                    .at(mapping.destination.outerIdentifier)
-                    .emplace(mapping.destination.innerIdentifier,
-                             getJsonTarget(partApi_.fetchDataPoint(chunk[j][itCsvIndex]), mapping.source.innerIdentifier));
+#ifdef EXCLUDE_API_FAILS
+                if (jsonTarget.empty()) {
+                    // api doesnt contain this path, add to list of failed
+                    std::lock_guard<std::mutex> lg{failedCsvApiMtx_};
+                    failedCsvApiRows_.insert(chunkStart + j);
+                    continue;
+                }
+#endif
+
+                resultChunk[j].try_emplace(mapping.destination.outerIdentifier, Change::colValMap{});
+                resultChunk[j].at(mapping.destination.outerIdentifier).emplace(mapping.destination.innerIdentifier, jsonTarget);
             }
         }
     }
 
     ApiResultType fetchApiData() {
+        failedCsvApiRows_.clear();
         std::size_t totalRows = csvData_.rows.size();
         if (totalRows <= 1) { return ApiResultType{}; }
 
         std::size_t threadCount = pool_.getAvailableThreadCount();
-        std::size_t dataRows = totalRows - 1; // skip header
+        std::size_t dataRows = totalRows - 1; // exclede header
 
         threadCount = std::max(std::size_t(1), std::min(threadCount, dataRows / 10));
 
         std::size_t baseChunkSize = dataRows / threadCount;
         std::size_t remainder = dataRows % threadCount;
-        std::size_t chunkStart = 0;
+        std::size_t chunkStart = 1; // exclude header
+        std::size_t resultStart = 0;
 
         ApiResultType results;
         std::vector<std::future<void>> futures;
@@ -278,12 +329,12 @@ class CsvChangeGenerator {
 
         for (std::size_t i = 0; i < threadCount; ++i) {
             std::size_t currentChunkSize = baseChunkSize + (i < remainder ? 1 : 0);
-            std::span<std::vector<std::string>> chunk =
-                std::span(csvData_.rows).subspan(chunkStart == 0 ? 1 : chunkStart, currentChunkSize);
+            std::span<std::vector<std::string>> chunk = std::span(csvData_.rows).subspan(chunkStart, currentChunkSize);
             std::span<std::unordered_map<std::string, Change::colValMap>> resultChunk =
-                std::span(results).subspan(chunkStart, currentChunkSize);
+                std::span(results).subspan(resultStart, currentChunkSize);
+            futures.push_back(pool_.submit(&CsvChangeGenerator::fetchChunk, this, chunk, resultChunk, chunkStart));
             chunkStart += currentChunkSize;
-            futures.push_back(pool_.submit(&CsvChangeGenerator::fetchChunk, this, chunk, resultChunk, i));
+            resultStart += currentChunkSize;
         }
 
         for (auto& f : futures) {
@@ -353,8 +404,8 @@ class CsvChangeGenerator {
 
     void addChangesFromMapping(ChangeConvertedMapping& mapped) {
         // This assumes that all changes caused by this row are children of the deepest mapping (the one which has the highest
-        // db-relation-depth) This is incorrect in the general case, but a correct simplification in the use case here for example part has
-        // manufacturer, therefore, if part exists, manufacturer doesnt need to be added
+        // db-relation-depth) This is incorrect in the general case, but a correct simplification in the use case here for example
+        // part has manufacturer, therefore, if part exists, manufacturer doesnt need to be added
         if (mapped.orderedCells.empty()) { return; }
         TableCells* deepestCell = mapped.orderedCells.back();
         if (processCell(deepestCell, true)) { return; }
@@ -402,11 +453,39 @@ class CsvChangeGenerator {
                 i++;
                 continue;
             }
+#ifdef EXCLUDE_API_FAILS
+            // no need to lock since all threads are done with it (fetchApiData)
+            if (failedCsvApiRows_.contains(i)) {
+                i++;
+                continue;
+            }
+#endif
             applyMappingToRow(row, mapped, results.at(i - 1));
             fillInAdditional(mapped);
             sortMappedCells(mapped);
             addChangesFromMapping(mapped);
             i++;
+        }
+
+#ifdef EXCLUDE_API_FAILS
+        writeBackFailedRows();
+#endif
+    }
+
+    void writeBackFailedRows() {
+        if (failedCsvApiRows_.empty() || csvData_.rows.empty()) { return; }
+        std::vector<std::vector<std::string>> rows;
+        rows.push_back(csvData_.rows.at(0)); // header
+
+        for (const std::size_t i : failedCsvApiRows_) {
+            rows.push_back(csvData_.rows.at(i));
+        }
+
+        std::filesystem::path failedPath = lastSuccessfulCsvPath_;
+        failedPath.replace_filename(failedPath.stem().string() + "_FAILED" + failedPath.extension().string());
+
+        if (writeData(failedPath, CSV::Data{rows, std::vector<DB::TypeCategory>{}}, logger_)) {
+            logger_.pushLog(Log{std::format("SUCCESS: Written failed api lookups to {}.", failedPath.string())});
         }
     }
 

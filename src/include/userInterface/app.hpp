@@ -194,7 +194,10 @@ class App {
         : config_(cConfig), pool_(cPool), dbService_(cDbService), changeTracker_(cChangeTracker), api_(cPartApi), bomReader_(cBomReader),
           orderReader_(cOrderReader), logger_(cLogger) {}
 
-    ~App() { config_.saveMappings(bomVisualizer_.getMappings(), orderVisualizer_.getMappings()); }
+    ~App() {
+        config_.saveMappings(bomVisualizer_.getMappings(), orderVisualizer_.getMappings());
+        config_.saveApiArchive();
+    }
 
     App(const App&) = delete;
     App& operator=(const App&) = delete;

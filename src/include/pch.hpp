@@ -1,11 +1,13 @@
 #pragma once
 
-#include <vector>
+#include <algorithm>
+#include <format>
 #include <map>
+#include <optional>
+#include <set>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
-#include <string>
-#include <format>
-#include <optional>
+#include <vector>
 
 #include "imgui.h"

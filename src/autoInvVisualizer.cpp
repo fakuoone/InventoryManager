@@ -50,8 +50,10 @@ void CsvMappingVisualizer::removeSourceAnchor(MappingIdType id) {
 }
 
 void CsvMappingVisualizer::handleApiClick(MappingDestinationToApi& destination) {
+    std::string example = destination.getExample();
+    if (example == DEFAULT_EXAMPLE) { return; }
     destination.previewData->loading = true;
-    api_.fetchExample(destination.getExample(), *destination.previewData);
+    api_.fetchExample(std::move(example), *destination.previewData);
 }
 
 DragResult CsvMappingVisualizer::handleDrag(ApiDestinationDetail& destination, const ImGuiPayload* payload) {

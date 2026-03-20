@@ -1,6 +1,6 @@
 #include "changeTracker.hpp"
 
-#define WITH_DETAILED_LOG
+#undef WITH_DETAILED_LOG
 
 void ChangeTracker::mergeCellChanges(Change& existingChange, const Change& newChange) {
     logger_.pushLog(Log{std::format("        Merging cell changes {} and {}", existingChange.getKey(), newChange.getKey())});

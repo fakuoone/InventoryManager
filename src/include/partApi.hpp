@@ -110,7 +110,7 @@ class PartApi {
     PartApi(PartApi&&) = delete;
     PartApi& operator=(PartApi&&) = delete;
 
-    nlohmann::json fetchDataPoint(const std::string& dataPoint, bool forceRefetch = false) {
+    nlohmann::json fetchDataPoint(std::string dataPoint, bool forceRefetch = false) {
         if (!forceRefetch) {
             std::lock_guard<std::mutex> lg{responses_.mtx};
             if (responses_.data.contains(dataPoint)) { return responses_.data.at(dataPoint); }
@@ -160,10 +160,10 @@ class PartApi {
         return parsed;
     }
 
-    void fetchExample(const std::string& dataPoint, UI::ApiPreviewState& state) {
-        pool_.submit([&]() {
+    void fetchExample(std::string dataPoint, UI::ApiPreviewState& state) {
+        pool_.submit([this, dataPoint = std::move(dataPoint), &state]() {
             state.loading = true;
-            state.fields = std::move(fetchDataPoint(dataPoint));
+            state.fields = fetchDataPoint(dataPoint);
             state.loading = false;
             state.ready = true;
         });

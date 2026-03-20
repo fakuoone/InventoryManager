@@ -17,7 +17,10 @@ struct WidgetAnchors {
     std::unordered_map<MappingIdType, ImVec2> anchors;
 };
 
+static constexpr std::string DEFAULT_EXAMPLE = "NONE";
+
 class CsvMappingVisualizer {
+
   protected:
     DbService& dbService_;
     PartApi& api_;
@@ -88,7 +91,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
         const std::size_t newIndex = ++destAnchors_.largestId;
         apiPreviewCache_.insert_or_assign(newIndex, UI::ApiPreviewState{});
         mappingsToApiWidgets_.emplace_back(MappingDestinationToApi(
-            ApiDestinationDetail(true, newIndex, "NONE", "API", DB::TypeCategory::ANY), &apiPreviewCache_.at(newIndex), true));
+            ApiDestinationDetail(true, newIndex, DEFAULT_EXAMPLE, "API", DB::TypeCategory::ANY), &apiPreviewCache_.at(newIndex), true));
         return std::prev(mappingsToApiWidgets_.end());
     }
 
@@ -164,7 +167,7 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
                                           [&](const MappingDestinationToApi& m) { return m.getId() == mapping.uniqueData.destination; });
                 if (itApi != mappingsToApiWidgets_.end()) {
                     itApi->setAttribute("API");
-                    itApi->setExample("NONE");
+                    itApi->setExample(DEFAULT_EXAMPLE);
                     itApi->eraseSourcesFromParent();
                     mappingsToApiWidgets_.erase(itApi);
                 }
@@ -273,6 +276,9 @@ template <typename Reader> class CsvVisualizerImpl : public CsvMappingVisualizer
                 source.eraseFromParent();
             }
             csvHeaderWidgets_.clear();
+            mappingsDrawingInfo_.clear();
+            mappingsN_.clear();
+            mappingsToApiWidgets_.clear();
             for (std::size_t i = 0; i < headers_.size(); ++i) {
                 csvHeaderWidgets_.emplace_back(headers_[i], std::string{}, firstRow_[i], headerTypes_[i]);
             }
