@@ -14,15 +14,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 # --- Source files ---
-set(SOURCES
-    src/main.cpp
-    src/threadPool.cpp
-    src/changeTracker.cpp
-    src/imGuiDX11Context.cpp
-    src/autoInvVisualizer.cpp
-    src/mappingWidgets.cpp
-    src/widgets.cpp
-)
+file(GLOB SOURCES "src/*.cpp")
 
 # --- Executable ---
 add_executable(InventoryManager ${SOURCES})
@@ -76,7 +68,7 @@ target_include_directories(InventoryManager PRIVATE
 ${PROJECT_SOURCE_DIR}/src/include
 )
 
-target_precompile_headers(InventoryManager PRIVATE ${PROJECT_SOURCE_DIR}/src/include/pch.hpp)
+# target_precompile_headers(InventoryManager PRIVATE ${PROJECT_SOURCE_DIR}/src/include/pch.hpp)
 
 # --- Dependencies ---
 find_package(CURL REQUIRED)

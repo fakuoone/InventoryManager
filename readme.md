@@ -3,7 +3,7 @@ An inventory manager with UI that is based on a local postgresql database.
 
 ## Current Stage
 CSV-files can now be used to generate changes which then can be executed and sent to the local database.
-Next step is to clean up the display of changes in the UI, general usability improvementes and rigorous testing.
+A generic api can be used to fetch additional data. Data can be filtered with a simple keyword.
 
 ## Dependencies
 - libcurl

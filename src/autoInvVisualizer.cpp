@@ -21,7 +21,7 @@ void CsvMappingVisualizer::setData(std::shared_ptr<const CompleteDbData> newData
             destAnchors_.anchors[id] = ImVec2();
             id++;
         }
-        dbHeaderWidgets_.push_back(std::move(MappingDestinationDb(s, std::move(destDetails), true)));
+        dbHeaderWidgets_.push_back(MappingDestinationDb(s, std::move(destDetails), true));
     }
     destAnchors_.largestId = id;
 }

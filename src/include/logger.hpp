@@ -7,8 +7,6 @@
 #include <string>
 #include <vector>
 
-#include "timing.hpp"
-
 #define WITH_LOGGING
 
 class Log {
@@ -17,7 +15,7 @@ class Log {
     std::chrono::time_point<std::chrono::steady_clock> timeOfCreation_;
 
   public:
-    Log(std::string cLog) : content_(cLog) { timeOfCreation_ = Timing::getTime(); }
+    Log(std::string cLog) : content_(cLog) { timeOfCreation_ = std::chrono::steady_clock::now(); }
     void print() {
         auto tp = timeOfCreation_.time_since_epoch(); // duration since steady_clock epoch
         auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(tp).count();

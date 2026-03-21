@@ -1,5 +1,7 @@
 #include "userInterface/widgets.hpp"
 
+#include "imgui.h"
+
 namespace Widgets {
 void DbTable::handleSplitterDrag(std::vector<float>& splitters, const std::size_t index) {
     float mouseX = ImGui::GetIO().MousePos.x - headerPos_.start.x;

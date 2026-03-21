@@ -5,9 +5,7 @@
 #include "changeTracker.hpp"
 #include "logger.hpp"
 
-#include <optional>
-#include <unordered_set>
-#include <variant>
+#include "imgui.h"
 
 struct EditingData {
     std::size_t whichId;

@@ -6,7 +6,6 @@
 #include "logger.hpp"
 #include "partApi.hpp"
 #include "threadPool.hpp"
-#include "timing.hpp"
 #include "userInterface/app.hpp"
 
 int main() {
