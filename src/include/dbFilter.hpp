@@ -26,14 +26,15 @@ class DbFilter {
     std::future<std::shared_ptr<const CompleteDbData>> fFilteredData_;
     std::mutex filterMtx_;
 
-    std::shared_ptr<const CompleteDbData> filterByKeyword(const std::string& keyword);
-    HitMap findHitsByKeyword(const std::string& keyword);
+    std::shared_ptr<const CompleteDbData> filterByKeyword(const std::string& keyword, float similarityThreshhold);
+    HitMap findHitsByKeyword(const std::string& keyword, float similarityThreshhold);
     void convertHitsToDbData(const HitMap& hitMap, CompleteDbData& newDbData);
+    bool isHit(const std::string& value, const std::string& keyword, float similarityThreshhold);
 
   public:
     DbFilter(DbService& cDbService, ThreadPool& cThreadPool, Logger& cLogger, UI::DataStates& cDataStates);
     void setData(std::shared_ptr<const CompleteDbData> newData);
     bool dataReady() const;
     std::shared_ptr<const CompleteDbData> getFilteredData();
-    void startFilterSearch(const std::string keyword);
+    void startFilterSearch(const std::string keyword, float similarityThreshhold);
 };

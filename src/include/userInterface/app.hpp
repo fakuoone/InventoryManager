@@ -164,7 +164,7 @@ class App {
                 dbVisualizer_.setData(dbData_);
                 filterActive_ = false;
             } else {
-                dbFilter_.startFilterSearch(std::string(filterBuffer_.data()));
+                dbFilter_.startFilterSearch(std::string(filterBuffer_.data()), 0.5);
                 filterActive_ = true;
             }
         }
