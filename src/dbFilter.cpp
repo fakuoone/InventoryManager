@@ -1,6 +1,7 @@
 #include "dbFilter.hpp"
 
-std::shared_ptr<const CompleteDbData> DbFilter::filterByKeyword(const std::string& keyword) {
+std::shared_ptr<const CompleteDbData> DbFilter::filterByKeyword(const std::string& keyword, float similarityThreshhold) {
+    similarityThreshhold = std::min(std::max(0.0f, similarityThreshhold), 1.0f);
     CompleteDbData dbData;
     if (keyword.empty()) { return std::make_shared<CompleteDbData>(dbData); }
     if (dataStates_.dbData != UI::DataState::DATA_READY) { return std::make_shared<CompleteDbData>(dbData); }
@@ -18,7 +19,7 @@ std::shared_ptr<const CompleteDbData> DbFilter::filterByKeyword(const std::strin
         }
     }
 
-    HitMap hitMap = findHitsByKeyword(keyword);
+    HitMap hitMap = findHitsByKeyword(keyword, similarityThreshhold);
     convertHitsToDbData(hitMap, dbData);
 
     dbData.maxPKeys = dbService_.calcMaxPKeys(dbData);
@@ -26,7 +27,7 @@ std::shared_ptr<const CompleteDbData> DbFilter::filterByKeyword(const std::strin
     return result;
 }
 
-DbFilter::HitMap DbFilter::findHitsByKeyword(const std::string& keyword) {
+DbFilter::HitMap DbFilter::findHitsByKeyword(const std::string& keyword, float similarityThreshhold) {
     HitMap hitMap;
 
     // sort by depth to prevent multiple iterations
@@ -52,7 +53,7 @@ DbFilter::HitMap DbFilter::findHitsByKeyword(const std::string& keyword) {
                     continue;
                 }
                 const std::string& ukey = dbData_->headers.at(tableName).uKeyName;
-                if (value.find(keyword) != std::string::npos) { // Direct find
+                if (isHit(value, keyword, similarityThreshhold)) {
                     hitMap.at(tableName).hits.insert(tableRowIndex);
                     // add unique key as hit so that dependant data gets affected aswell
                     hitMap.at(tableName).ukeyHits.insert(rowData.at(ukey).at(tableRowIndex));
@@ -71,6 +72,14 @@ DbFilter::HitMap DbFilter::findHitsByKeyword(const std::string& keyword) {
         }
     }
     return hitMap;
+}
+
+bool DbFilter::isHit(const std::string& value, const std::string& keyword, float similarityThreshhold) {
+    // TODO: Use more advanced filtering with 3 char sliding window and analog similarity
+    if (value.find(keyword) != std::string::npos) { // Direct find#8°
+        return true;
+    }
+    return false;
 }
 
 void DbFilter::convertHitsToDbData(const HitMap& hitMap, CompleteDbData& newDbData) {
@@ -107,6 +116,6 @@ std::shared_ptr<const CompleteDbData> DbFilter::getFilteredData() {
     return data;
 }
 
-void DbFilter::startFilterSearch(const std::string keyword) {
-    fFilteredData_ = pool_.submit(&DbFilter::filterByKeyword, this, keyword);
+void DbFilter::startFilterSearch(const std::string keyword, float similarityThreshhold) {
+    fFilteredData_ = pool_.submit(&DbFilter::filterByKeyword, this, keyword, similarityThreshhold);
 }
