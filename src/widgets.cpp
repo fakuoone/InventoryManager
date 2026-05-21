@@ -538,10 +538,8 @@ void ChangeOverviewer::setChangeData(std::shared_ptr<uiChangeInfo> changeData) {
     uiChanges = changeData;
 }
 
-MouseEventType ChangeOverviewer::drawSingleChangeOverview(const Change& change,
-                                                          std::size_t* visualDepth,
-                                                          const std::size_t parent,
-                                                          bool isChildrenNotLast) {
+MouseEventType
+ChangeOverviewer::drawSingleChangeOverview(const Change& change, std::size_t* visualDepth, const std::size_t parent, ImVec2& position) {
     MouseEventType event(MouseEventType::NONE);
     const uint32_t rowId = change.getRowId();
     const std::size_t uid = change.getKey();
@@ -565,9 +563,7 @@ MouseEventType ChangeOverviewer::drawSingleChangeOverview(const Change& change,
         break;
     }
 
-    ImGui::PushID(static_cast<int>(parent));
-    ImGui::PushID(static_cast<int>(rowId));
-    ImGui::PushID(static_cast<int>(*visualDepth));
+    ImGui::PushID(static_cast<int>(uid));
 
     ImU32 bgCol = change.isValid() ? colValid.first : colInvalid.first;
     ImU32 borderCol = change.isValid() ? colValid.second : colInvalid.second;
@@ -638,17 +634,13 @@ MouseEventType ChangeOverviewer::drawSingleChangeOverview(const Change& change,
     ImGui::Text("Row %u", rowId);
 
     ImGui::PopID();
-    ImGui::PopID();
-    ImGui::PopID();
 
     // padding
     ImVec2 end = ImGui::GetCursorScreenPos();
     ImGui::SetCursorScreenPos({end.x, max.y});
-    if (isChildrenNotLast) {
-        ImGui::Dummy(ImVec2(0.0f, 0.25f));
-    } else {
-        ImGui::Dummy(ImVec2(0.0f, VPADDING));
-    }
+    ImGui::Dummy(ImVec2(0.0f, VPADDING));
+
+    position = max;
 
     return event;
 }

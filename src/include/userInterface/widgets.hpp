@@ -214,7 +214,7 @@ class ChangeOverviewer {
     static constexpr float ROW_COL = 60.0f;
     static constexpr float HPADDING = 6.0f;     // padding between row elements
     static constexpr float VPADDING_INT = 6.0f; // internal row height
-    static constexpr float VPADDING = 2.0f;     // padding after row
+    static constexpr float VPADDING = 1.0f;     // padding after row
 
   public:
     ChangeOverviewer(ChangeTracker& cChangeTracker,
@@ -227,7 +227,7 @@ class ChangeOverviewer {
 
     void setChangeData(std::shared_ptr<uiChangeInfo> changeData);
     bool drawChildren(const std::vector<std::size_t>& children, float allowedWidth);
-    MouseEventType drawSingleChangeOverview(const Change& change, std::size_t* visualDepth, const std::size_t parent, bool childrenShowing);
+    MouseEventType drawSingleChangeOverview(const Change& change, std::size_t* visualDepth, const std::size_t parent, ImVec2& position);
 };
 
 } // namespace Widgets

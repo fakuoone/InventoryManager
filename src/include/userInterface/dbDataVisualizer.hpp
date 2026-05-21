@@ -48,7 +48,13 @@ class DbVisualizer {
 
         for (const std::size_t rootKey : uiChanges_->roots) {
             std::size_t depth = 0;
-            drawChangesTree(rootKey, &depth, INVALID_ID, INVALID_ID);
+            const Change& change = uiChanges_->changes.at(rootKey);
+            ImVec2 beginning = ImGui::GetCursorScreenPos();
+            ImVec2 end = drawChangesTree(change, &depth, INVALID_ID);
+            ImDrawList* drawlist = ImGui::GetWindowDrawList();
+            // ImU32 color = change.isValid() ? Widgets::colValid.first : Widgets::colInvalid.first;
+            ImU32 color = IM_COL32(200, 200, 200, 255);
+            drawlist->AddRect(beginning, end, color);
         }
 
         /*
@@ -61,35 +67,31 @@ class DbVisualizer {
         ImGui::EndDisabled();
     }
 
-    void drawChangesTree(const std::size_t key, std::size_t* treeDepth, const std::size_t lastChild, const std::size_t parent) {
+    ImVec2 drawChangesTree(const Change& change, std::size_t* treeDepth, const std::size_t parent) {
+        const std::size_t key = change.getKey();
         bool containsKey = clickedChanges_.contains(key);
-        const Change& change = uiChanges_->changes.at(key);
-        bool isChildrenNotLast = false;
-        if (change.hasParent()) {
-            isChildrenNotLast = lastChild != key;
-        } else if (containsKey && change.hasChildren()) {
-            isChildrenNotLast = true;
-        }
 
-        if (drawChange(key, treeDepth, parent, isChildrenNotLast) == Widgets::MouseEventType::CLICK) { toggleNode(key); }
+        ImVec2 position;
+        if (drawChange(key, treeDepth, parent, position) == Widgets::MouseEventType::CLICK) { toggleNode(key); }
 
         if (containsKey) {
             (*treeDepth)++;
             const std::vector<std ::size_t>& children = change.getChildren();
             for (std::size_t childKey : children) {
-                drawChangesTree(childKey, treeDepth, children.back(), key);
+                position = drawChangesTree(uiChanges_->changes.at(childKey), treeDepth, key);
             }
             (*treeDepth)--;
         }
+        return position;
     }
 
     void toggleNode(std::size_t key) {
         if (!clickedChanges_.insert(key).second) { clickedChanges_.erase(key); }
     }
 
-    Widgets::MouseEventType drawChange(const std::size_t key, std::size_t* visualDepth, const std::size_t parent, bool isChildrenNotLast) {
+    Widgets::MouseEventType drawChange(const std::size_t key, std::size_t* visualDepth, const std::size_t parent, ImVec2& position) {
         const Change& change = uiChanges_->changes.at(key);
-        return changeOverviewer_.drawSingleChangeOverview(change, visualDepth, parent, isChildrenNotLast);
+        return changeOverviewer_.drawSingleChangeOverview(change, visualDepth, parent, position);
     }
 
     void handleTableEvent() {
