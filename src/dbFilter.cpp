@@ -74,12 +74,60 @@ DbFilter::HitMap DbFilter::findHitsByKeyword(const std::string& keyword, float s
     return hitMap;
 }
 
+DbFilter::Ngram DbFilter::generateNgram(const std::string& value) {
+    Ngram array;
+    std::size_t len;
+    if (value.size() < ngramLength_) {
+        len = value.size() - 1;
+    } else {
+        len = value.size() - ngramLength_ + 1;
+    }
+
+    for (size_t i = 0; i < len; i++) {
+        array.push_back(value.substr(i, ngramLength_));
+    }
+    return array;
+}
+
+float DbFilter::ngramDifference(const Ngram& a, const Ngram& b) {
+    if (a.size() == 0 || b.size() == 0) { return 0.0f; }
+    std::size_t count{0};
+    std::vector<std::size_t> ngramEqualities;
+    for (std::size_t i = 0; i < a.size(); i++) {
+        for (std::size_t j = 0; j < b.size(); j++) {
+            if (a[i] == b[j]) {
+                ngramEqualities.push_back(j);
+                count++;
+                continue;
+            }
+        }
+    }
+
+    if (count == 0) { return 0; }
+
+    uint8_t maxDensity{0};
+    uint8_t density{0};
+    static constexpr uint8_t windowSize = 4;
+    for (std::size_t i = 0; i < ngramEqualities.size() - 1; i++) {
+        if (i % windowSize == 0) { density = 0; }
+        if (ngramEqualities[i + 1] - ngramEqualities[i] == 1) { density++; }
+        if (density > maxDensity) { maxDensity = density; }
+    }
+
+    return static_cast<float>(count) / std::max(a.size(), b.size()) + static_cast<float>(maxDensity) / windowSize;
+}
+
 bool DbFilter::isHit(const std::string& value, const std::string& keyword, float similarityThreshhold) {
-    // TODO: Use more advanced filtering with 3 char sliding window and analog similarity
+    Ngram valueNgram = DbFilter::generateNgram(value);
+    Ngram keywordNgram = DbFilter::generateNgram(keyword);
+
     if (value.find(keyword) != std::string::npos) { // Direct find#8°
         return true;
     }
-    return false;
+
+    float ngramDiff = DbFilter::ngramDifference(valueNgram, keywordNgram);
+    if (ngramDiff > 0) { logger_.pushLog(Log{std::format("DATA {} WITH SIMILARITY: {}", value, ngramDiff)}); }
+    return ngramDiff > similarityThreshhold;
 }
 
 void DbFilter::convertHitsToDbData(const HitMap& hitMap, CompleteDbData& newDbData) {
