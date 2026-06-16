@@ -42,6 +42,13 @@ void Config::getAdditionalConfig(const nlohmann::json& j) {
             bom_.defaultPath = j["bom"]["defaultPath"].get<std::filesystem::path>();
             if (j["bom"].contains("mappingArchive")) { bom_.mappingArchive = j["bom"]["mappingArchive"].get<std::filesystem::path>(); }
         }
+
+        // AUTO INV ARCHIVE
+        if (j.contains("archivePath")) {
+            autoInvArchivePath = j["archivePath"].get<std::filesystem::path>();
+        } else {
+            logger_.pushLog(Log{"INFORMATION: Archive-path not specified, no history possible."});
+        }
     } catch (const nlohmann::json::parse_error& e) { logger_.pushLog(Log{std::format("ERROR: Could not parse {}", e.what())}); }
 }
 
@@ -239,4 +246,8 @@ std::filesystem::path Config::getCsvPathOrder() const {
 
 std::filesystem::path Config::getCsvPathBom() const {
     return bom_.defaultPath;
+}
+
+std::filesystem::path Config::getAutoInvArchivePath() const {
+    return autoInvArchivePath;
 }

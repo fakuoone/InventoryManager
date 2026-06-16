@@ -1,4 +1,5 @@
 #include "autoInv.hpp"
+#include "autoGenInfo.hpp"
 
 #define EXCLUDE_API_FAILS
 
@@ -367,12 +368,16 @@ bool CsvChangeGenerator::processCell(TableCells* cells, bool onlyAddIfFound) {
     };
 
     if (!found && onlyAddIfFound) { return false; }
+    Change change = Change{cells->cells, type, dbService_.getTable(cells->table)};
 
-    ChangeAddResult result = changeTracker_.addChange(Change{cells->cells, type, dbService_.getTable(cells->table)}, foundIndexes.pkey);
+    ChangeAddResult result = changeTracker_.addChange(change, foundIndexes.pkey);
     if (!ChangeTracker::gotAdded(result)) {
+        AutoGenInfo::changeAdded(change.getKey(), false);
         logger_.pushLog(Log{std::format("ERROR: Adding change from mapping failed.")});
         return false;
     }
+
+    AutoGenInfo::changeAdded(change.getKey(), true);
     cells->cells.clear();
     return true;
 }
@@ -453,6 +458,7 @@ bool CsvChangeGenerator::dataValid(bool once) {
 }
 
 void CsvChangeGenerator::read(std::filesystem::path csv) {
+    AutoGenInfo::setCsvSource(csv);
     fRead_ = pool_.submit(&CsvChangeGenerator::run, this, csv);
 }
 

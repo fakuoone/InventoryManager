@@ -35,6 +35,8 @@ class Config {
     ReaderConfig order_;
     ReaderConfig bom_;
 
+    std::filesystem::path autoInvArchivePath;
+
     Logger& logger_;
 
     std::string databaseJsonToDbString(const nlohmann::json& j);
@@ -61,4 +63,5 @@ class Config {
     std::string getSearchPattern() const;
     std::filesystem::path getCsvPathOrder() const;
     std::filesystem::path getCsvPathBom() const;
+    std::filesystem::path getAutoInvArchivePath() const;
 };

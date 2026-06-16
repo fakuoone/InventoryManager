@@ -1,3 +1,4 @@
+#include "autoGenInfo.hpp"
 #include "autoInv.hpp"
 #include "changeTracker.hpp"
 #include "config.hpp"
@@ -12,6 +13,9 @@ int main() {
     Logger logger;
     Change::setLogger(logger);
     Config config{logger};
+
+    AutoGenInfo::setConfig(config);
+    AutoGenInfo::setLogger(logger);
 
     ThreadPool pool{10, logger};
 

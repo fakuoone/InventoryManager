@@ -1,4 +1,5 @@
 #include "changeExeService.hpp"
+#include "autoGenInfo.hpp"
 
 void ChangeExeService::collectChanges(std::size_t key, std::unordered_set<std::size_t>& visited, std::vector<Change>& order) {
     if (visited.contains(key)) { return; }
@@ -36,6 +37,8 @@ Change::chHashV ChangeExeService::getSuccessfulChanges() {
     if (isChangeApplicationDone()) {
         successfulChanges = fApplyChanges_.get();
         changeTracker_.removeChanges(successfulChanges);
+
+        AutoGenInfo::finish(successfulChanges);
     }
     return successfulChanges;
 }
