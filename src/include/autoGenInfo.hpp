@@ -1,11 +1,12 @@
 #pragma once
 
-#include <filesystem>
-#include <nlohmann/json.hpp>
-#include <unordered_set>
-
 #include "change.hpp"
 #include "config.hpp"
+#include <expected>
+#include <filesystem>
+
+#include <nlohmann/json.hpp>
+#include <unordered_set>
 
 class AutoGenInfo {
   private:
@@ -37,40 +38,51 @@ class AutoGenInfo {
         changesTotal_++;
     }
 
-    static void finish(const Change::chHashV& successfulChanges) {
-        if (changesTotal_ == 0 || csvPath_.empty()) { return; }
+    static std::expected<nlohmann::ordered_json, std::string> getArchive() {
         // parse archive
         nlohmann::ordered_json archiveJson;
         std::filesystem::path path = config_->getAutoInvArchivePath();
+        std::string errorMessage;
 
-        {
-            // open archive
-            std::ifstream archive(path);
-            if (!archive.is_open()) {
-                logger_->pushLog(Log{std::format("ERROR: Could not open archive on path: {}", path.string())});
-                return;
-            }
-
-            try {
-                if (archive.peek() == std::ifstream::traits_type::eof()) {
-                    archiveJson = nlohmann::json::array();
-                } else {
-                    archive >> archiveJson;
-                }
-                if (!archiveJson.is_array() && !archiveJson.empty()) {
-                    logger_->pushLog(Log{std::format("ERROR: Archive is not of type array or empty.")});
-                    return;
-                }
-            } catch (const nlohmann::json::parse_error& e) {
-                logger_->pushLog(Log{std::format("ERROR: Could not parse {}", e.what())});
-                return;
-            }
-
-            // remove all changes that got executed
-            for (std::size_t key : successfulChanges) {
-                changeExecuted(key);
-            }
+        // open archive
+        std::ifstream archive(path);
+        if (!archive.is_open()) {
+            errorMessage = std::format("ERROR: Could not open archive on path: {}", path.string());
+            logger_->pushLog(Log{errorMessage});
+            return std::unexpected(errorMessage);
         }
+
+        try {
+            if (archive.peek() == std::ifstream::traits_type::eof()) {
+                archiveJson = nlohmann::json::array();
+            } else {
+                archive >> archiveJson;
+            }
+            if (!archiveJson.is_array() && !archiveJson.empty()) {
+                errorMessage = std::format("ERROR: Archive is not of type array or empty.");
+                logger_->pushLog(Log{errorMessage});
+                return std::unexpected(errorMessage);
+            }
+        } catch (const nlohmann::json::parse_error& e) {
+            errorMessage = std::format("ERROR: Could not parse {}", e.what());
+            logger_->pushLog(Log{errorMessage});
+            return std::unexpected(errorMessage);
+        }
+        return archiveJson;
+    }
+
+    static void finish(const Change::chHashV& successfulChanges) {
+        if (changesTotal_ == 0 || csvPath_.empty()) { return; }
+
+        auto archive = getArchive();
+        if (!archive) { return; }
+        // remove all changes that got executed
+        for (std::size_t key : successfulChanges) {
+            changeExecuted(key);
+        }
+
+        std::filesystem::path path = config_->getAutoInvArchivePath();
+        nlohmann::ordered_json archiveJson = archive.value();
 
         // add
         auto now = std::chrono::system_clock::now();
@@ -79,7 +91,7 @@ class AutoGenInfo {
                                        {"path", csvPath_},
                                        {"addedChangeCount", addedChanges_},
                                        {"totalChangeCount", changesTotal_},
-                                       {"remainingChangeCount", unexecutedChangeKeys_.size()}};
+                                       {"remainingChangeCount", static_cast<uint16_t>(unexecutedChangeKeys_.size())}};
 
         archiveJson.push_back(self);
 

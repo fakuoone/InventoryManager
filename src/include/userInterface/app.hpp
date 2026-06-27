@@ -182,6 +182,46 @@ class App {
 
     void showOrder() { orderVisualizer_.run(); }
 
+    void showHistory() {
+        auto result = AutoGenInfo::getArchive();
+        if (!result) { return; }
+        nlohmann::ordered_json archiveJson = result.value();
+
+        if (!archiveJson.is_array()) { return; }
+
+        ImGui::Columns(4, "HistoryColumns", true);
+        ImGui::TextUnformatted("Path");
+        ImGui::NextColumn();
+        ImGui::TextUnformatted("Changes");
+        ImGui::NextColumn();
+        ImGui::TextUnformatted("Remaining");
+        ImGui::NextColumn();
+        ImGui::TextUnformatted("Timestamp");
+        ImGui::NextColumn();
+        ImGui::Separator();
+
+        for (const auto& entry : archiveJson) {
+            if (!entry.is_object()) { continue; }
+
+            std::string timestamp = entry.value("timestamp", std::string{});
+            std::string path = entry.value("path", std::string{});
+            uint16_t addedChangeCount = entry.value("addedChangeCount", 0);
+            uint16_t totalChangeCount = entry.value("totalChangeCount", 0);
+            uint16_t remainingChangeCount = entry.value("remainingChangeCount", 0);
+
+            ImGui::TextUnformatted(path.c_str());
+            ImGui::NextColumn();
+            ImGui::Text("%u/%u", addedChangeCount, totalChangeCount);
+            ImGui::NextColumn();
+            ImGui::Text("%u", remainingChangeCount);
+            ImGui::NextColumn();
+            ImGui::TextUnformatted(timestamp.c_str());
+            ImGui::NextColumn();
+        }
+
+        ImGui::Columns(1);
+    }
+
   public:
     App(Config& cConfig,
         ThreadPool& cPool,
@@ -235,6 +275,10 @@ class App {
                 }
                 if (ImGui::BeginTabItem("Order")) {
                     showOrder();
+                    ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("History")) {
+                    showHistory();
                     ImGui::EndTabItem();
                 }
                 ImGui::EndTabBar();
