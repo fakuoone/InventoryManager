@@ -189,7 +189,9 @@ class App {
 
         if (!archiveJson.is_array()) { return; }
 
-        ImGui::Columns(4, "HistoryColumns", true);
+        ImGui::Columns(5, "HistoryColumns", true);
+        ImGui::TextUnformatted("Operation");
+        ImGui::NextColumn();
         ImGui::TextUnformatted("Path");
         ImGui::NextColumn();
         ImGui::TextUnformatted("Changes");
@@ -208,7 +210,24 @@ class App {
             uint16_t addedChangeCount = entry.value("addedChangeCount", 0);
             uint16_t totalChangeCount = entry.value("totalChangeCount", 0);
             uint16_t remainingChangeCount = entry.value("remainingChangeCount", 0);
+            DB::QuantityOperation operation = entry.value("operation", DB::QuantityOperation::NONE);
 
+            switch (operation) {
+            case DB::QuantityOperation::SET:
+                ImGui::TextUnformatted("SET");
+                break;
+            case DB::QuantityOperation::ADD:
+                ImGui::TextUnformatted("ADD");
+                break;
+            case DB::QuantityOperation::SUB:
+                ImGui::TextUnformatted("SUB");
+                break;
+            default:
+                ImGui::TextUnformatted("Unspecified");
+                break;
+            }
+
+            ImGui::NextColumn();
             ImGui::TextUnformatted(path.c_str());
             ImGui::NextColumn();
             ImGui::Text("%u/%u", addedChangeCount, totalChangeCount);

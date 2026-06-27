@@ -136,7 +136,7 @@ CsvChangeGenerator::CsvChangeGenerator(ThreadPool& cThreadPool,
                                        PartApi& cPartApi,
                                        Config& cConfig,
                                        Logger& cLogger,
-                                       QuantityOperation cOperation)
+                                       DB::QuantityOperation cOperation)
     : pool_(cThreadPool), changeTracker_(cChangeTracker), dbService_(cDbService), partApi_(cPartApi), config_(cConfig), logger_(cLogger),
       operation_(cOperation) {}
 
@@ -459,6 +459,7 @@ bool CsvChangeGenerator::dataValid(bool once) {
 
 void CsvChangeGenerator::read(std::filesystem::path csv) {
     AutoGenInfo::setCsvSource(csv);
+    AutoGenInfo::setOperation(operation_);
     fRead_ = pool_.submit(&CsvChangeGenerator::run, this, csv);
 }
 

@@ -16,6 +16,7 @@ class AutoGenInfo {
     static inline uint16_t changesTotal_;
     static inline uint16_t addedChanges_;
     static inline std::unordered_set<std::size_t> unexecutedChangeKeys_;
+    static inline DB::QuantityOperation operation_{DB::QuantityOperation::SET};
 
     static void changeExecuted(std::size_t key) {
         if (unexecutedChangeKeys_.contains(key)) { unexecutedChangeKeys_.erase(key); }
@@ -24,6 +25,8 @@ class AutoGenInfo {
   public:
     static void setConfig(Config& c) { config_ = &c; }
     static void setLogger(Logger& l) { logger_ = &l; }
+
+    static void setOperation(DB::QuantityOperation operation) { operation_ = operation; }
 
     static void setCsvSource(std::filesystem::path csv) {
         if (!csvPath_.empty()) { return; }
@@ -91,7 +94,8 @@ class AutoGenInfo {
                                        {"path", csvPath_},
                                        {"addedChangeCount", addedChanges_},
                                        {"totalChangeCount", changesTotal_},
-                                       {"remainingChangeCount", static_cast<uint16_t>(unexecutedChangeKeys_.size())}};
+                                       {"remainingChangeCount", static_cast<uint16_t>(unexecutedChangeKeys_.size())},
+                                       {"operation", static_cast<uint16_t>(operation_)}};
 
         archiveJson.push_back(self);
 

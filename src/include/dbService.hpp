@@ -9,8 +9,6 @@
 #include <expected>
 #include <future>
 
-enum class QuantityOperation { ADD, SUB, SET };
-
 struct IndexPKeyPair {
     std::size_t index;
     std::size_t pkey;
@@ -40,8 +38,10 @@ class DbService {
     std::map<std::string, std::size_t> calcMaxPKeys(const CompleteDbData& data) const;
     IndexPKeyPair findIndexAndPKeyOfExisting(const std::string& table, const Change::colValMap& cells) const;
     bool hasQuantityColumn(const std::string& table) const;
-    void
-    updateChangeQuantity(const std::string& table, Change::colValMap& cells, const std::size_t index, QuantityOperation operation) const;
+    void updateChangeQuantity(const std::string& table,
+                              Change::colValMap& cells,
+                              const std::size_t index,
+                              DB::QuantityOperation operation) const;
     bool validateCompleteDbData(const CompleteDbData& data) const;
     bool validateChange(Change& change, bool fromGeneration) const;
     std::vector<Change> getRequiredChanges(const Change& change, const std::map<std::string, std::size_t>& ids) const;

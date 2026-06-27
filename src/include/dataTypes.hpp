@@ -26,6 +26,7 @@ constexpr std::size_t BUFFER_SIZE = 256;
 namespace DB {
 enum class DataType { INT16, INT32, INT64, FLOAT, DOUBLE, BOOL, STRING, TEXT, JSON, UNKNOWN };
 enum class TypeCategory { INTEGER, FLOATING, BOOLEAN, TEXT, JSON, ANY, OTHER };
+enum class QuantityOperation : uint16_t { NONE = 0, ADD = 1, SUB = 2, SET = 3 };
 
 template <typename T> struct ProtectedData {
     T data;

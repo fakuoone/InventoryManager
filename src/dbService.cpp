@@ -87,7 +87,7 @@ bool DbService::hasQuantityColumn(const std::string& table) const {
 void DbService::updateChangeQuantity(const std::string& table,
                                      Change::colValMap& cells,
                                      const std::size_t index,
-                                     QuantityOperation operation) const {
+                                     DB::QuantityOperation operation) const {
     const std::string& quantityColumn = config_.getQuantityColumn();
     if (!hasQuantityColumn(table)) { return; }
     try {
@@ -123,13 +123,13 @@ void DbService::updateChangeQuantity(const std::string& table,
         logger_.pushLog(Log{std::format("EXISTING QUANTITY IS: {}. Change-quantity will operate with value {}.", quantityDb, changeValue)});
 
         switch (operation) {
-        case QuantityOperation::SET:
+        case DB::QuantityOperation::SET:
             cells.at(quantityColumn) = std::to_string(changeValue);
             break;
-        case QuantityOperation::ADD:
+        case DB::QuantityOperation::ADD:
             cells.at(quantityColumn) = std::to_string(quantityDb + changeValue);
             break;
-        case QuantityOperation::SUB:
+        case DB::QuantityOperation::SUB:
             if (changeValue > quantityDb) {
                 logger_.pushLog(Log{std::format("ERROR: Quantity subtraction would underflow: {} - {}.", quantityDb, changeValue)});
                 return;

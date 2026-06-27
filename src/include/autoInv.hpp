@@ -63,7 +63,7 @@ class CsvChangeGenerator {
     std::set<std::size_t> failedCsvApiRows_;
     std::mutex failedCsvApiMtx_;
 
-    QuantityOperation operation_;
+    DB::QuantityOperation operation_;
 
     CsvChangeGenerator(ThreadPool& cThreadPool,
                        ChangeTracker& cChangeTracker,
@@ -71,7 +71,7 @@ class CsvChangeGenerator {
                        PartApi& cPartApi,
                        Config& cConfig,
                        Logger& cLogger,
-                       QuantityOperation cOperation);
+                       DB::QuantityOperation cOperation);
     virtual ~CsvChangeGenerator() = default;
 
     bool run(std::filesystem::path csv);
@@ -114,7 +114,7 @@ class ChangeGeneratorFromBom : public CsvChangeGenerator {
   public:
     ChangeGeneratorFromBom(
         ThreadPool& cPool, ChangeTracker& cChangeTracker, DbService& cDbService, PartApi& cPartApi, Config& cConfig, Logger& cLogger)
-        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cPartApi, cConfig, cLogger, QuantityOperation::SUB) {}
+        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cPartApi, cConfig, cLogger, DB::QuantityOperation::SUB) {}
 };
 
 class ChangeGeneratorFromOrder : public CsvChangeGenerator {
@@ -122,6 +122,6 @@ class ChangeGeneratorFromOrder : public CsvChangeGenerator {
   public:
     ChangeGeneratorFromOrder(
         ThreadPool& cPool, ChangeTracker& cChangeTracker, DbService& cDbService, PartApi& cPartApi, Config& cConfig, Logger& cLogger)
-        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cPartApi, cConfig, cLogger, QuantityOperation::ADD) {}
+        : CsvChangeGenerator(cPool, cChangeTracker, cDbService, cPartApi, cConfig, cLogger, DB::QuantityOperation::ADD) {}
 };
 }; // namespace AutoInv
