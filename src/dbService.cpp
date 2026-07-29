@@ -1,4 +1,5 @@
 #include "dbService.hpp"
+#include "dataTypes.hpp"
 
 bool DbService::isDataReady() {
     if (!pendingData_ && fCompleteDbData_.valid() && fCompleteDbData_.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
@@ -135,6 +136,9 @@ void DbService::updateChangeQuantity(const std::string& table,
                 return;
             }
             cells.at(quantityColumn) = std::to_string(quantityDb - changeValue);
+            break;
+        case DB::QuantityOperation::NONE:
+            logger_.pushLog(Log{std::format("ERROR: No operation defined.")});
             break;
         }
     } catch (const std::exception& e) {

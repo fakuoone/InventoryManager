@@ -1,7 +1,6 @@
 #pragma once
 
-#include <future>
-
+#include "autoGenInfo.hpp"
 #include "autoInv.hpp"
 #include "changeExeService.hpp"
 #include "changeTracker.hpp"
@@ -13,11 +12,17 @@
 #include "dataTypes.hpp"
 #include "userInterface/autoInvVisualizer.hpp"
 #include "userInterface/dbDataVisualizer.hpp"
-#include "userInterface/imGuiDX11Context.hpp"
+
+#ifdef _WIN32
+#include "userInterface/ImGuiContext.hpp"
+#elif defined(__linux__)
+#include "userInterface/imGuiVulkanContext.hpp"
+#else
+#endif
 
 class App {
   private:
-    ImGuiDX11Context imguiCtx_;
+    ImGuiRenderContext imguiCtx_;
 
     Config& config_;
     ThreadPool& pool_;
@@ -271,8 +276,8 @@ class App {
         orderVisualizer_.setDefaultPath(config_.getCsvPathOrder());
 
         AutoInv::LoadedMappings loaded = config_.readMappings();
-        pool_.submit(AutoInv::BomVisualizer::injectMappings, &bomVisualizer_, loaded.bom);
-        pool_.submit(AutoInv::OrderVisualizer::injectMappings, &orderVisualizer_, loaded.order);
+        pool_.submit(&AutoInv::BomVisualizer::injectMappings, &bomVisualizer_, loaded.bom);
+        pool_.submit(&AutoInv::OrderVisualizer::injectMappings, &orderVisualizer_, loaded.order);
     }
 
     void run() {

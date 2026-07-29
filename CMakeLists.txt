@@ -16,6 +16,11 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # --- Source files ---
 file(GLOB SOURCES "src/*.cpp")
 
+if(NOT WIN32)
+    list(FILTER SOURCES EXCLUDE REGEX "DX11")
+    list(FILTER SOURCES EXCLUDE REGEX "win32")
+endif()
+
 # --- Executable ---
 add_executable(InventoryManager ${SOURCES})
 set_target_properties(InventoryManager PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin")
@@ -35,11 +40,21 @@ file(GLOB IMGUI_GLOB
     ${IMGUI_DIR}/imstb_truetype.h
     ${IMGUI_DIR}/imgui_tables.cpp
     ${IMGUI_DIR}/imgui_widgets.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_win32.h
-    ${IMGUI_DIR}/backends/imgui_impl_win32.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp
-    ${IMGUI_DIR}/backends/imgui_impl_dx11.h
-)
+    )
+    
+if(WIN32)
+    list(APPEND IMGUI_GLOB
+        ${IMGUI_DIR}/backends/imgui_impl_win32.h
+        ${IMGUI_DIR}/backends/imgui_impl_win32.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_dx11.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_dx11.h
+    )
+elseif(UNIX)
+    list(APPEND IMGUI_GLOB
+        ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_glfw.h
+    )
+endif()
 
 add_library(imgui ${IMGUI_LIBRARY_TYPE} ${IMGUI_GLOB})
 target_include_directories(imgui PUBLIC
@@ -53,15 +68,20 @@ set_target_properties(imgui PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/bin"
 )
 
-target_link_libraries(imgui PUBLIC
-d3d11
-dxgi
-d3dcompiler
-imm32
-user32
-gdi32
-dwmapi
-)
+if(WIN32)
+    target_link_libraries(imgui PUBLIC
+        d3d11
+        dxgi
+        d3dcompiler
+        imm32
+        user32
+        gdi32
+        dwmapi
+    )
+elseif(UNIX)
+    # find_package(Vulkan REQUIRED)
+    # target_link_libraries(imgui PUBLIC lvulkan)
+endif()
 
 # --- Includes ---
 target_include_directories(InventoryManager PRIVATE

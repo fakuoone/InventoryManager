@@ -281,7 +281,7 @@ void DbInterface::acquireTableRows(const std::string& table, const HeadersInfo& 
             std::vector<std::string> cells;
             cells.reserve(static_cast<std::size_t>(r.columns()));
 
-            for (const pqxx::row& row : r) {
+            for (const auto& row : r) {
                 cells.emplace_back(row[col.name].c_str());
                 // logger.pushLog(Log{std::format("        {}: {}", col.name, row[col.name].c_str())});
             }

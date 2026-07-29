@@ -4,13 +4,13 @@
 
 #include "imgui.h"
 
-class ImGuiDX11Context {
+class ImGuiRenderContext {
   public:
-    ImGuiDX11Context(const ImGuiDX11Context&) = delete;
-    ImGuiDX11Context& operator=(const ImGuiDX11Context&) = delete;
+    ImGuiRenderContext(const ImGuiRenderContext&) = delete;
+    ImGuiRenderContext& operator=(const ImGuiRenderContext&) = delete;
 
-    ImGuiDX11Context();
-    ~ImGuiDX11Context();
+    ImGuiRenderContext();
+    ~ImGuiRenderContext();
 
     bool pollEvents();
     bool beginFrame();

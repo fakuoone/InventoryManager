@@ -1,5 +1,13 @@
 #include "config.hpp"
-#include "windows.h"
+
+#include <fstream>
+
+#ifdef _WIN32
+#include <windows.h>
+#elif defined(__linux__)
+#include <limits.h>
+#include <unistd.h>
+#endif
 
 std::string Config::databaseJsonToDbString(const nlohmann::json& j) {
     try {
@@ -25,7 +33,6 @@ void Config::getAdditionalConfig(const nlohmann::json& j) {
         if (j["api"].contains("dummyJson")) { api_.dummyJson = j["api"]["dummyJson"].get<nlohmann::json>(); }
         api_.searchPattern = j["api"]["search"].get<nlohmann::json>().dump();
         if (j["api"].contains("responseArchive")) {
-            api_.responseArchive = j["api"]["responseArchive"].get<std::filesystem::path>();
             readApiArchive();
         } else {
             logger_.pushLog(Log{"INFORMATION: API storage feature not specified in config. This will lead to increased api request rate."});
@@ -33,19 +40,12 @@ void Config::getAdditionalConfig(const nlohmann::json& j) {
 
         // DEFAULT CSV
         if (j.contains("order")) {
-            order_.defaultPath = j["order"]["defaultPath"].get<std::filesystem::path>();
-            if (j["order"].contains("mappingArchive")) {
-                order_.mappingArchive = j["order"]["mappingArchive"].get<std::filesystem::path>();
-            }
+            if (j["order"].contains("mappingArchive")) {}
         }
-        if (j.contains("bom")) {
-            bom_.defaultPath = j["bom"]["defaultPath"].get<std::filesystem::path>();
-            if (j["bom"].contains("mappingArchive")) { bom_.mappingArchive = j["bom"]["mappingArchive"].get<std::filesystem::path>(); }
-        }
+        if (j.contains("bom")) {}
 
         // AUTO INV ARCHIVE
         if (j.contains("archivePath")) {
-            autoInvArchivePath = j["archivePath"].get<std::filesystem::path>();
         } else {
             logger_.pushLog(Log{"INFORMATION: Archive-path not specified, no history possible."});
         }
@@ -211,9 +211,21 @@ void Config::saveMappings(const std::vector<AutoInv::MappingNumber>& mappingsBom
 }
 
 std::filesystem::path Config::getExeDir() {
+#ifdef _WIN32
     char buffer[MAX_PATH];
     GetModuleFileName(nullptr, buffer, MAX_PATH);
     return std::filesystem::path(buffer).parent_path();
+#elif defined(__linux__)
+    char buffer[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+
+    if (len != -1) {
+        buffer[len] = '\0';
+        return std::filesystem::path(buffer).parent_path();
+    }
+
+    return {};
+#endif
 }
 
 const std::string& Config::getFont() const {

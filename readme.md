@@ -15,7 +15,7 @@ A generic api can be used to fetch additional data. Data can be filtered with a 
 ```c++
 class App {
    private:
-    ImGuiDX11Context imguiCtx;
+    ImGuiContext imguiCtx;
 
 ```
 The only interface to the dx11-backed is through these three functions:

@@ -1,5 +1,6 @@
 #include "autoInv.hpp"
 #include "autoGenInfo.hpp"
+#include <fstream>
 
 #define EXCLUDE_API_FAILS
 

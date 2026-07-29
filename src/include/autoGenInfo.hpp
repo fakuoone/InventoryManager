@@ -4,6 +4,7 @@
 #include "config.hpp"
 #include <expected>
 #include <filesystem>
+#include <fstream>
 
 #include <nlohmann/json.hpp>
 #include <unordered_set>

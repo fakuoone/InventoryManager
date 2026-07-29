@@ -1,4 +1,4 @@
-#include "userInterface/ImGuiDX11Context.hpp"
+#include "userInterface/imGuiDX11Context.hpp"
 
 #include "imgui_impl_dx11.h"
 #include "imgui_impl_win32.h"
@@ -7,10 +7,10 @@
 
 // Forward declaration from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
-LRESULT CALLBACK ImGuiDX11Context::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK ImGuiRenderContext::WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam)) return true;
 
-    ImGuiDX11Context* ctx = reinterpret_cast<ImGuiDX11Context*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+    ImGuiRenderContext* ctx = reinterpret_cast<ImGuiRenderContext*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
 
     switch (msg) {
     case WM_SIZE:
@@ -32,7 +32,7 @@ LRESULT CALLBACK ImGuiDX11Context::WndProc(HWND hWnd, UINT msg, WPARAM wParam, L
     return DefWindowProcW(hWnd, msg, wParam, lParam);
 }
 
-ImGuiDX11Context::ImGuiDX11Context() {
+ImGuiRenderContext::ImGuiRenderContext() {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
 
@@ -45,9 +45,9 @@ ImGuiDX11Context::ImGuiDX11Context() {
     wc_ = {};
     wc_.cbSize = sizeof(WNDCLASSEXW);
     wc_.style = CS_CLASSDC;
-    wc_.lpfnWndProc = ImGuiDX11Context::WndProc;
+    wc_.lpfnWndProc = ImGuiRenderContext::WndProc;
     wc_.hInstance = GetModuleHandle(nullptr);
-    wc_.lpszClassName = L"ImGuiDX11Context";
+    wc_.lpszClassName = L"ImGuiRenderContext";
 
     RegisterClassExW(&wc_);
 
@@ -81,7 +81,7 @@ ImGuiDX11Context::ImGuiDX11Context() {
     ImGui_ImplDX11_Init(device_, deviceContext_);
 }
 
-ImGuiDX11Context::~ImGuiDX11Context() {
+ImGuiRenderContext::~ImGuiRenderContext() {
     ImGui_ImplDX11_Shutdown();
     ImGui_ImplWin32_Shutdown();
     ImGui::DestroyContext();
@@ -91,7 +91,7 @@ ImGuiDX11Context::~ImGuiDX11Context() {
     UnregisterClassW(wc_.lpszClassName, wc_.hInstance);
 }
 
-bool ImGuiDX11Context::pollEvents() {
+bool ImGuiRenderContext::pollEvents() {
     MSG msg;
     while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
         TranslateMessage(&msg);
@@ -101,7 +101,7 @@ bool ImGuiDX11Context::pollEvents() {
     return true;
 }
 
-bool ImGuiDX11Context::beginFrame() {
+bool ImGuiRenderContext::beginFrame() {
     if (swapChainOccluded_ && swapChain_->Present(0, DXGI_PRESENT_TEST) == DXGI_STATUS_OCCLUDED) {
         Sleep(10);
         return false;
@@ -138,7 +138,7 @@ bool ImGuiDX11Context::beginFrame() {
     return true;
 }
 
-void ImGuiDX11Context::endFrame() {
+void ImGuiRenderContext::endFrame() {
     ImGui::PopStyleVar(3);
     ImGui::End();
 
@@ -154,7 +154,7 @@ void ImGuiDX11Context::endFrame() {
     swapChainOccluded_ = (hr == DXGI_STATUS_OCCLUDED);
 }
 
-bool ImGuiDX11Context::createDeviceD3D(HWND hWnd) {
+bool ImGuiRenderContext::createDeviceD3D(HWND hWnd) {
     DXGI_SWAP_CHAIN_DESC sd{};
     sd.BufferCount = 2;
     sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -176,21 +176,21 @@ bool ImGuiDX11Context::createDeviceD3D(HWND hWnd) {
     return true;
 }
 
-void ImGuiDX11Context::cleanupDeviceD3D() {
+void ImGuiRenderContext::cleanupDeviceD3D() {
     cleanupRenderTarget();
     if (swapChain_) swapChain_->Release();
     if (deviceContext_) deviceContext_->Release();
     if (device_) device_->Release();
 }
 
-void ImGuiDX11Context::createRenderTarget() {
+void ImGuiRenderContext::createRenderTarget() {
     ID3D11Texture2D* backBuffer = nullptr;
     swapChain_->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
     device_->CreateRenderTargetView(backBuffer, nullptr, &mainRTV_);
     backBuffer->Release();
 }
 
-void ImGuiDX11Context::cleanupRenderTarget() {
+void ImGuiRenderContext::cleanupRenderTarget() {
     if (mainRTV_) {
         mainRTV_->Release();
         mainRTV_ = nullptr;
