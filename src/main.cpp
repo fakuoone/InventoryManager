@@ -16,6 +16,7 @@ int main() {
 
     AutoGenInfo::setConfig(config);
     AutoGenInfo::setLogger(logger);
+    ImGuiRenderContext::setLogger(&logger);
 
     ThreadPool pool{10, logger};
 

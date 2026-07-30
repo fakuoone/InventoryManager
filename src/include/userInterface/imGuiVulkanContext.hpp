@@ -5,6 +5,8 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
+#include "logger.hpp"
+
 #include "imgui.h"
 
 class ImGuiRenderContext {
@@ -12,11 +14,13 @@ class ImGuiRenderContext {
     ImGuiRenderContext();
     ~ImGuiRenderContext();
 
+    static void setLogger(Logger* cLogger);
     bool pollEvents();
     bool beginFrame();
     void endFrame();
 
   private:
+    static inline Logger* logger_ = nullptr;
     GLFWwindow* window_ = nullptr;
 
     // Vulkan
@@ -81,4 +85,6 @@ class ImGuiRenderContext {
     void initImGui();
 
     void cleanupSwapchain();
+
+    static void errorCallback(int error, const char* description);
 };

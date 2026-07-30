@@ -22,8 +22,6 @@
 
 class App {
   private:
-    ImGuiRenderContext imguiCtx_;
-
     Config& config_;
     ThreadPool& pool_;
     DbService& dbService_;
@@ -32,6 +30,8 @@ class App {
     AutoInv::ChangeGeneratorFromBom& bomReader_;
     AutoInv::ChangeGeneratorFromOrder& orderReader_;
     Logger& logger_;
+
+    ImGuiRenderContext imguiCtx_;
 
     UI::DataStates dataStates_;
 

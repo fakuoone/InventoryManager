@@ -80,8 +80,9 @@ if(WIN32)
     )
 elseif(UNIX)
     # find_package(Vulkan REQUIRED)
-    # target_link_libraries(imgui PUBLIC lvulkan)
-endif()
+    target_link_libraries(imgui PUBLIC vulkan)
+    target_link_libraries(imgui PUBLIC glfw)
+    endif()
 
 # --- Includes ---
 target_include_directories(InventoryManager PRIVATE
