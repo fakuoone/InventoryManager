@@ -1,9 +1,10 @@
 #pragma once
 
+#include <array>
 #include <vector>
 
+#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-#include <vulkan/vulkan.h>
 
 #include "logger.hpp"
 
@@ -22,6 +23,7 @@ class ImGuiRenderContext {
   private:
     static inline Logger* logger_ = nullptr;
     GLFWwindow* window_ = nullptr;
+    std::vector<std::string> glfwRequiredExtensions_;
 
     // Vulkan
     VkInstance instance_ = VK_NULL_HANDLE;
@@ -33,6 +35,8 @@ class ImGuiRenderContext {
     uint32_t graphicsQueueFamily_ = 0;
     VkQueue graphicsQueue_ = VK_NULL_HANDLE;
     VkQueue presentQueue_ = VK_NULL_HANDLE;
+
+    static constexpr std::array<const char*, 1> validationLayers_ = {"VK_LAYER_KHRONOS_validation"};
 
     // Swapchain
     VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
@@ -64,6 +68,9 @@ class ImGuiRenderContext {
     ImVec4 clearColor_{0.45f, 0.55f, 0.60f, 1.0f};
 
   private:
+    void initGlfwTest();
+    void initVulkan();
+    bool checkValidationLayerSupport();
     void createInstance();
     void createSurface();
     void pickPhysicalDevice();
