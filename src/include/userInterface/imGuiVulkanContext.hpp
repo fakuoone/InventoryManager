@@ -1,15 +1,22 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
+#include <optional>
 #include <vector>
-#include <vulkan/vulkan_core.h>
 
+#include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include "logger.hpp"
 
 #include "imgui.h"
+
+struct QueueFamilyIndices {
+    std::optional<uint32_t> graphicsFamily;
+    bool isComplete() { return graphicsFamily.has_value(); }
+};
 
 class ImGuiRenderContext {
   public:
@@ -34,24 +41,24 @@ class ImGuiRenderContext {
 #endif
 
     GLFWwindow* window_ = nullptr;
-    std::vector<std::string> glfwRequiredExtensions_;
+    std::vector<const char*> glfwRequiredExtensions_;
 
     // Vulkan
-    VkInstance instance_ = VK_NULL_HANDLE;
+    VkInstance instance_;
     static constexpr std::array<const char*, 1> validationLayers_ = {"VK_LAYER_KHRONOS_validation"};
     VkDebugUtilsMessengerEXT debugMessenger_;
 
-    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
+    VkSurfaceKHR surface_;
 
-    VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
-    VkDevice device_ = VK_NULL_HANDLE;
+    VkPhysicalDevice physicalDevice_;
+    VkDevice device_;
 
     uint32_t graphicsQueueFamily_ = 0;
-    VkQueue graphicsQueue_ = VK_NULL_HANDLE;
-    VkQueue presentQueue_ = VK_NULL_HANDLE;
+    VkQueue graphicsQueue_;
+    VkQueue presentQueue_;
 
     // Swapchain
-    VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
+    VkSwapchainKHR swapchain_;
 
     std::vector<VkImage> swapchainImages_;
     std::vector<VkImageView> swapchainImageViews_;
@@ -61,10 +68,10 @@ class ImGuiRenderContext {
     VkExtent2D swapchainExtent_;
 
     // Rendering
-    VkRenderPass renderPass_ = VK_NULL_HANDLE;
+    VkRenderPass renderPass_;
 
     // Commands
-    VkCommandPool commandPool_ = VK_NULL_HANDLE;
+    VkCommandPool commandPool_;
     std::vector<VkCommandBuffer> commandBuffers_;
 
     // Sync
@@ -72,26 +79,33 @@ class ImGuiRenderContext {
     VkSemaphore renderFinished_;
     VkFence inFlightFence_;
 
-    // ImGui
     VkDescriptorPool descriptorPool_;
 
-    ImGuiIO* io_ = nullptr;
-    ImGuiStyle* style_ = nullptr;
-    ImVec4 clearColor_{0.45f, 0.55f, 0.60f, 1.0f};
-
   private:
-    void initGlfwTest();
+    // Init
+    void initGlfw();
     void initVulkan();
+
+    // Debug
     bool checkValidationLayerSupport();
     VkDebugUtilsMessengerCreateInfoEXT createDebugMessengerCreateInfo();
     VkResult createDebugUtilsMessengerExt(const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, VkDebugUtilsMessengerEXT* pDebugMessenger);
     void destroyDebugUtilsMessengerExt();
+    void getRequiredExtensions();
     void setupDebugMessenger();
+
+    // Instance
     void createInstance();
 
+    // Physical device
     void pickPhysicalDevice();
-    void createSurface();
+    static uint32_t rateDeviceSuitability(const VkPhysicalDevice& device);
+    static QueueFamilyIndices findQueueFamilies(const VkPhysicalDevice& device);
+
+    // Logical device
     void createLogicalDevice();
+
+    void createSurface();
 
     void createSwapchain();
     void createImageViews();

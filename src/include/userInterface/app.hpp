@@ -24,14 +24,15 @@ class App {
   private:
     Config& config_;
     ThreadPool& pool_;
+
+    ImGuiRenderContext imguiCtx_;
+
     DbService& dbService_;
     ChangeTracker& changeTracker_;
     PartApi& api_;
     AutoInv::ChangeGeneratorFromBom& bomReader_;
     AutoInv::ChangeGeneratorFromOrder& orderReader_;
     Logger& logger_;
-
-    ImGuiRenderContext imguiCtx_;
 
     UI::DataStates dataStates_;
 
