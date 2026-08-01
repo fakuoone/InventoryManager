@@ -2,6 +2,7 @@
 
 #include <array>
 #include <vector>
+#include <vulkan/vulkan_core.h>
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -16,17 +17,30 @@ class ImGuiRenderContext {
     ~ImGuiRenderContext();
 
     static void setLogger(Logger* cLogger);
+    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                                                        VkDebugUtilsMessageTypeFlagsEXT messageType,
+                                                        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+                                                        void* userData);
     bool pollEvents();
     bool beginFrame();
     void endFrame();
 
   private:
     static inline Logger* logger_ = nullptr;
+#ifdef NDEBUG
+    static constexpr inline bool debug_ = false;
+#else
+    static constexpr inline bool debug_ = true;
+#endif
+
     GLFWwindow* window_ = nullptr;
     std::vector<std::string> glfwRequiredExtensions_;
 
     // Vulkan
     VkInstance instance_ = VK_NULL_HANDLE;
+    static constexpr std::array<const char*, 1> validationLayers_ = {"VK_LAYER_KHRONOS_validation"};
+    VkDebugUtilsMessengerEXT debugMessenger_;
+
     VkSurfaceKHR surface_ = VK_NULL_HANDLE;
 
     VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
@@ -35,8 +49,6 @@ class ImGuiRenderContext {
     uint32_t graphicsQueueFamily_ = 0;
     VkQueue graphicsQueue_ = VK_NULL_HANDLE;
     VkQueue presentQueue_ = VK_NULL_HANDLE;
-
-    static constexpr std::array<const char*, 1> validationLayers_ = {"VK_LAYER_KHRONOS_validation"};
 
     // Swapchain
     VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
@@ -71,9 +83,14 @@ class ImGuiRenderContext {
     void initGlfwTest();
     void initVulkan();
     bool checkValidationLayerSupport();
+    VkDebugUtilsMessengerCreateInfoEXT createDebugMessengerCreateInfo();
+    VkResult createDebugUtilsMessengerExt(const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, VkDebugUtilsMessengerEXT* pDebugMessenger);
+    void destroyDebugUtilsMessengerExt();
+    void setupDebugMessenger();
     void createInstance();
-    void createSurface();
+
     void pickPhysicalDevice();
+    void createSurface();
     void createLogicalDevice();
 
     void createSwapchain();

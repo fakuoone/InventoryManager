@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <cstring>
+#include <format>
 #include <print>
 #include <stdexcept>
 #include <vector>
@@ -23,12 +24,8 @@ void ImGuiRenderContext::initGlfwTest() {
     glfwMakeContextCurrent(window_);
 }
 
-void ImGuiRenderContext::initVulkan() {
-    createInstance();
-}
-
 bool ImGuiRenderContext::checkValidationLayerSupport() {
-    // TODO: Only debug
+    if (!debug_) { return true; }
     uint32_t layerCount;
     vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
     std::vector<VkLayerProperties> availableLayers{layerCount};
@@ -36,18 +33,55 @@ bool ImGuiRenderContext::checkValidationLayerSupport() {
 
     for (const char* layerName : validationLayers_) {
         bool layerFound = false;
-
         for (const auto& layerProperties : availableLayers) {
             if (strcmp(layerName, layerProperties.layerName) == 0) {
                 layerFound = true;
                 break;
             }
         }
-
         if (!layerFound) { return false; }
     }
 
     return true;
+}
+
+void ImGuiRenderContext::initVulkan() {
+    createInstance();
+    setupDebugMessenger();
+    pickPhysicalDevice();
+}
+
+VkDebugUtilsMessengerCreateInfoEXT ImGuiRenderContext::createDebugMessengerCreateInfo() {
+    VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                                 VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+                             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    createInfo.pfnUserCallback = debugCallback;
+    return createInfo;
+}
+
+VkResult ImGuiRenderContext::createDebugUtilsMessengerExt(const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+                                                          VkDebugUtilsMessengerEXT* pDebugMessenger) {
+    auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance_, "vkCreateDebugUtilsMessengerEXT"));
+    if (func != nullptr) {
+        return func(instance_, pCreateInfo, nullptr, pDebugMessenger);
+    } else {
+        return VK_ERROR_EXTENSION_NOT_PRESENT;
+    }
+}
+
+void ImGuiRenderContext::destroyDebugUtilsMessengerExt() {
+    auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(instance_, "vkDestroyDebugUtilsMessengerEXT"));
+    if (func != nullptr) { func(instance_, debugMessenger_, nullptr); }
+}
+
+void ImGuiRenderContext::setupDebugMessenger() {
+    auto createInfo = createDebugMessengerCreateInfo();
+    if (createDebugUtilsMessengerExt(&createInfo, &debugMessenger_) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to set up debug messenger.");
+    }
 }
 
 void ImGuiRenderContext::createInstance() {
@@ -63,15 +97,23 @@ void ImGuiRenderContext::createInstance() {
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
-    createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers_.size()); // TODO only debug
-    createInfo.ppEnabledLayerNames = validationLayers_.data();
+    createInfo.ppEnabledLayerNames = 0;
+
+    // Add debug functionality
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+    if (debug_) {
+        createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers_.size());
+        createInfo.ppEnabledLayerNames = validationLayers_.data();
+        auto debugCreateInfo = createDebugMessengerCreateInfo();
+        createInfo.pNext = static_cast<VkDebugUtilsMessengerCreateInfoEXT*>(&debugCreateInfo);
+    }
 
     // Get required extensions
     uint32_t glfwExtensionCount = 0;
     const char** glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     glfwRequiredExtensions_.assign(glfwExtensions, glfwExtensions + glfwExtensionCount);
-    glfwRequiredExtensions_.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME); // TODO only debug
+    if (debug_) { glfwRequiredExtensions_.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME); }
 
     // Get available extensions
     uint32_t deviceExtensionCount = 0;
@@ -125,6 +167,7 @@ ImGuiRenderContext::ImGuiRenderContext() {
     initGlfwTest();
 }
 ImGuiRenderContext::~ImGuiRenderContext() {
+    if (debug_) { destroyDebugUtilsMessengerExt(); }
     vkDestroyInstance(instance_, nullptr);
 
     glfwDestroyWindow(window_);
@@ -133,6 +176,15 @@ ImGuiRenderContext::~ImGuiRenderContext() {
 
 void ImGuiRenderContext::setLogger(Logger* logger) {
     logger_ = logger;
+}
+
+VKAPI_ATTR VkBool32 VKAPI_CALL ImGuiRenderContext::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                                                                 VkDebugUtilsMessageTypeFlagsEXT messageType,
+                                                                 const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+                                                                 void* userData) {
+    logger_->pushLog(Log{std::format("Validation layer: {}", pCallbackData->pMessage)});
+    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+    return VK_FALSE;
 }
 
 bool ImGuiRenderContext::pollEvents() {
