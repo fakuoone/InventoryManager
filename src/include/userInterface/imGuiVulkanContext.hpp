@@ -5,9 +5,9 @@
 #include <optional>
 #include <vector>
 
-#include <vulkan/vulkan_core.h>
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <vulkan/vulkan_core.h>
 
 #include "logger.hpp"
 
@@ -15,7 +15,14 @@
 
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
-    bool isComplete() { return graphicsFamily.has_value(); }
+    std::optional<uint32_t> presentFamily;
+    bool isComplete() { return graphicsFamily.has_value() && presentFamily.has_value(); }
+};
+
+struct SwapChainSupportDetails {
+    VkSurfaceCapabilitiesKHR capabilities;
+    std::vector<VkSurfaceFormatKHR> formats;
+    std::vector<VkPresentModeKHR> presentModes;
 };
 
 class ImGuiRenderContext {
@@ -24,10 +31,11 @@ class ImGuiRenderContext {
     ~ImGuiRenderContext();
 
     static void setLogger(Logger* cLogger);
-    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                                                        VkDebugUtilsMessageTypeFlagsEXT messageType,
-                                                        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-                                                        void* userData);
+    static VKAPI_ATTR VkBool32 VKAPI_CALL
+    debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                  VkDebugUtilsMessageTypeFlagsEXT messageType,
+                  const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+                  void* userData);
     bool pollEvents();
     bool beginFrame();
     void endFrame();
@@ -46,6 +54,8 @@ class ImGuiRenderContext {
     // Vulkan
     VkInstance instance_;
     static constexpr std::array<const char*, 1> validationLayers_ = {"VK_LAYER_KHRONOS_validation"};
+    static constexpr std::array<const char*, 1> deviceExtensions_ = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     VkDebugUtilsMessengerEXT debugMessenger_;
 
     VkSurfaceKHR surface_;
@@ -89,7 +99,8 @@ class ImGuiRenderContext {
     // Debug
     bool checkValidationLayerSupport();
     VkDebugUtilsMessengerCreateInfoEXT createDebugMessengerCreateInfo();
-    VkResult createDebugUtilsMessengerExt(const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, VkDebugUtilsMessengerEXT* pDebugMessenger);
+    VkResult createDebugUtilsMessengerExt(const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+                                          VkDebugUtilsMessengerEXT* pDebugMessenger);
     void destroyDebugUtilsMessengerExt();
     void getRequiredExtensions();
     void setupDebugMessenger();
@@ -97,16 +108,23 @@ class ImGuiRenderContext {
     // Instance
     void createInstance();
 
+    void createSurface();
+
     // Physical device
     void pickPhysicalDevice();
-    static uint32_t rateDeviceSuitability(const VkPhysicalDevice& device);
-    static QueueFamilyIndices findQueueFamilies(const VkPhysicalDevice& device);
+    uint32_t rateDeviceSuitability(const VkPhysicalDevice& device);
+    QueueFamilyIndices findQueueFamilies(const VkPhysicalDevice& device);
+    bool checkDeviceExtensionSupport(const VkPhysicalDevice& device);
 
     // Logical device
     void createLogicalDevice();
 
-    void createSurface();
-
+    SwapChainSupportDetails querySwapChainSupport(const VkPhysicalDevice& device);
+    VkSurfaceFormatKHR
+    chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
+    VkPresentModeKHR
+    chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
+    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
     void createSwapchain();
     void createImageViews();
 

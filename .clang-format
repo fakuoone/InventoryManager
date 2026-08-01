@@ -5,7 +5,7 @@ TabWidth: 2
 UseTab: Never
 
 # Line length
-ColumnLimit: 140
+ColumnLimit: 100
 
 # Braces
 BreakBeforeBraces: Attach
