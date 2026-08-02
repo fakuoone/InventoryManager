@@ -69,13 +69,11 @@ class ImGuiRenderContext {
 
     // Swapchain
     VkSwapchainKHR swapchain_;
-
+    VkFormat swapchainFormat_;
+    VkExtent2D swapchainExtent_;
     std::vector<VkImage> swapchainImages_;
     std::vector<VkImageView> swapchainImageViews_;
     std::vector<VkFramebuffer> framebuffers_;
-
-    VkFormat swapchainFormat_;
-    VkExtent2D swapchainExtent_;
 
     // Rendering
     VkRenderPass renderPass_;
@@ -90,6 +88,11 @@ class ImGuiRenderContext {
     VkFence inFlightFence_;
 
     VkDescriptorPool descriptorPool_;
+
+    // ImGui
+    ImGuiIO* io_ = nullptr;
+    ImGuiStyle* style_ = nullptr;
+    ImVec4 clearColor_ = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
   private:
     // Init
@@ -107,7 +110,6 @@ class ImGuiRenderContext {
 
     // Instance
     void createInstance();
-
     void createSurface();
 
     // Physical device
@@ -119,6 +121,7 @@ class ImGuiRenderContext {
     // Logical device
     void createLogicalDevice();
 
+    // Swapchain
     SwapChainSupportDetails querySwapChainSupport(const VkPhysicalDevice& device);
     VkSurfaceFormatKHR
     chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
@@ -128,6 +131,7 @@ class ImGuiRenderContext {
     void createSwapchain();
     void createImageViews();
 
+    void createGraphicsPipeline();
     void createRenderPass();
     void createFramebuffers();
 

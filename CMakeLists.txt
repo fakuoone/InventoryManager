@@ -53,6 +53,8 @@ elseif(UNIX)
     list(APPEND IMGUI_GLOB
         ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
         ${IMGUI_DIR}/backends/imgui_impl_glfw.h
+        ${IMGUI_DIR}/backends/imgui_impl_vulkan.cpp
+        ${IMGUI_DIR}/backends/imgui_impl_vulkan.h
     )
 endif()
 

@@ -7,6 +7,11 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <vulkan/vulkan_core.h>
+
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_vulkan.h"
+#include "imgui.h"
 
 #include "userInterface/imGuiVulkanContext.hpp"
 
@@ -50,6 +55,8 @@ void ImGuiRenderContext::initVulkan() {
     pickPhysicalDevice();
     createLogicalDevice();
     createSwapchain();
+    createImageViews();
+    createGraphicsPipeline();
 }
 
 VkDebugUtilsMessengerCreateInfoEXT ImGuiRenderContext::createDebugMessengerCreateInfo() {
@@ -177,9 +184,9 @@ uint32_t ImGuiRenderContext::rateDeviceSuitability(const VkPhysicalDevice& devic
     if (!checkDeviceExtensionSupport(device)) { return 0; }
 
     // Assumes swapchain extension is supported which is covered above
-    bool swapChainAdequate = false;
-    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
-    swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+    bool swapchainAdequate = false;
+    SwapChainSupportDetails swapchainSupport = querySwapChainSupport(device);
+    swapchainAdequate = !swapchainSupport.formats.empty() && !swapchainSupport.presentModes.empty();
 
     int score = 0;
     if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) { score += 1000; }
@@ -329,16 +336,16 @@ VkExtent2D ImGuiRenderContext::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& 
 }
 
 void ImGuiRenderContext::createSwapchain() {
-    SwapChainSupportDetails swapChainSupport = querySwapChainSupport(physicalDevice_);
-    VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-    VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-    VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+    SwapChainSupportDetails swapchainSupport = querySwapChainSupport(physicalDevice_);
+    VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapchainSupport.formats);
+    VkPresentModeKHR presentMode = chooseSwapPresentMode(swapchainSupport.presentModes);
+    VkExtent2D extent = chooseSwapExtent(swapchainSupport.capabilities);
 
-    uint32_t imageCount = std::clamp(swapChainSupport.capabilities.minImageCount + 1,
-                                     swapChainSupport.capabilities.minImageCount,
-                                     swapChainSupport.capabilities.maxImageCount == 0
+    uint32_t imageCount = std::clamp(swapchainSupport.capabilities.minImageCount + 1,
+                                     swapchainSupport.capabilities.minImageCount,
+                                     swapchainSupport.capabilities.maxImageCount == 0
                                          ? std::numeric_limits<uint32_t>::max()
-                                         : swapChainSupport.capabilities.maxImageCount);
+                                         : swapchainSupport.capabilities.maxImageCount);
 
     VkSwapchainCreateInfoKHR createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -362,7 +369,7 @@ void ImGuiRenderContext::createSwapchain() {
         createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     }
 
-    createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+    createInfo.preTransform = swapchainSupport.capabilities.currentTransform;
     createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     createInfo.presentMode = presentMode;
     createInfo.clipped = VK_TRUE;
@@ -371,11 +378,74 @@ void ImGuiRenderContext::createSwapchain() {
     if (vkCreateSwapchainKHR(device_, &createInfo, nullptr, &swapchain_) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create swap chain.");
     }
+
+    swapchainFormat_ = surfaceFormat.format;
+    swapchainExtent_ = extent;
+
+    // Get swapchain-images
+    vkGetSwapchainImagesKHR(device_, swapchain_, &imageCount, nullptr);
+    swapchainImages_.resize(imageCount);
+    vkGetSwapchainImagesKHR(device_, swapchain_, &imageCount, swapchainImages_.data());
 }
 
-void ImGuiRenderContext::createImageViews() {}
+void ImGuiRenderContext::createImageViews() {
+    swapchainImageViews_.resize(swapchainImages_.size());
+    for (size_t i = 0; i < swapchainImages_.size(); i++) {
+        VkImageViewCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        createInfo.image = swapchainImages_[i];
+        createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        createInfo.format = swapchainFormat_;
+        createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        createInfo.subresourceRange.baseMipLevel = 0;
+        createInfo.subresourceRange.levelCount = 1;
+        createInfo.subresourceRange.baseArrayLayer = 0;
+        createInfo.subresourceRange.layerCount = 1;
 
-void ImGuiRenderContext::createRenderPass() {}
+        if (vkCreateImageView(device_, &createInfo, nullptr, &swapchainImageViews_[i]) !=
+            VK_SUCCESS) {
+            throw std::runtime_error("Failed to create swapchain image views.");
+        }
+    }
+}
+
+void ImGuiRenderContext::createGraphicsPipeline() {}
+
+void ImGuiRenderContext::createRenderPass() {
+    VkAttachmentDescription colorAttachment;
+    colorAttachment.format = swapchainFormat_;
+    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    VkAttachmentReference colorAttachmentRef{};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+
+    VkSubpassDescription subpass{};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments = &colorAttachmentRef;
+
+    VkRenderPassCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    createInfo.attachmentCount = 1;
+    createInfo.pAttachments = &colorAttachment;
+    createInfo.subpassCount = 1;
+    createInfo.pSubpasses = &subpass;
+
+    if (vkCreateRenderPass(device_, &createInfo, nullptr, &renderPass_) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create render pass.");
+    }
+}
 
 void ImGuiRenderContext::createFramebuffers() {}
 
@@ -387,7 +457,28 @@ void ImGuiRenderContext::createSyncObjects() {}
 
 void ImGuiRenderContext::createDescriptorPool() {}
 
-void ImGuiRenderContext::initImGui() {}
+void ImGuiRenderContext::initImGui() {
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+
+    ImGui_ImplGlfw_InitForVulkan(window_, true);
+
+    ImGui_ImplVulkan_InitInfo initInfo{};
+    initInfo.Instance = instance_;
+    initInfo.PhysicalDevice = physicalDevice_;
+    initInfo.Device = device_;
+    initInfo.QueueFamily = graphicsQueueFamily_;
+    initInfo.Queue = graphicsQueue_;
+    initInfo.DescriptorPool = descriptorPool_;
+    initInfo.MinImageCount = swapchainImages_.size();
+    initInfo.ImageCount = swapchainImages_.size();
+    initInfo.PipelineInfoMain.RenderPass = renderPass_;
+
+    ImGui_ImplVulkan_Init(&initInfo);
+
+    io_ = &ImGui::GetIO();
+    style_ = &ImGui::GetStyle();
+}
 
 void ImGuiRenderContext::cleanupSwapchain() {}
 
@@ -399,9 +490,14 @@ ImGuiRenderContext::ImGuiRenderContext() {
     if (!logger_) { throw std::runtime_error("Logger needs to be specified."); }
     initGlfw();
     initVulkan();
+    initImGui();
 }
 ImGuiRenderContext::~ImGuiRenderContext() {
     if (debug_) { destroyDebugUtilsMessengerExt(); }
+    vkDestroyRenderPass(device_, renderPass_, nullptr);
+    for (auto& imageView : swapchainImageViews_) {
+        vkDestroyImageView(device_, imageView, nullptr);
+    }
     vkDestroySwapchainKHR(device_, swapchain_, nullptr);
     vkDestroySurfaceKHR(instance_, surface_, nullptr);
     vkDestroyDevice(device_, nullptr);
