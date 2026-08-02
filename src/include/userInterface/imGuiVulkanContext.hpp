@@ -16,6 +16,7 @@
 struct QueueFamilyIndices {
     std::optional<uint32_t> graphicsFamily;
     std::optional<uint32_t> presentFamily;
+    VkPhysicalDevice physicalDevice;
     bool isComplete() { return graphicsFamily.has_value() && presentFamily.has_value(); }
 };
 
@@ -56,12 +57,14 @@ class ImGuiRenderContext {
     static constexpr std::array<const char*, 1> validationLayers_ = {"VK_LAYER_KHRONOS_validation"};
     static constexpr std::array<const char*, 1> deviceExtensions_ = {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
     VkDebugUtilsMessengerEXT debugMessenger_;
 
     VkSurfaceKHR surface_;
 
     VkPhysicalDevice physicalDevice_;
     VkDevice device_;
+    QueueFamilyIndices queueFamilyIndices_;
 
     uint32_t graphicsQueueFamily_ = 0;
     VkQueue graphicsQueue_;
@@ -73,19 +76,19 @@ class ImGuiRenderContext {
     VkExtent2D swapchainExtent_;
     std::vector<VkImage> swapchainImages_;
     std::vector<VkImageView> swapchainImageViews_;
-    std::vector<VkFramebuffer> framebuffers_;
+    std::vector<VkFramebuffer> swapchainFramebuffers_;
 
     // Rendering
     VkRenderPass renderPass_;
 
     // Commands
     VkCommandPool commandPool_;
-    std::vector<VkCommandBuffer> commandBuffers_;
+    std::array<VkCommandBuffer, 1> commandBuffers_;
 
     // Sync
-    VkSemaphore imageAvailable_;
-    VkSemaphore renderFinished_;
-    VkFence inFlightFence_;
+    VkSemaphore imageAvailableS_;
+    VkSemaphore renderFinishedS_;
+    VkFence inFlightFenceF_;
 
     VkDescriptorPool descriptorPool_;
 
@@ -114,15 +117,15 @@ class ImGuiRenderContext {
 
     // Physical device
     void pickPhysicalDevice();
-    uint32_t rateDeviceSuitability(const VkPhysicalDevice& device);
-    QueueFamilyIndices findQueueFamilies(const VkPhysicalDevice& device);
-    bool checkDeviceExtensionSupport(const VkPhysicalDevice& device);
+    uint32_t rateDeviceSuitability(VkPhysicalDevice device);
+    void findQueueFamilies(VkPhysicalDevice device);
+    bool checkDeviceExtensionSupport(VkPhysicalDevice device);
 
     // Logical device
     void createLogicalDevice();
 
     // Swapchain
-    SwapChainSupportDetails querySwapChainSupport(const VkPhysicalDevice& device);
+    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
     VkSurfaceFormatKHR
     chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
     VkPresentModeKHR
@@ -133,10 +136,11 @@ class ImGuiRenderContext {
 
     void createGraphicsPipeline();
     void createRenderPass();
-    void createFramebuffers();
 
+    void createFramebuffers();
     void createCommandPool();
     void createCommandBuffers();
+    void recordCommandBuffers(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 
     void createSyncObjects();
 

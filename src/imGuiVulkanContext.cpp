@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <format>
@@ -6,6 +7,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <sys/types.h>
 #include <vector>
 #include <vulkan/vulkan_core.h>
 
@@ -56,7 +58,13 @@ void ImGuiRenderContext::initVulkan() {
     createLogicalDevice();
     createSwapchain();
     createImageViews();
+    createRenderPass();
     createGraphicsPipeline();
+    createFramebuffers();
+    createCommandPool();
+    createCommandBuffers();
+    createDescriptorPool();
+    createSyncObjects();
 }
 
 VkDebugUtilsMessengerCreateInfoEXT ImGuiRenderContext::createDebugMessengerCreateInfo() {
@@ -174,7 +182,7 @@ void ImGuiRenderContext::pickPhysicalDevice() {
     }
 }
 
-uint32_t ImGuiRenderContext::rateDeviceSuitability(const VkPhysicalDevice& device) {
+uint32_t ImGuiRenderContext::rateDeviceSuitability(VkPhysicalDevice device) {
     VkPhysicalDeviceProperties deviceProperties;
     VkPhysicalDeviceFeatures deviceFeatures;
     vkGetPhysicalDeviceProperties(device, &deviceProperties);
@@ -191,14 +199,18 @@ uint32_t ImGuiRenderContext::rateDeviceSuitability(const VkPhysicalDevice& devic
     int score = 0;
     if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) { score += 1000; }
     score += deviceProperties.limits.maxImageDimension2D;
-    QueueFamilyIndices indices = findQueueFamilies(device);
+    findQueueFamilies(device);
 
-    if (!indices.isComplete()) { return 0; } // TODO
+    if (!queueFamilyIndices_.isComplete()) { return 0; }
 
     return score;
 }
 
-QueueFamilyIndices ImGuiRenderContext::findQueueFamilies(const VkPhysicalDevice& device) {
+void ImGuiRenderContext::findQueueFamilies(VkPhysicalDevice device) {
+    if (queueFamilyIndices_.physicalDevice == device) {
+        logger_->pushLog(Log{std::format("Device has already been processed, nothing to do.")});
+        return;
+    }
     QueueFamilyIndices indices;
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
@@ -213,10 +225,11 @@ QueueFamilyIndices ImGuiRenderContext::findQueueFamilies(const VkPhysicalDevice&
         if (indices.isComplete()) { break; }
     }
 
-    return indices;
+    indices.physicalDevice = device;
+    queueFamilyIndices_ = std::move(indices);
 }
 
-bool ImGuiRenderContext::checkDeviceExtensionSupport(const VkPhysicalDevice& device) {
+bool ImGuiRenderContext::checkDeviceExtensionSupport(VkPhysicalDevice device) {
     uint32_t extensionCount;
     vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
     std::vector<VkExtensionProperties> availableExtensions(extensionCount);
@@ -233,10 +246,10 @@ bool ImGuiRenderContext::checkDeviceExtensionSupport(const VkPhysicalDevice& dev
 }
 
 void ImGuiRenderContext::createLogicalDevice() {
-    QueueFamilyIndices indices = findQueueFamilies(physicalDevice_);
+    findQueueFamilies(physicalDevice_);
     float queuePrio = 1.0f;
-    std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsFamily.value(),
-                                              indices.presentFamily.value()};
+    std::set<uint32_t> uniqueQueueFamilies = {queueFamilyIndices_.graphicsFamily.value(),
+                                              queueFamilyIndices_.presentFamily.value()};
 
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
     queueCreateInfos.reserve(uniqueQueueFamilies.size());
@@ -267,11 +280,11 @@ void ImGuiRenderContext::createLogicalDevice() {
         throw std::runtime_error("Failed to create logical device.");
     }
 
-    vkGetDeviceQueue(device_, indices.graphicsFamily.value(), 0, &graphicsQueue_);
-    vkGetDeviceQueue(device_, indices.presentFamily.value(), 0, &presentQueue_);
+    vkGetDeviceQueue(device_, queueFamilyIndices_.graphicsFamily.value(), 0, &graphicsQueue_);
+    vkGetDeviceQueue(device_, queueFamilyIndices_.presentFamily.value(), 0, &presentQueue_);
 }
 
-SwapChainSupportDetails ImGuiRenderContext::querySwapChainSupport(const VkPhysicalDevice& device) {
+SwapChainSupportDetails ImGuiRenderContext::querySwapChainSupport(VkPhysicalDevice device) {
     SwapChainSupportDetails details;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface_, &details.capabilities);
 
@@ -357,11 +370,11 @@ void ImGuiRenderContext::createSwapchain() {
     createInfo.imageArrayLayers = 1;
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-    QueueFamilyIndices indices = findQueueFamilies(physicalDevice_);
-    std::array<uint32_t, 2> queueFamilyIndices = {indices.graphicsFamily.value(),
-                                                  indices.presentFamily.value()};
+    findQueueFamilies(physicalDevice_);
+    std::array<uint32_t, 2> queueFamilyIndices = {queueFamilyIndices_.graphicsFamily.value(),
+                                                  queueFamilyIndices_.presentFamily.value()};
 
-    if (indices.graphicsFamily != indices.presentFamily) {
+    if (queueFamilyIndices_.graphicsFamily != queueFamilyIndices_.presentFamily) {
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         createInfo.queueFamilyIndexCount = 2;
         createInfo.pQueueFamilyIndices = queueFamilyIndices.data();
@@ -428,7 +441,7 @@ void ImGuiRenderContext::createRenderPass() {
 
     VkAttachmentReference colorAttachmentRef{};
     colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL;
+    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkSubpassDescription subpass{};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -447,15 +460,128 @@ void ImGuiRenderContext::createRenderPass() {
     }
 }
 
-void ImGuiRenderContext::createFramebuffers() {}
+void ImGuiRenderContext::createFramebuffers() {
+    swapchainFramebuffers_.resize(swapchainImages_.size());
+    for (size_t i = 0; i < swapchainImageViews_.size(); i++) {
+        VkImageView attachments[] = {swapchainImageViews_[i]};
 
-void ImGuiRenderContext::createCommandPool() {}
+        VkFramebufferCreateInfo framebufferInfo{};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass = renderPass_;
+        framebufferInfo.attachmentCount = 1;
+        framebufferInfo.pAttachments = attachments;
+        framebufferInfo.width = swapchainExtent_.width;
+        framebufferInfo.height = swapchainExtent_.height;
+        framebufferInfo.layers = 1;
 
-void ImGuiRenderContext::createCommandBuffers() {}
+        if (vkCreateFramebuffer(device_, &framebufferInfo, nullptr, &swapchainFramebuffers_[i]) !=
+            VK_SUCCESS) {
+            throw std::runtime_error("failed to create framebuffer!");
+        }
+    }
+}
 
-void ImGuiRenderContext::createSyncObjects() {}
+void ImGuiRenderContext::createCommandPool() {
+    findQueueFamilies(physicalDevice_);
+    VkCommandPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolInfo.queueFamilyIndex = queueFamilyIndices_.graphicsFamily.value();
 
-void ImGuiRenderContext::createDescriptorPool() {}
+    if (vkCreateCommandPool(device_, &poolInfo, nullptr, &commandPool_) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create command pool.");
+    }
+}
+
+void ImGuiRenderContext::createCommandBuffers() {
+    // TODO: multiple?
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = commandPool_;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+
+    if (vkAllocateCommandBuffers(device_, &allocInfo, commandBuffers_.data()) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to allocate command buffers.");
+    }
+}
+
+void ImGuiRenderContext::recordCommandBuffers(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+    // TODO: multiple ?
+    if (vkBeginCommandBuffer(commandBuffers_[0], &beginInfo) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to begin recording command buffer.");
+    }
+
+    VkRenderPassBeginInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = renderPass_;
+    renderPassInfo.framebuffer = swapchainFramebuffers_[imageIndex];
+    renderPassInfo.renderArea.offset = {0, 0};
+    renderPassInfo.renderArea.extent = swapchainExtent_;
+
+    VkClearValue clearColor_ = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
+    renderPassInfo.clearValueCount = 1;
+    renderPassInfo.pClearValues = &clearColor_;
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    // TODO
+
+    vkCmdEndRenderPass(commandBuffer);
+
+    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+        throw std::runtime_error("failed to record command buffer!");
+    }
+}
+
+void ImGuiRenderContext::createSyncObjects() {
+    VkSemaphoreCreateInfo semaphoreInfo{};
+    semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+    bool success = true;
+    success = success &&
+              vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &imageAvailableS_) == VK_SUCCESS;
+    success = success &&
+              vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &renderFinishedS_) == VK_SUCCESS;
+    success =
+        success && vkCreateFence(device_, &fenceInfo, nullptr, &inFlightFenceF_) == VK_SUCCESS;
+
+    if (!success) {
+        throw std::runtime_error("Failed to create semaphores for CPU / GPU synchronization.");
+    }
+}
+
+void ImGuiRenderContext::createDescriptorPool() {
+    std::vector<VkDescriptorPoolSize> poolSizes = {
+        {VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+        {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000}};
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+    if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create descriptor pool.");
+    }
+}
 
 void ImGuiRenderContext::initImGui() {
     IMGUI_CHECKVERSION();
@@ -480,8 +606,6 @@ void ImGuiRenderContext::initImGui() {
     style_ = &ImGui::GetStyle();
 }
 
-void ImGuiRenderContext::cleanupSwapchain() {}
-
 void ImGuiRenderContext::errorCallback(int error, const char* description) {
     logger_->pushLog(Log{std::string{description}});
 }
@@ -494,6 +618,14 @@ ImGuiRenderContext::ImGuiRenderContext() {
 }
 ImGuiRenderContext::~ImGuiRenderContext() {
     if (debug_) { destroyDebugUtilsMessengerExt(); }
+    vkDestroySemaphore(device_, imageAvailableS_, nullptr);
+    vkDestroySemaphore(device_, renderFinishedS_, nullptr);
+    vkDestroyFence(device_, inFlightFenceF_, nullptr);
+
+    vkDestroyCommandPool(device_, commandPool_, nullptr);
+    for (auto framebuffer : swapchainFramebuffers_) {
+        vkDestroyFramebuffer(device_, framebuffer, nullptr);
+    }
     vkDestroyRenderPass(device_, renderPass_, nullptr);
     for (auto& imageView : swapchainImageViews_) {
         vkDestroyImageView(device_, imageView, nullptr);
@@ -528,8 +660,54 @@ bool ImGuiRenderContext::pollEvents() {
 }
 
 bool ImGuiRenderContext::beginFrame() {
+    vkWaitForFences(device_, 1, &inFlightFenceF_, VK_TRUE, UINT64_MAX);
+    vkResetFences(device_, 1, &inFlightFenceF_);
 
-    return false;
+    uint32_t imageIndex;
+    vkAcquireNextImageKHR(
+        device_, swapchain_, UINT64_MAX, imageAvailableS_, VK_NULL_HANDLE, &imageIndex);
+
+    vkResetCommandBuffer(commandBuffers_[0], imageIndex);
+    recordCommandBuffers(commandBuffers_[0], imageIndex);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+    auto waitSemaphores = std::array{imageAvailableS_};
+    std::array<VkPipelineStageFlags, 1> waitStages = {
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+    submitInfo.waitSemaphoreCount = static_cast<uint32_t>(waitSemaphores.size());
+    submitInfo.pWaitSemaphores = waitSemaphores.data();
+    submitInfo.pWaitDstStageMask = waitStages.data();
+    submitInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers_.size());
+    submitInfo.pCommandBuffers = commandBuffers_.data();
+
+    std::array<VkSemaphore, 1> signalSemaphores = {renderFinishedS_};
+    submitInfo.signalSemaphoreCount = static_cast<uint32_t>(signalSemaphores.size());
+    submitInfo.pSignalSemaphores = signalSemaphores.data();
+
+    if (vkQueueSubmit(graphicsQueue_, 1, &submitInfo, inFlightFenceF_) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to submit draw command buffer.");
+    }
+
+    ImGui_ImplVulkan_NewFrame();
+    ImGui::NewFrame();
+
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+
+    ImGui::SetNextWindowPos(viewport->Pos);
+    ImGui::SetNextWindowSize(viewport->Size);
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+                             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+                             ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+
+    ImGui::Begin("Inventory Manager", nullptr, flags);
+
+    return true;
 }
 
 void ImGuiRenderContext::endFrame() {}
