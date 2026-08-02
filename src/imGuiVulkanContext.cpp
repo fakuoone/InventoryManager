@@ -137,7 +137,6 @@ void ImGuiRenderContext::createInstance() {
 
     createInfo.enabledExtensionCount = glfwRequiredExtensions_.size();
     createInfo.ppEnabledExtensionNames = glfwRequiredExtensions_.data();
-    createInfo.enabledLayerCount = 0;
     VkResult result = vkCreateInstance(&createInfo, nullptr, &instance_);
     if (result != VK_SUCCESS) { throw std::runtime_error("Failed to create vulkan instance."); }
 }
@@ -232,7 +231,8 @@ void ImGuiRenderContext::createLogicalDevice() {
     std::set<uint32_t> uniqueQueueFamilies = {indices.graphicsFamily.value(),
                                               indices.presentFamily.value()};
 
-    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos(uniqueQueueFamilies.size());
+    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+    queueCreateInfos.reserve(uniqueQueueFamilies.size());
     for (uint32_t queueFamily : uniqueQueueFamilies) {
         VkDeviceQueueCreateInfo queueCreateInfo{};
         queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
