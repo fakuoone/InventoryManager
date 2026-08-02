@@ -689,7 +689,6 @@ bool ImGuiRenderContext::beginFrame() {
     if (vkQueueSubmit(graphicsQueue_, 1, &submitInfo, inFlightFenceF_) != VK_SUCCESS) {
         throw std::runtime_error("Failed to submit draw command buffer.");
     }
-
     ImGui_ImplVulkan_NewFrame();
     ImGui::NewFrame();
 
