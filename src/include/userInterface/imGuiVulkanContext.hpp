@@ -40,6 +40,8 @@ class ImGuiRenderContext {
     bool pollEvents();
     bool beginFrame();
     void endFrame();
+    void renderFrame();
+    void presentFrame();
 
   private:
     static inline Logger* logger_ = nullptr;
@@ -80,15 +82,18 @@ class ImGuiRenderContext {
 
     // Rendering
     VkRenderPass renderPass_;
+    uint32_t currentImageIndex_ = 0;
+    uint32_t currentFrame_ = 0;
+    bool frameBufferResized_;
 
     // Commands
     VkCommandPool commandPool_;
-    std::array<VkCommandBuffer, 1> commandBuffers_;
+    std::array<VkCommandBuffer, MAX_FRAMES_IN_FLIGHT> commandBuffers_;
 
     // Sync
-    VkSemaphore imageAvailableS_;
-    VkSemaphore renderFinishedS_;
-    VkFence inFlightFenceF_;
+    std::array<VkSemaphore, MAX_FRAMES_IN_FLIGHT> imageAvailableS_;
+    std::array<VkSemaphore, MAX_FRAMES_IN_FLIGHT> renderFinishedS_;
+    std::array<VkFence, MAX_FRAMES_IN_FLIGHT> inFlightFenceF_;
 
     VkDescriptorPool descriptorPool_;
 
@@ -140,7 +145,7 @@ class ImGuiRenderContext {
     void createFramebuffers();
     void createCommandPool();
     void createCommandBuffers();
-    void recordCommandBuffers(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void recordCommandBuffers(VkCommandBuffer commandBuffer);
 
     void createSyncObjects();
 
@@ -148,7 +153,9 @@ class ImGuiRenderContext {
 
     void initImGui();
 
+    void recreateSwapchain();
     void cleanupSwapchain();
 
     static void errorCallback(int error, const char* description);
+    static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 };
