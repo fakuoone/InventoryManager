@@ -523,7 +523,6 @@ void ImGuiRenderContext::recordCommandBuffers(VkCommandBuffer commandBuffer) {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-    // TODO: multiple ?
     if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
         throw std::runtime_error("Failed to begin recording command buffer.");
     }
@@ -540,9 +539,7 @@ void ImGuiRenderContext::recordCommandBuffers(VkCommandBuffer commandBuffer) {
     renderPassInfo.pClearValues = &clearColor_;
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-    // TODO
-
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
@@ -593,7 +590,7 @@ void ImGuiRenderContext::createDescriptorPool() {
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    poolInfo.maxSets = 1000;
 
     if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create descriptor pool.");
@@ -617,6 +614,7 @@ void ImGuiRenderContext::initImGui() {
     initInfo.MinImageCount = swapchainImages_.size();
     initInfo.ImageCount = swapchainImages_.size();
     initInfo.PipelineInfoMain.RenderPass = renderPass_;
+
     // TODO subpass
     // TODO checkvkresultfn
 
@@ -658,6 +656,7 @@ ImGuiRenderContext::~ImGuiRenderContext() {
 
     vkDestroyCommandPool(device_, commandPool_, nullptr);
     cleanupSwapchain();
+    vkDestroyRenderPass(device_, renderPass_, nullptr);
     vkDestroySurfaceKHR(instance_, surface_, nullptr);
     vkDestroyDevice(device_, nullptr);
     vkDestroyInstance(instance_, nullptr);
@@ -724,7 +723,6 @@ bool ImGuiRenderContext::beginFrame() {
 
 void ImGuiRenderContext::endFrame() {
 
-    ImDrawData* drawData = ImGui::GetDrawData();
     renderFrame();
     presentFrame();
     currentFrame_ = (currentFrame_ + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -802,7 +800,6 @@ void ImGuiRenderContext::cleanupSwapchain() {
     for (auto framebuffer : swapchainFramebuffers_) {
         vkDestroyFramebuffer(device_, framebuffer, nullptr);
     }
-    vkDestroyRenderPass(device_, renderPass_, nullptr);
     for (auto& imageView : swapchainImageViews_) {
         vkDestroyImageView(device_, imageView, nullptr);
     }
