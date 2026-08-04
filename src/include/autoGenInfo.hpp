@@ -46,6 +46,9 @@ class AutoGenInfo {
         // parse archive
         nlohmann::ordered_json archiveJson;
         std::filesystem::path path = config_->getAutoInvArchivePath();
+
+        if (path.empty()) { return std::unexpected("ERROR: Archive path empty."); }
+
         std::string errorMessage;
 
         // open archive
@@ -90,20 +93,24 @@ class AutoGenInfo {
 
         // add
         auto now = std::chrono::system_clock::now();
-        std::string timestamp = std::format("{:%Y-%m-%d %H:%M:%S}", std::chrono::floor<std::chrono::seconds>(now)); // TODO: timezone?
-        nlohmann::ordered_json self = {{"timestamp", timestamp},
-                                       {"path", csvPath_},
-                                       {"addedChangeCount", addedChanges_},
-                                       {"totalChangeCount", changesTotal_},
-                                       {"remainingChangeCount", static_cast<uint16_t>(unexecutedChangeKeys_.size())},
-                                       {"operation", static_cast<uint16_t>(operation_)}};
+        std::string timestamp =
+            std::format("{:%Y-%m-%d %H:%M:%S}",
+                        std::chrono::floor<std::chrono::seconds>(now)); // TODO: timezone?
+        nlohmann::ordered_json self = {
+            {"timestamp", timestamp},
+            {"path", csvPath_},
+            {"addedChangeCount", addedChanges_},
+            {"totalChangeCount", changesTotal_},
+            {"remainingChangeCount", static_cast<uint16_t>(unexecutedChangeKeys_.size())},
+            {"operation", static_cast<uint16_t>(operation_)}};
 
         archiveJson.push_back(self);
 
         // Write
         std::ofstream archiveWrite(path);
         if (!archiveWrite.is_open()) {
-            logger_->pushLog(Log{std::format("ERROR: Could not open archive on path: {}", path.string())});
+            logger_->pushLog(
+                Log{std::format("ERROR: Could not open archive on path: {}", path.string())});
             return;
         }
         logger_->pushLog(Log{archiveJson.dump()});

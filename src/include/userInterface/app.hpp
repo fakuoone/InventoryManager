@@ -39,13 +39,16 @@ class App {
     ChangeExeService changeExe_{dbService_, changeTracker_, logger_};
     DbVisualizer dbVisualizer_{dbService_, changeTracker_, changeExe_, logger_, dataStates_};
 
-    AutoInv::BomVisualizer bomVisualizer_{dbService_, bomReader_, api_, config_, logger_, dataStates_};
-    AutoInv::OrderVisualizer orderVisualizer_{dbService_, orderReader_, api_, config_, logger_, dataStates_};
+    AutoInv::BomVisualizer bomVisualizer_{
+        dbService_, bomReader_, api_, config_, logger_, dataStates_};
+    AutoInv::OrderVisualizer orderVisualizer_{
+        dbService_, orderReader_, api_, config_, logger_, dataStates_};
 
     DbFilter dbFilter_{dbService_, pool_, logger_, dataStates_};
 
     std::shared_ptr<const CompleteDbData> dbData_;
-    std::shared_ptr<const CompleteDbData> filteredDbData_; // copy of data for simplicity and thread safety
+    std::shared_ptr<const CompleteDbData>
+        filteredDbData_; // copy of data for simplicity and thread safety
     bool filterActive_ = false;
     std::array<char, UI::BUFFER_SIZE> filterBuffer_;
     std::shared_ptr<uiChangeInfo> uiChanges_;
@@ -74,13 +77,15 @@ class App {
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
         const float PAD = 10.0f;
 
-        ImVec2 pos(viewport->WorkPos.x + viewport->WorkSize.x - PAD, viewport->WorkPos.y + viewport->WorkSize.y - PAD);
+        ImVec2 pos(viewport->WorkPos.x + viewport->WorkSize.x - PAD,
+                   viewport->WorkPos.y + viewport->WorkSize.y - PAD);
 
         ImGui::SetNextWindowPos(pos, ImGuiCond_Always, ImVec2(1.0f, 1.0f));
         ImGui::SetNextWindowBgAlpha(0.35f);
 
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing |
-                                 ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove;
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                                 ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+                                 ImGuiWindowFlags_NoMove;
 
         if (ImGui::Begin("FPSOverlay", nullptr, flags)) {
             ImGuiIO& io = ImGui::GetIO();
@@ -180,8 +185,10 @@ class App {
         ImGui::SetCursorPos(ImVec2(x, y));
         ImGui::SetNextItemWidth(inputWidth);
 
-        bool inputFinished =
-            ImGui::InputText("##filterstring", filterBuffer_.data(), UI::BUFFER_SIZE, ImGuiInputTextFlags_EnterReturnsTrue);
+        bool inputFinished = ImGui::InputText("##filterstring",
+                                              filterBuffer_.data(),
+                                              UI::BUFFER_SIZE,
+                                              ImGuiInputTextFlags_EnterReturnsTrue);
     }
 
     void showBom() { bomVisualizer_.run(); }
@@ -256,8 +263,8 @@ class App {
         AutoInv::ChangeGeneratorFromBom& cBomReader,
         AutoInv::ChangeGeneratorFromOrder& cOrderReader,
         Logger& cLogger)
-        : config_(cConfig), pool_(cPool), dbService_(cDbService), changeTracker_(cChangeTracker), api_(cPartApi), bomReader_(cBomReader),
-          orderReader_(cOrderReader), logger_(cLogger) {}
+        : config_(cConfig), pool_(cPool), dbService_(cDbService), changeTracker_(cChangeTracker),
+          api_(cPartApi), bomReader_(cBomReader), orderReader_(cOrderReader), logger_(cLogger) {}
 
     ~App() {
         config_.saveMappings(bomVisualizer_.getMappings(), orderVisualizer_.getMappings());
@@ -270,7 +277,8 @@ class App {
     App& operator=(App&&) = delete;
 
     void supplyConfigString() {
-        std::string dbString = config_.setConfigString(std::filesystem::path{}); // OPTIONAL USER SUPPLIED CONFIG PATH
+        std::string dbString =
+            config_.setConfigString(std::filesystem::path{}); // OPTIONAL USER SUPPLIED CONFIG PATH
         initFont(config_.getFont());
         dbService_.initializeDbInterface(dbString);
         bomVisualizer_.setDefaultPath(config_.getCsvPathBom());

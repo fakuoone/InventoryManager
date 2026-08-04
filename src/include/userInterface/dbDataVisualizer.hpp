@@ -37,14 +37,19 @@ class DbVisualizer {
     std::unordered_set<std::size_t> changeHighlight_;
 
     Widgets::DbTable dbTable_{edit_, selectedTable_, changeHighlight_, logger_};
-    Widgets::ChangeOverviewer changeOverviewer_{changeTracker_, changeExe_, 60, changeHighlight_, selectedTable_};
+    Widgets::ChangeOverviewer changeOverviewer_{
+        changeTracker_, changeExe_, 60, changeHighlight_, selectedTable_};
 
     std::unordered_set<std::size_t> clickedChanges_;
 
     void drawChangeOverview() {
         ImGui::Text("CHANGE OVERVIEW");
+        if (!uiChanges_) { return; }
+
         ImGui::BeginDisabled(dataStates_.dbData != UI::DataState::DATA_READY);
-        if (ImGui::Button("Execute all")) { changeExe_.requestChangeApplication(SqlAction::EXECUTE); }
+        if (ImGui::Button("Execute all")) {
+            changeExe_.requestChangeApplication(SqlAction::EXECUTE);
+        }
 
         for (const std::size_t rootKey : uiChanges_->roots) {
             std::size_t depth = 0;
@@ -72,7 +77,9 @@ class DbVisualizer {
         bool containsKey = clickedChanges_.contains(key);
 
         ImVec2 position;
-        if (drawChange(key, treeDepth, parent, position) == Widgets::MouseEventType::CLICK) { toggleNode(key); }
+        if (drawChange(key, treeDepth, parent, position) == Widgets::MouseEventType::CLICK) {
+            toggleNode(key);
+        }
 
         if (containsKey) {
             (*treeDepth)++;
@@ -89,24 +96,30 @@ class DbVisualizer {
         if (!clickedChanges_.insert(key).second) { clickedChanges_.erase(key); }
     }
 
-    Widgets::MouseEventType drawChange(const std::size_t key, std::size_t* visualDepth, const std::size_t parent, ImVec2& position) {
+    Widgets::MouseEventType drawChange(const std::size_t key,
+                                       std::size_t* visualDepth,
+                                       const std::size_t parent,
+                                       ImVec2& position) {
         const Change& change = uiChanges_->changes.at(key);
         return changeOverviewer_.drawSingleChangeOverview(change, visualDepth, parent, position);
     }
 
     void handleTableEvent() {
         const Widgets::Event tableEvent = dbTable_.getEvent();
-        const bool handleEvent =
-            tableEvent.type.mouse == Widgets::MouseEventType::CLICK || tableEvent.type.action == Widgets::ActionType::EDIT;
+        const bool handleEvent = tableEvent.type.mouse == Widgets::MouseEventType::CLICK ||
+                                 tableEvent.type.action == Widgets::ActionType::EDIT;
         if (!handleEvent) { return; }
 
         logger_.pushLog(Log{std::format("EVENT occured.")});
-        if (std::holds_alternative<Widgets::DataEvent>(tableEvent.origin)) { // NO CHANGE EXISTS ON THIS ROW
+        if (std::holds_alternative<Widgets::DataEvent>(
+                tableEvent.origin)) { // NO CHANGE EXISTS ON THIS ROW
             const Widgets::DataEvent event = std::get<Widgets::DataEvent>(tableEvent.origin);
             switch (tableEvent.type.action) {
             case Widgets::ActionType::HEADER: {
                 const HeaderVector& header = dbData_->headers.at(event.tableName).data;
-                auto it = std::find_if(header.begin(), header.end(), [&](const HeaderInfo& h) { return h.name == event.headerName; });
+                auto it = std::find_if(header.begin(), header.end(), [&](const HeaderInfo& h) {
+                    return h.name == event.headerName;
+                });
                 if (it != header.end()) { selectedTable_ = it->referencedTable; }
                 break;
             }
@@ -117,7 +130,9 @@ class DbVisualizer {
                                                 static_cast<std::size_t>(std::stoi(event.pKey))));
                 break;
             case Widgets::ActionType::EDIT:
-                changeTracker_.addChange(Change(tableEvent.cells, ChangeType::UPDATE_CELLS, dbService_.getTable(event.tableName)),
+                changeTracker_.addChange(Change(tableEvent.cells,
+                                                ChangeType::UPDATE_CELLS,
+                                                dbService_.getTable(event.tableName)),
                                          static_cast<std::size_t>(std::stoi(event.pKey)));
                 break;
             case Widgets::ActionType::REQUEST_EDIT: {
@@ -130,7 +145,9 @@ class DbVisualizer {
                 break;
             }
             case Widgets::ActionType::INSERT:
-                changeTracker_.addChange(Change(tableEvent.cells, ChangeType::INSERT_ROW, dbService_.getTable(event.tableName)));
+                changeTracker_.addChange(Change(tableEvent.cells,
+                                                ChangeType::INSERT_ROW,
+                                                dbService_.getTable(event.tableName)));
                 break;
             default:
                 break;
@@ -164,9 +181,13 @@ class DbVisualizer {
     }
 
   public:
-    DbVisualizer(
-        DbService& cDbService, ChangeTracker& cChangeTracker, ChangeExeService& cChangeExe, Logger& cLogger, UI::DataStates& cDataStates)
-        : dbService_(cDbService), changeTracker_(cChangeTracker), changeExe_(cChangeExe), logger_(cLogger), dataStates_(cDataStates) {}
+    DbVisualizer(DbService& cDbService,
+                 ChangeTracker& cChangeTracker,
+                 ChangeExeService& cChangeExe,
+                 Logger& cLogger,
+                 UI::DataStates& cDataStates)
+        : dbService_(cDbService), changeTracker_(cChangeTracker), changeExe_(cChangeExe),
+          logger_(cLogger), dataStates_(cDataStates) {}
 
     void setData(std::shared_ptr<const CompleteDbData> newData) {
         dbData_ = newData;
@@ -185,7 +206,8 @@ class DbVisualizer {
             if (!selectedTable_.empty()) { flags |= ImGuiTabItemFlags_SetSelected; };
             if (ImGui::BeginTabItem("Tables", nullptr, flags)) {
                 if (ImGui::BeginTabBar("MainTabs")) {
-                    if (dataStates_.dbData == UI::DataState::DATA_OUTDATED || dataStates_.dbData == UI::DataState::DATA_READY) {
+                    if (dataStates_.dbData == UI::DataState::DATA_OUTDATED ||
+                        dataStates_.dbData == UI::DataState::DATA_READY) {
                         for (const auto& [table, data] : dbData_->headers) {
                             ImGuiTabItemFlags flagsHeader = ImGuiTabItemFlags_None;
                             if (selectedTable_ == table) {
@@ -193,7 +215,8 @@ class DbVisualizer {
                                 flagsHeader |= ImGuiTabItemFlags_SetSelected;
                             }
                             if (ImGui::BeginTabItem(table.c_str(), nullptr, flagsHeader)) {
-                                ImGui::BeginDisabled(dataStates_.dbData != UI::DataState::DATA_READY);
+                                ImGui::BeginDisabled(dataStates_.dbData !=
+                                                     UI::DataState::DATA_READY);
                                 dbTable_.drawTable(table);
                                 handleTableEvent();
                                 ImGui::EndDisabled();
